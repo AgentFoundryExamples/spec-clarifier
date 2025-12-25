@@ -1,5 +1,7 @@
 """Application configuration."""
 
+from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +19,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
 
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Get application settings singleton."""
     return Settings()

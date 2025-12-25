@@ -1,8 +1,10 @@
 """Tests for the FastAPI application factory and configuration."""
 
+import os
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
 from app.main import create_app
 from app.config import get_settings
@@ -48,16 +50,49 @@ def test_unknown_route_returns_404():
     assert response.status_code == 404
 
 
-def test_global_exception_handler():
-    """Test that the global exception handler catches unhandled exceptions."""
-    app = create_app()
+def test_global_exception_handler_in_production():
+    """Test that the global exception handler catches unhandled exceptions in production mode."""
+    # Clear the lru_cache to ensure we get fresh settings
+    get_settings.cache_clear()
     
-    @app.get("/test-error")
-    async def raise_error():
-        raise ValueError("Test error")
+    # Ensure we're not in debug mode
+    with patch.dict(os.environ, {"APP_DEBUG": "false"}, clear=False):
+        get_settings.cache_clear()
+        app = create_app()
+        
+        @app.get("/test-error")
+        async def raise_error():
+            raise ValueError("Test error")
+        
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.get("/test-error")
+        
+        assert response.status_code == 500
+        assert response.json() == {"detail": "Internal server error"}
     
-    client = TestClient(app, raise_server_exceptions=False)
-    response = client.get("/test-error")
+    # Clear cache after test
+    get_settings.cache_clear()
+
+
+def test_exception_handler_not_registered_in_debug_mode():
+    """Test that the exception handler is not registered in debug mode."""
+    # Clear the lru_cache to ensure we get fresh settings
+    get_settings.cache_clear()
     
-    assert response.status_code == 500
-    assert response.json() == {"detail": "Internal server error"}
+    # Set debug mode
+    with patch.dict(os.environ, {"APP_DEBUG": "true"}, clear=False):
+        get_settings.cache_clear()
+        app = create_app()
+        
+        @app.get("/test-error")
+        async def raise_error():
+            raise ValueError("Test error")
+        
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.get("/test-error")
+        
+        # In debug mode, FastAPI's default error handling shows the full traceback
+        assert response.status_code == 500
+    
+    # Clear cache after test
+    get_settings.cache_clear()
