@@ -19,7 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.api import routes_health
+from app.api import routes_health, routes_clarifications
 
 # Configure logging
 logging.basicConfig(
@@ -57,6 +57,7 @@ def create_app() -> FastAPI:
     
     # Register routers
     app.include_router(routes_health.router)
+    app.include_router(routes_clarifications.router)
     
     return app
 
