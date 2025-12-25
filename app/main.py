@@ -16,6 +16,7 @@
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
@@ -41,6 +42,15 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=settings.app_description,
+    )
+    
+    # Configure CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.get_cors_origins_list(),
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=settings.get_cors_methods_list(),
+        allow_headers=settings.get_cors_headers_list(),
     )
     
     # Register exception handlers only in non-debug mode

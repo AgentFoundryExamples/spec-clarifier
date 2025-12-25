@@ -105,3 +105,76 @@ def test_exception_handler_not_registered_in_debug_mode():
         
         # In debug mode, FastAPI's default error handling shows the full traceback
         assert response.status_code == 500
+
+
+def test_cors_middleware_configured():
+    """Test that CORS middleware is configured on the app."""
+    app = create_app()
+    
+    # Check that CORSMiddleware is in the middleware stack
+    # Middleware is wrapped in Middleware objects, so we check the cls attribute
+    from starlette.middleware.cors import CORSMiddleware
+    middleware_classes = [m.cls for m in app.user_middleware]
+    assert CORSMiddleware in middleware_classes
+
+
+def test_cors_allows_configured_origins():
+    """Test that CORS allows requests from configured origins."""
+    app = create_app()
+    client = TestClient(app)
+    
+    # Test with default localhost origin
+    response = client.get(
+        "/health",
+        headers={"Origin": "http://localhost:3000"}
+    )
+    assert response.status_code == 200
+    assert "access-control-allow-origin" in response.headers
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_cors_rejects_non_configured_origins():
+    """Test that CORS rejects requests from non-configured origins."""
+    app = create_app()
+    client = TestClient(app)
+    
+    # Test with non-configured origin
+    response = client.get(
+        "/health",
+        headers={"Origin": "https://evil.com"}
+    )
+    assert response.status_code == 200
+    # The access-control-allow-origin header should not be present for a disallowed origin
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_cors_preflight_request():
+    """Test that CORS preflight requests are handled correctly."""
+    app = create_app()
+    client = TestClient(app)
+    
+    # Send OPTIONS preflight request
+    response = client.options(
+        "/v1/clarifications/preview",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type"
+        }
+    )
+    assert response.status_code == 200
+    assert "access-control-allow-origin" in response.headers
+    assert "access-control-allow-methods" in response.headers
+
+
+def test_cors_with_credentials():
+    """Test that CORS allows credentials when configured."""
+    app = create_app()
+    client = TestClient(app)
+    
+    response = client.get(
+        "/health",
+        headers={"Origin": "http://localhost:3000"}
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-credentials") == "true"
