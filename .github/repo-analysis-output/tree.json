@@ -158,7 +158,15 @@
     },
     {
       "type": "file",
+      "name": ".dockerignore"
+    },
+    {
+      "type": "file",
       "name": ".gitignore"
+    },
+    {
+      "type": "file",
+      "name": "Dockerfile"
     },
     {
       "type": "file",

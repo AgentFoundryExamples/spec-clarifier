@@ -11,7 +11,7 @@ Includes classification of external dependencies as stdlib vs third-party.
 - **Total files**: 16
 - **Intra-repo dependencies**: 15
 - **External stdlib dependencies**: 5
-- **External third-party dependencies**: 12
+- **External third-party dependencies**: 14
 
 ## External Dependencies
 
@@ -27,11 +27,12 @@ Total: 5 unique modules
 
 ### Third-Party Packages
 
-Total: 12 unique packages
+Total: 14 unique packages
 
 - `fastapi.APIRouter`
 - `fastapi.FastAPI`
 - `fastapi.Request`
+- `fastapi.middleware.cors.CORSMiddleware`
 - `fastapi.responses.JSONResponse`
 - `fastapi.testclient.TestClient`
 - `pydantic.BaseModel`
@@ -41,6 +42,7 @@ Total: 12 unique packages
 - `pydantic_settings.BaseSettings`
 - `pydantic_settings.SettingsConfigDict`
 - `pytest`
+- `starlette.middleware.cors.CORSMiddleware`
 
 ## Most Depended Upon Files (Intra-Repo)
 

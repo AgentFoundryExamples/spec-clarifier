@@ -65,6 +65,7 @@
         "third-party": [
           "fastapi.FastAPI",
           "fastapi.Request",
+          "fastapi.middleware.cors.CORSMiddleware",
           "fastapi.responses.JSONResponse"
         ]
       }
@@ -171,7 +172,8 @@
         "third-party": [
           "fastapi.FastAPI",
           "fastapi.testclient.TestClient",
-          "pytest"
+          "pytest",
+          "starlette.middleware.cors.CORSMiddleware"
         ]
       }
     },
@@ -262,6 +264,7 @@
       "fastapi.APIRouter",
       "fastapi.FastAPI",
       "fastapi.Request",
+      "fastapi.middleware.cors.CORSMiddleware",
       "fastapi.responses.JSONResponse",
       "fastapi.testclient.TestClient",
       "pydantic.BaseModel",
@@ -270,9 +273,10 @@
       "pydantic.ValidationError",
       "pydantic_settings.BaseSettings",
       "pydantic_settings.SettingsConfigDict",
-      "pytest"
+      "pytest",
+      "starlette.middleware.cors.CORSMiddleware"
     ],
     "stdlib_count": 5,
-    "third-party_count": 12
+    "third-party_count": 14
   }
 }

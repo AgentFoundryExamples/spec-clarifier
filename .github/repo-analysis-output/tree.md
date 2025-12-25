@@ -34,7 +34,9 @@
   ├── test_health.py
   ├── test_main.py
   └── test_models.py
+├── .dockerignore
 ├── .gitignore
+├── Dockerfile
 ├── LICENSE
 ├── LLMs.md
 ├── pyproject.toml
