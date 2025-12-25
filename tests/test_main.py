@@ -1,0 +1,63 @@
+"""Tests for the FastAPI application factory and configuration."""
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.main import create_app
+from app.config import get_settings
+
+
+def test_create_app():
+    """Test that create_app returns a FastAPI instance."""
+    app = create_app()
+    assert isinstance(app, FastAPI)
+
+
+def test_app_metadata():
+    """Test that the app has correct metadata from settings."""
+    settings = get_settings()
+    app = create_app()
+    
+    assert app.title == settings.app_name
+    assert app.version == settings.app_version
+    assert app.description == settings.app_description
+
+
+def test_app_has_openapi_endpoints():
+    """Test that OpenAPI documentation endpoints are available."""
+    app = create_app()
+    client = TestClient(app)
+    
+    # Test /docs endpoint exists (Swagger UI)
+    response = client.get("/docs")
+    assert response.status_code == 200
+    
+    # Test /openapi.json endpoint exists
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    assert response.json()["info"]["title"] == get_settings().app_name
+
+
+def test_unknown_route_returns_404():
+    """Test that unknown routes return 404."""
+    app = create_app()
+    client = TestClient(app)
+    
+    response = client.get("/nonexistent")
+    assert response.status_code == 404
+
+
+def test_global_exception_handler():
+    """Test that the global exception handler catches unhandled exceptions."""
+    app = create_app()
+    
+    @app.get("/test-error")
+    async def raise_error():
+        raise ValueError("Test error")
+    
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/test-error")
+    
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}
