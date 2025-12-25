@@ -19,6 +19,17 @@
       }
     },
     {
+      "id": "app/api/routes_clarifications.py",
+      "path": "app/api/routes_clarifications.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
+        "third-party": [
+          "fastapi.APIRouter"
+        ]
+      }
+    },
+    {
       "id": "app/api/routes_health.py",
       "path": "app/api/routes_health.py",
       "type": "file",
@@ -59,12 +70,68 @@
       }
     },
     {
+      "id": "app/models/__init__.py",
+      "path": "app/models/__init__.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
+        "third-party": []
+      }
+    },
+    {
+      "id": "app/models/specs.py",
+      "path": "app/models/specs.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "typing.List"
+        ],
+        "third-party": [
+          "pydantic.BaseModel",
+          "pydantic.ConfigDict",
+          "pydantic.Field"
+        ]
+      }
+    },
+    {
+      "id": "app/services/clarification.py",
+      "path": "app/services/clarification.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
+        "third-party": []
+      }
+    },
+    {
       "id": "tests/__init__.py",
       "path": "tests/__init__.py",
       "type": "file",
       "external_dependencies": {
         "stdlib": [],
         "third-party": []
+      }
+    },
+    {
+      "id": "tests/test_clarification_service.py",
+      "path": "tests/test_clarification_service.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
+        "third-party": [
+          "pytest"
+        ]
+      }
+    },
+    {
+      "id": "tests/test_clarifications_api.py",
+      "path": "tests/test_clarifications_api.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
+        "third-party": [
+          "fastapi.testclient.TestClient",
+          "pytest"
+        ]
       }
     },
     {
@@ -107,9 +174,29 @@
           "pytest"
         ]
       }
+    },
+    {
+      "id": "tests/test_models.py",
+      "path": "tests/test_models.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
+        "third-party": [
+          "pydantic.ValidationError",
+          "pytest"
+        ]
+      }
     }
   ],
   "edges": [
+    {
+      "source": "app/api/routes_clarifications.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "app/api/routes_clarifications.py",
+      "target": "app/__init__.py"
+    },
     {
       "source": "app/main.py",
       "target": "app/config.py"
@@ -117,6 +204,30 @@
     {
       "source": "app/main.py",
       "target": "app/api/routes_health.py"
+    },
+    {
+      "source": "app/main.py",
+      "target": "app/api/routes_clarifications.py"
+    },
+    {
+      "source": "app/models/__init__.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "app/services/clarification.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_clarification_service.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_clarification_service.py",
+      "target": "app/__init__.py"
+    },
+    {
+      "source": "tests/test_clarifications_api.py",
+      "target": "app/main.py"
     },
     {
       "source": "tests/test_config.py",
@@ -133,6 +244,10 @@
     {
       "source": "tests/test_main.py",
       "target": "app/config.py"
+    },
+    {
+      "source": "tests/test_models.py",
+      "target": "app/models/specs.py"
     }
   ],
   "external_dependencies_summary": {
@@ -140,6 +255,7 @@
       "functools.lru_cache",
       "logging",
       "os",
+      "typing.List",
       "unittest.mock.patch"
     ],
     "third-party": [
@@ -148,11 +264,15 @@
       "fastapi.Request",
       "fastapi.responses.JSONResponse",
       "fastapi.testclient.TestClient",
+      "pydantic.BaseModel",
+      "pydantic.ConfigDict",
+      "pydantic.Field",
+      "pydantic.ValidationError",
       "pydantic_settings.BaseSettings",
       "pydantic_settings.SettingsConfigDict",
       "pytest"
     ],
-    "stdlib_count": 4,
-    "third-party_count": 8
+    "stdlib_count": 5,
+    "third-party_count": 12
   }
 }

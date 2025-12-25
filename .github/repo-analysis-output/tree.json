@@ -76,7 +76,35 @@
             },
             {
               "type": "file",
+              "name": "routes_clarifications.py"
+            },
+            {
+              "type": "file",
               "name": "routes_health.py"
+            }
+          ]
+        },
+        {
+          "type": "directory",
+          "name": "models",
+          "children": [
+            {
+              "type": "file",
+              "name": "__init__.py"
+            },
+            {
+              "type": "file",
+              "name": "specs.py"
+            }
+          ]
+        },
+        {
+          "type": "directory",
+          "name": "services",
+          "children": [
+            {
+              "type": "file",
+              "name": "clarification.py"
             }
           ]
         },
@@ -104,6 +132,14 @@
         },
         {
           "type": "file",
+          "name": "test_clarification_service.py"
+        },
+        {
+          "type": "file",
+          "name": "test_clarifications_api.py"
+        },
+        {
+          "type": "file",
           "name": "test_config.py"
         },
         {
@@ -113,6 +149,10 @@
         {
           "type": "file",
           "name": "test_main.py"
+        },
+        {
+          "type": "file",
+          "name": "test_models.py"
         }
       ]
     },

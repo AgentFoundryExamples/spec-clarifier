@@ -16,15 +16,24 @@
 ├── app
   ├── api
     ├── __init__.py
+    ├── routes_clarifications.py
     └── routes_health.py
+  ├── models
+    ├── __init__.py
+    └── specs.py
+  ├── services
+    └── clarification.py
   ├── __init__.py
   ├── config.py
   └── main.py
 ├── tests
   ├── __init__.py
+  ├── test_clarification_service.py
+  ├── test_clarifications_api.py
   ├── test_config.py
   ├── test_health.py
-  └── test_main.py
+  ├── test_main.py
+  └── test_models.py
 ├── .gitignore
 ├── LICENSE
 ├── LLMs.md
