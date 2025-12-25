@@ -10,6 +10,14 @@ from app.main import create_app
 from app.config import get_settings
 
 
+@pytest.fixture(autouse=True)
+def clear_settings_cache():
+    """Clear settings cache before and after each test."""
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 def test_create_app():
     """Test that create_app returns a FastAPI instance."""
     app = create_app()
@@ -52,9 +60,6 @@ def test_unknown_route_returns_404():
 
 def test_global_exception_handler_in_production():
     """Test that the global exception handler catches unhandled exceptions in production mode."""
-    # Clear the lru_cache to ensure we get fresh settings
-    get_settings.cache_clear()
-    
     # Ensure we're not in debug mode
     with patch.dict(os.environ, {"APP_DEBUG": "false"}, clear=False):
         get_settings.cache_clear()
@@ -69,16 +74,10 @@ def test_global_exception_handler_in_production():
         
         assert response.status_code == 500
         assert response.json() == {"detail": "Internal server error"}
-    
-    # Clear cache after test
-    get_settings.cache_clear()
 
 
 def test_exception_handler_not_registered_in_debug_mode():
     """Test that the exception handler is not registered in debug mode."""
-    # Clear the lru_cache to ensure we get fresh settings
-    get_settings.cache_clear()
-    
     # Set debug mode
     with patch.dict(os.environ, {"APP_DEBUG": "true"}, clear=False):
         get_settings.cache_clear()
@@ -93,6 +92,3 @@ def test_exception_handler_not_registered_in_debug_mode():
         
         # In debug mode, FastAPI's default error handling shows the full traceback
         assert response.status_code == 500
-    
-    # Clear cache after test
-    get_settings.cache_clear()
