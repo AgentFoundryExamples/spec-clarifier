@@ -63,6 +63,64 @@
       ]
     },
     {
+      "type": "directory",
+      "name": "app",
+      "children": [
+        {
+          "type": "directory",
+          "name": "api",
+          "children": [
+            {
+              "type": "file",
+              "name": "__init__.py"
+            },
+            {
+              "type": "file",
+              "name": "routes_health.py"
+            }
+          ]
+        },
+        {
+          "type": "file",
+          "name": "__init__.py"
+        },
+        {
+          "type": "file",
+          "name": "config.py"
+        },
+        {
+          "type": "file",
+          "name": "main.py"
+        }
+      ]
+    },
+    {
+      "type": "directory",
+      "name": "tests",
+      "children": [
+        {
+          "type": "file",
+          "name": "__init__.py"
+        },
+        {
+          "type": "file",
+          "name": "test_config.py"
+        },
+        {
+          "type": "file",
+          "name": "test_health.py"
+        },
+        {
+          "type": "file",
+          "name": "test_main.py"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": ".gitignore"
+    },
+    {
       "type": "file",
       "name": "LICENSE"
     },
@@ -72,7 +130,15 @@
     },
     {
       "type": "file",
+      "name": "pyproject.toml"
+    },
+    {
+      "type": "file",
       "name": "README.md"
+    },
+    {
+      "type": "file",
+      "name": "requirements.txt"
     }
   ]
 }
