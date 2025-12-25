@@ -1,6 +1,6 @@
 {
   "type": "directory",
-  "name": "agent-foundry-ai-template",
+  "name": "spec-clarifier",
   "children": [
     {
       "type": "directory",
