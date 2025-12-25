@@ -78,6 +78,73 @@ Returns the health status of the service:
 }
 ```
 
+### Clarifications
+
+#### Preview Clarifications
+
+```bash
+POST /v1/clarifications/preview
+```
+
+Accepts a ClarificationRequest containing specifications with open questions and returns a ClarifiedPlan with the questions removed. This endpoint provides a synchronous preview of the clarification process without processing answers or triggering async/LLM operations.
+
+**Request Body:**
+
+```json
+{
+  "plan": {
+    "specs": [
+      {
+        "purpose": "Build a web application",
+        "vision": "A modern, scalable web app",
+        "must": ["User authentication", "Database integration"],
+        "dont": ["Complex UI frameworks"],
+        "nice": ["Dark mode", "Mobile responsive"],
+        "open_questions": ["Which database should we use?", "What auth provider?"],
+        "assumptions": ["Users have modern browsers"]
+      }
+    ]
+  },
+  "answers": []
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "specs": [
+    {
+      "purpose": "Build a web application",
+      "vision": "A modern, scalable web app",
+      "must": ["User authentication", "Database integration"],
+      "dont": ["Complex UI frameworks"],
+      "nice": ["Dark mode", "Mobile responsive"],
+      "assumptions": ["Users have modern browsers"]
+    }
+  ]
+}
+```
+
+Note that `open_questions` are omitted from the clarified specifications in the response.
+
+**Error Response (422 Unprocessable Entity):**
+
+Returned when the request payload is malformed or missing required fields:
+
+```json
+{
+  "detail": [
+    {
+      "type": "missing",
+      "loc": ["body", "plan", "specs", 0, "vision"],
+      "msg": "Field required",
+      "input": {"purpose": "Missing vision field"}
+    }
+  ]
+}
+```
+
 ## Development
 
 ### Running Tests
