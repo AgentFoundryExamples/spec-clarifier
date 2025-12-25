@@ -26,13 +26,13 @@ def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
     (purpose, vision, must, dont, nice, assumptions) while omitting open_questions.
     Answers in the request are currently ignored.
     
+    FastAPI automatically validates the request body and returns 422 Unprocessable
+    Entity responses for malformed payloads or missing required fields.
+    
     Args:
         request: The clarification request containing the plan and optional answers
         
     Returns:
         ClarifiedPlan: The clarified plan with specifications ready for use
-        
-    Raises:
-        422: If the request payload is malformed or missing required fields
     """
     return clarify_plan(request.plan)

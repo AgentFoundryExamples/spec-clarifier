@@ -22,10 +22,10 @@ def clarify_plan(plan_input: PlanInput) -> ClarifiedPlan:
         clarified_spec = ClarifiedSpec(
             purpose=spec_input.purpose,
             vision=spec_input.vision,
-            must=spec_input.must.copy(),
-            dont=spec_input.dont.copy(),
-            nice=spec_input.nice.copy(),
-            assumptions=spec_input.assumptions.copy(),
+            must=spec_input.must,
+            dont=spec_input.dont,
+            nice=spec_input.nice,
+            assumptions=spec_input.assumptions,
         )
         clarified_specs.append(clarified_spec)
     
