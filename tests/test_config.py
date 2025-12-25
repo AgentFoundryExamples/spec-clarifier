@@ -132,3 +132,47 @@ def test_cors_settings_from_environment(monkeypatch):
     assert settings.cors_allow_credentials is False
     assert settings.cors_allow_methods == "GET,POST"
     assert settings.cors_allow_headers == "Content-Type,Authorization"
+
+
+def test_get_cors_methods_list_wildcard():
+    """Test that wildcard methods return a list with asterisk."""
+    settings = get_settings()
+    methods = settings.get_cors_methods_list()
+    
+    assert methods == ["*"]
+
+
+def test_get_cors_methods_list_explicit(monkeypatch):
+    """Test that explicit methods are parsed correctly."""
+    monkeypatch.setenv("APP_CORS_ALLOW_METHODS", "GET, POST, PUT")
+    
+    get_settings.cache_clear()
+    settings = get_settings()
+    methods = settings.get_cors_methods_list()
+    
+    assert len(methods) == 3
+    assert "GET" in methods
+    assert "POST" in methods
+    assert "PUT" in methods
+
+
+def test_get_cors_headers_list_wildcard():
+    """Test that wildcard headers return a list with asterisk."""
+    settings = get_settings()
+    headers = settings.get_cors_headers_list()
+    
+    assert headers == ["*"]
+
+
+def test_get_cors_headers_list_explicit(monkeypatch):
+    """Test that explicit headers are parsed correctly."""
+    monkeypatch.setenv("APP_CORS_ALLOW_HEADERS", "Content-Type, Authorization, X-Custom")
+    
+    get_settings.cache_clear()
+    settings = get_settings()
+    headers = settings.get_cors_headers_list()
+    
+    assert len(headers) == 3
+    assert "Content-Type" in headers
+    assert "Authorization" in headers
+    assert "X-Custom" in headers

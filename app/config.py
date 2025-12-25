@@ -46,6 +46,26 @@ class Settings(BaseSettings):
         if not self.cors_origins:
             return []
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+    
+    def get_cors_methods_list(self) -> list[str]:
+        """Parse CORS methods from comma-separated string to list.
+        
+        Returns:
+            List of allowed CORS methods or ["*"] for wildcard
+        """
+        if self.cors_allow_methods == "*":
+            return ["*"]
+        return [method.strip() for method in self.cors_allow_methods.split(",") if method.strip()]
+    
+    def get_cors_headers_list(self) -> list[str]:
+        """Parse CORS headers from comma-separated string to list.
+        
+        Returns:
+            List of allowed CORS headers or ["*"] for wildcard
+        """
+        if self.cors_allow_headers == "*":
+            return ["*"]
+        return [header.strip() for header in self.cors_allow_headers.split(",") if header.strip()]
 
 
 @lru_cache(maxsize=1)

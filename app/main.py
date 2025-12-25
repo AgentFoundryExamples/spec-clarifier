@@ -49,8 +49,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.get_cors_origins_list(),
         allow_credentials=settings.cors_allow_credentials,
-        allow_methods=settings.cors_allow_methods.split(",") if settings.cors_allow_methods != "*" else ["*"],
-        allow_headers=settings.cors_allow_headers.split(",") if settings.cors_allow_headers != "*" else ["*"],
+        allow_methods=settings.get_cors_methods_list(),
+        allow_headers=settings.get_cors_headers_list(),
     )
     
     # Register exception handlers only in non-debug mode
