@@ -25,6 +25,6 @@ USER appuser
 # Expose port 8000
 EXPOSE 8000
 
-# Run uvicorn with reload for local development
-# For production, remove --reload and consider using gunicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Run uvicorn. For production, consider using gunicorn as a process manager.
+# For development with hot-reload, override this command with --reload flag.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

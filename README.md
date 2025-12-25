@@ -65,10 +65,11 @@ Run the container:
 docker run -p 8000:8000 spec-clarifier
 ```
 
-For development with hot-reload (mounts local code):
+For development with hot-reload (mounts local code and adds --reload flag):
 
 ```bash
-docker run -p 8000:8000 -v $(pwd)/app:/app/app spec-clarifier
+docker run -p 8000:8000 -v $(pwd)/app:/app/app spec-clarifier \
+  uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 To pass environment variables to the container:

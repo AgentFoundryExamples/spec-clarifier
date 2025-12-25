@@ -144,8 +144,8 @@ def test_cors_rejects_non_configured_origins():
         headers={"Origin": "https://evil.com"}
     )
     assert response.status_code == 200
-    # The access-control-allow-origin header should not match the disallowed origin
-    assert response.headers.get("access-control-allow-origin") != "https://evil.com"
+    # The access-control-allow-origin header should not be present for a disallowed origin
+    assert "access-control-allow-origin" not in response.headers
 
 
 def test_cors_preflight_request():
