@@ -23,9 +23,13 @@
       "path": "app/api/routes_clarifications.py",
       "type": "file",
       "external_dependencies": {
-        "stdlib": [],
+        "stdlib": [
+          "uuid.UUID"
+        ],
         "third-party": [
-          "fastapi.APIRouter"
+          "fastapi.APIRouter",
+          "fastapi.BackgroundTasks",
+          "fastapi.HTTPException"
         ]
       }
     },
@@ -112,8 +116,14 @@
       "path": "app/services/clarification.py",
       "type": "file",
       "external_dependencies": {
-        "stdlib": [],
-        "third-party": []
+        "stdlib": [
+          "logging",
+          "typing.Optional",
+          "uuid.UUID"
+        ],
+        "third-party": [
+          "fastapi.BackgroundTasks"
+        ]
       }
     },
     {
@@ -145,6 +155,22 @@
       }
     },
     {
+      "id": "tests/test_async_job_lifecycle.py",
+      "path": "tests/test_async_job_lifecycle.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "unittest.mock.MagicMock",
+          "unittest.mock.Mock",
+          "unittest.mock.patch",
+          "uuid.uuid4"
+        ],
+        "third-party": [
+          "pytest"
+        ]
+      }
+    },
+    {
       "id": "tests/test_clarification_service.py",
       "path": "tests/test_clarification_service.py",
       "type": "file",
@@ -160,7 +186,9 @@
       "path": "tests/test_clarifications_api.py",
       "type": "file",
       "external_dependencies": {
-        "stdlib": [],
+        "stdlib": [
+          "time"
+        ],
         "third-party": [
           "fastapi.testclient.TestClient",
           "pytest"
@@ -254,6 +282,10 @@
       "target": "app/services/clarification.py"
     },
     {
+      "source": "app/api/routes_clarifications.py",
+      "target": "app/services/job_store.py"
+    },
+    {
       "source": "app/main.py",
       "target": "app/config.py"
     },
@@ -282,8 +314,24 @@
       "target": "app/models/specs.py"
     },
     {
+      "source": "app/services/clarification.py",
+      "target": "app/services/job_store.py"
+    },
+    {
       "source": "app/services/job_store.py",
       "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_async_job_lifecycle.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_async_job_lifecycle.py",
+      "target": "app/services/clarification.py"
+    },
+    {
+      "source": "tests/test_async_job_lifecycle.py",
+      "target": "app/services/job_store.py"
     },
     {
       "source": "tests/test_clarification_service.py",
@@ -296,6 +344,14 @@
     {
       "source": "tests/test_clarifications_api.py",
       "target": "app/main.py"
+    },
+    {
+      "source": "tests/test_clarifications_api.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_clarifications_api.py",
+      "target": "app/services/job_store.py"
     },
     {
       "source": "tests/test_config.py",
@@ -340,13 +396,17 @@
       "typing.Dict",
       "typing.List",
       "typing.Optional",
+      "unittest.mock.MagicMock",
+      "unittest.mock.Mock",
       "unittest.mock.patch",
       "uuid.UUID",
       "uuid.uuid4"
     ],
     "third-party": [
       "fastapi.APIRouter",
+      "fastapi.BackgroundTasks",
       "fastapi.FastAPI",
+      "fastapi.HTTPException",
       "fastapi.Request",
       "fastapi.middleware.cors.CORSMiddleware",
       "fastapi.responses.JSONResponse",
@@ -360,7 +420,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 15,
-    "third-party_count": 14
+    "stdlib_count": 17,
+    "third-party_count": 16
   }
 }

@@ -140,6 +140,10 @@
         },
         {
           "type": "file",
+          "name": "test_async_job_lifecycle.py"
+        },
+        {
+          "type": "file",
           "name": "test_clarification_service.py"
         },
         {
