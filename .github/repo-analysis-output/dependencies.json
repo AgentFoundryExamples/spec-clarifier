@@ -85,7 +85,11 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "typing.List"
+          "datetime.datetime",
+          "enum.Enum",
+          "typing.List",
+          "typing.Optional",
+          "uuid.UUID"
         ],
         "third-party": [
           "pydantic.BaseModel",
@@ -95,11 +99,39 @@
       }
     },
     {
+      "id": "app/services/__init__.py",
+      "path": "app/services/__init__.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
+        "third-party": []
+      }
+    },
+    {
       "id": "app/services/clarification.py",
       "path": "app/services/clarification.py",
       "type": "file",
       "external_dependencies": {
         "stdlib": [],
+        "third-party": []
+      }
+    },
+    {
+      "id": "app/services/job_store.py",
+      "path": "app/services/job_store.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "datetime.datetime",
+          "datetime.timedelta",
+          "datetime.timezone",
+          "threading",
+          "typing.Dict",
+          "typing.List",
+          "typing.Optional",
+          "uuid.UUID",
+          "uuid.uuid4"
+        ],
         "third-party": []
       }
     },
@@ -161,6 +193,24 @@
       }
     },
     {
+      "id": "tests/test_job_store.py",
+      "path": "tests/test_job_store.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "datetime.datetime",
+          "datetime.timedelta",
+          "datetime.timezone",
+          "threading",
+          "time",
+          "uuid.uuid4"
+        ],
+        "third-party": [
+          "pytest"
+        ]
+      }
+    },
+    {
       "id": "tests/test_main.py",
       "path": "tests/test_main.py",
       "type": "file",
@@ -182,7 +232,11 @@
       "path": "tests/test_models.py",
       "type": "file",
       "external_dependencies": {
-        "stdlib": [],
+        "stdlib": [
+          "datetime.datetime",
+          "datetime.timezone",
+          "uuid.uuid4"
+        ],
         "third-party": [
           "pydantic.ValidationError",
           "pytest"
@@ -197,7 +251,7 @@
     },
     {
       "source": "app/api/routes_clarifications.py",
-      "target": "app/__init__.py"
+      "target": "app/services/clarification.py"
     },
     {
       "source": "app/main.py",
@@ -216,16 +270,28 @@
       "target": "app/models/specs.py"
     },
     {
+      "source": "app/services/__init__.py",
+      "target": "app/services/clarification.py"
+    },
+    {
+      "source": "app/services/__init__.py",
+      "target": "app/services/job_store.py"
+    },
+    {
       "source": "app/services/clarification.py",
       "target": "app/models/specs.py"
     },
     {
+      "source": "app/services/job_store.py",
+      "target": "app/models/specs.py"
+    },
+    {
       "source": "tests/test_clarification_service.py",
       "target": "app/models/specs.py"
     },
     {
       "source": "tests/test_clarification_service.py",
-      "target": "app/__init__.py"
+      "target": "app/services/clarification.py"
     },
     {
       "source": "tests/test_clarifications_api.py",
@@ -238,6 +304,14 @@
     {
       "source": "tests/test_health.py",
       "target": "app/main.py"
+    },
+    {
+      "source": "tests/test_job_store.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_job_store.py",
+      "target": "app/services/job_store.py"
     },
     {
       "source": "tests/test_main.py",
@@ -254,11 +328,21 @@
   ],
   "external_dependencies_summary": {
     "stdlib": [
+      "datetime.datetime",
+      "datetime.timedelta",
+      "datetime.timezone",
+      "enum.Enum",
       "functools.lru_cache",
       "logging",
       "os",
+      "threading",
+      "time",
+      "typing.Dict",
       "typing.List",
-      "unittest.mock.patch"
+      "typing.Optional",
+      "unittest.mock.patch",
+      "uuid.UUID",
+      "uuid.uuid4"
     ],
     "third-party": [
       "fastapi.APIRouter",
@@ -276,7 +360,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 5,
+    "stdlib_count": 15,
     "third-party_count": 14
   }
 }
