@@ -13,9 +13,28 @@
 # limitations under the License.
 """Pydantic models for specification clarification."""
 
-from typing import List
+from datetime import datetime
+from enum import Enum
+from typing import List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class JobStatus(str, Enum):
+    """Status of a clarification job.
+    
+    Attributes:
+        PENDING: Job created but not yet started
+        RUNNING: Job is currently being processed
+        SUCCESS: Job completed successfully
+        FAILED: Job failed with an error
+    """
+    
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
 
 
 class SpecInput(BaseModel):
@@ -118,3 +137,32 @@ class ClarificationRequest(BaseModel):
     
     plan: PlanInput = Field(..., description="The plan input with specifications")
     answers: List[QuestionAnswer] = Field(default_factory=list, description="List of answers to open questions")
+
+
+class ClarificationJob(BaseModel):
+    """Clarification job tracking status and results.
+    
+    Represents a clarification job with status tracking, timestamps, error handling,
+    and optional configuration. Jobs are stored in-memory and can be polled for status.
+    
+    Attributes:
+        id: Unique identifier for the job
+        status: Current status of the job
+        created_at: UTC timestamp when job was created
+        updated_at: UTC timestamp when job was last updated
+        last_error: Optional error message if job failed
+        request: The original clarification request
+        result: Optional clarified plan result when job succeeds
+        config: Optional configuration dictionary for job processing
+    """
+    
+    model_config = ConfigDict(extra="forbid")
+    
+    id: UUID = Field(..., description="Unique identifier for the job")
+    status: JobStatus = Field(..., description="Current status of the job")
+    created_at: datetime = Field(..., description="UTC timestamp when job was created")
+    updated_at: datetime = Field(..., description="UTC timestamp when job was last updated")
+    last_error: Optional[str] = Field(None, description="Optional error message if job failed")
+    request: ClarificationRequest = Field(..., description="The original clarification request")
+    result: Optional[ClarifiedPlan] = Field(None, description="Optional clarified plan result when job succeeds")
+    config: Optional[dict] = Field(None, description="Optional configuration dictionary for job processing")

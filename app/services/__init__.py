@@ -11,26 +11,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Models package for spec clarifier."""
+"""Services package for spec clarifier."""
 
-from app.models.specs import (
-    ClarificationJob,
-    ClarificationRequest,
-    ClarifiedPlan,
-    ClarifiedSpec,
-    JobStatus,
-    PlanInput,
-    QuestionAnswer,
-    SpecInput,
+from app.services.clarification import clarify_plan
+from app.services.job_store import (
+    JobNotFoundError,
+    cleanup_expired_jobs,
+    clear_all_jobs,
+    create_job,
+    delete_job,
+    get_job,
+    list_jobs,
+    update_job,
 )
 
 __all__ = [
-    "ClarificationJob",
-    "ClarificationRequest",
-    "ClarifiedPlan",
-    "ClarifiedSpec",
-    "JobStatus",
-    "PlanInput",
-    "QuestionAnswer",
-    "SpecInput",
+    "clarify_plan",
+    "cleanup_expired_jobs",
+    "clear_all_jobs",
+    "create_job",
+    "delete_job",
+    "get_job",
+    "JobNotFoundError",
+    "list_jobs",
+    "update_job",
 ]
