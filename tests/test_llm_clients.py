@@ -910,13 +910,18 @@ class TestOpenAIResponsesClient:
     async def test_openai_client_authentication_error(self, monkeypatch):
         """Test that OpenAI AuthenticationError is mapped to LLMAuthenticationError."""
         from app.services.llm_clients import OpenAIResponsesClient, LLMAuthenticationError
+        import httpx
+        
+        # Create proper httpx request and response
+        request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+        response = httpx.Response(401, json={"error": {"message": "Invalid API key"}}, request=request)
         
         # Mock AsyncOpenAI to raise AuthenticationError
         class MockAsyncOpenAI:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import AuthenticationError
-                    raise AuthenticationError("Invalid API key")
+                    raise AuthenticationError("Invalid API key", response=response, body=None)
             
             def __init__(self, api_key):
                 self.responses = self.MockResponses()
@@ -940,13 +945,18 @@ class TestOpenAIResponsesClient:
     async def test_openai_client_rate_limit_error(self, monkeypatch):
         """Test that OpenAI RateLimitError is mapped to LLMRateLimitError."""
         from app.services.llm_clients import OpenAIResponsesClient, LLMRateLimitError
+        import httpx
+        
+        # Create proper httpx request and response
+        request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+        response = httpx.Response(429, json={"error": {"message": "Rate limit exceeded"}}, request=request)
         
         # Mock AsyncOpenAI to raise RateLimitError
         class MockAsyncOpenAI:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import RateLimitError
-                    raise RateLimitError("Rate limit exceeded")
+                    raise RateLimitError("Rate limit exceeded", response=response, body=None)
             
             def __init__(self, api_key):
                 self.responses = self.MockResponses()
@@ -969,13 +979,18 @@ class TestOpenAIResponsesClient:
     async def test_openai_client_validation_error(self, monkeypatch):
         """Test that OpenAI BadRequestError is mapped to LLMValidationError."""
         from app.services.llm_clients import OpenAIResponsesClient, LLMValidationError
+        import httpx
+        
+        # Create proper httpx request and response
+        request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+        response = httpx.Response(400, json={"error": {"message": "Invalid request format"}}, request=request)
         
         # Mock AsyncOpenAI to raise BadRequestError
         class MockAsyncOpenAI:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import BadRequestError
-                    raise BadRequestError("Invalid request format", response=None, body=None)
+                    raise BadRequestError("Invalid request format", response=response, body=None)
             
             def __init__(self, api_key):
                 self.responses = self.MockResponses()
@@ -999,12 +1014,17 @@ class TestOpenAIResponsesClient:
         """Test that OpenAI connection errors are mapped to LLMNetworkError."""
         from app.services.llm_clients import OpenAIResponsesClient, LLMNetworkError
         
+        # Mock request object for OpenAI exception
+        class MockRequest:
+            url = "https://api.openai.com/v1/responses"
+            method = "POST"
+        
         # Mock AsyncOpenAI to raise APIConnectionError
         class MockAsyncOpenAI:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import APIConnectionError
-                    raise APIConnectionError(request=None)
+                    raise APIConnectionError(request=MockRequest())
             
             def __init__(self, api_key):
                 self.responses = self.MockResponses()
@@ -1028,12 +1048,17 @@ class TestOpenAIResponsesClient:
         """Test that OpenAI timeout errors are mapped to LLMNetworkError."""
         from app.services.llm_clients import OpenAIResponsesClient, LLMNetworkError
         
+        # Mock request object for OpenAI exception
+        class MockRequest:
+            url = "https://api.openai.com/v1/responses"
+            method = "POST"
+        
         # Mock AsyncOpenAI to raise APITimeoutError
         class MockAsyncOpenAI:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import APITimeoutError
-                    raise APITimeoutError(request=None)
+                    raise APITimeoutError(request=MockRequest())
             
             def __init__(self, api_key):
                 self.responses = self.MockResponses()
@@ -1056,6 +1081,14 @@ class TestOpenAIResponsesClient:
     async def test_openai_client_generic_api_error(self, monkeypatch):
         """Test that generic OpenAI APIError is mapped to LLMCallError."""
         from app.services.llm_clients import OpenAIResponsesClient, LLMCallError
+        
+        # Mock response object for OpenAI exception
+        class MockResponse:
+            status_code = 500
+            headers = {}
+            
+            def json(self):
+                return {"error": {"message": "Internal server error"}}
         
         # Mock AsyncOpenAI to raise APIError
         class MockAsyncOpenAI:
