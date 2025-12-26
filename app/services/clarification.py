@@ -356,10 +356,11 @@ def _remove_prose_patterns(text: str) -> str:
         Text with prose patterns removed
     """
     # Common phrases LLMs use before JSON
+    # Use word boundaries and more precise patterns to avoid false matches
     prose_patterns = [
-        r'^(?:here\s+is|here\'s|the\s+result\s+is|the\s+answer\s+is|the\s+clarified\s+plan\s+is)[^\{]*',
-        r'^(?:sure|okay|certainly)[,\s]*',
-        r'^(?:i\s+can\s+help|let\s+me\s+help|i\'ll\s+help)[^\{]*',
+        r'^\s*(?:here\s+is|here\'s|the\s+result\s+is|the\s+answer\s+is|the\s+clarified\s+plan\s+is)\s*[:\s]*',
+        r'^\s*(?:sure|okay|certainly)[,\s]*',
+        r'^\s*(?:i\s+can\s+help|let\s+me\s+help|i\'ll\s+help)\s+.*?\s*',
     ]
     
     for pattern in prose_patterns:

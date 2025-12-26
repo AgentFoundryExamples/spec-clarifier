@@ -244,34 +244,27 @@ class TestBuildClarificationPrompts:
         parsed = json.loads(json_str)  # Should not raise
         assert parsed['specs'][0]['purpose'] == "Système de gestion 系统管理"
     
-    def test_no_secrets_in_prompts(self):
+    def test_no_secrets_in_prompts(self, monkeypatch):
         """Test that no environment secrets leak into prompts."""
-        import os
+        # Set some fake environment variables using monkeypatch for isolation
+        monkeypatch.setenv('TEST_API_KEY', 'secret-key-12345')
+        monkeypatch.setenv('TEST_PASSWORD', 'super-secret-pwd')
         
-        # Set some fake environment variables
-        os.environ['TEST_API_KEY'] = 'secret-key-12345'
-        os.environ['TEST_PASSWORD'] = 'super-secret-pwd'
+        spec = SpecInput(
+            purpose="Test security",
+            vision="No secrets",
+            must=["Feature"],
+        )
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan, answers=[])
         
-        try:
-            spec = SpecInput(
-                purpose="Test security",
-                vision="No secrets",
-                must=["Feature"],
-            )
-            plan = PlanInput(specs=[spec])
-            request = ClarificationRequest(plan=plan, answers=[])
-            
-            system_prompt, user_prompt = build_clarification_prompts(request)
-            
-            # Verify no secrets in prompts
-            assert 'secret-key-12345' not in system_prompt
-            assert 'secret-key-12345' not in user_prompt
-            assert 'super-secret-pwd' not in system_prompt
-            assert 'super-secret-pwd' not in user_prompt
-        finally:
-            # Clean up
-            del os.environ['TEST_API_KEY']
-            del os.environ['TEST_PASSWORD']
+        system_prompt, user_prompt = build_clarification_prompts(request)
+        
+        # Verify no secrets in prompts
+        assert 'secret-key-12345' not in system_prompt
+        assert 'secret-key-12345' not in user_prompt
+        assert 'super-secret-pwd' not in system_prompt
+        assert 'super-secret-pwd' not in user_prompt
     
     def test_provider_model_metadata_not_in_prompts(self):
         """Test that provider/model metadata doesn't leak into prompts."""
