@@ -117,7 +117,9 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
+          "copy",
           "logging",
+          "typing.Any",
           "typing.Optional",
           "uuid.UUID"
         ],
@@ -394,6 +396,10 @@
       "target": "app/services/job_store.py"
     },
     {
+      "source": "app/services/clarification.py",
+      "target": "app/services/llm_clients.py"
+    },
+    {
       "source": "app/services/job_store.py",
       "target": "app/models/specs.py"
     },
@@ -420,6 +426,10 @@
     {
       "source": "tests/test_clarification_service.py",
       "target": "app/services/job_store.py"
+    },
+    {
+      "source": "tests/test_clarification_service.py",
+      "target": "app/services/llm_clients.py"
     },
     {
       "source": "tests/test_clarifications_api.py",
@@ -474,6 +484,7 @@
     "stdlib": [
       "abc.ABC",
       "abc.abstractmethod",
+      "copy",
       "datetime.datetime",
       "datetime.timedelta",
       "datetime.timezone",
@@ -533,7 +544,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 23,
+    "stdlib_count": 24,
     "third-party_count": 35
   }
 }
