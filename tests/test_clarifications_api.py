@@ -1447,3 +1447,33 @@ class TestDebugEndpoint:
         # Config should contain llm_config since that's set by default
         if debug_data["config"]:
             assert "llm_config" in debug_data["config"]
+
+
+class TestDebugEndpointOpenAPI:
+    """Tests for OpenAPI documentation of debug endpoint."""
+    
+    def test_openapi_includes_debug_endpoint(self, client):
+        """Test that OpenAPI schema includes debug endpoint."""
+        response = client.get("/openapi.json")
+        
+        assert response.status_code == 200
+        openapi = response.json()
+        
+        # Check that the debug endpoint is documented
+        assert "/v1/clarifications/{job_id}/debug" in openapi["paths"]
+        
+        endpoint = openapi["paths"]["/v1/clarifications/{job_id}/debug"]
+        assert "get" in endpoint
+        
+        # Check GET method documentation
+        get_spec = endpoint["get"]
+        assert "Clarifications" in get_spec["tags"]
+        assert "summary" in get_spec
+        assert "debug" in get_spec["summary"].lower()
+        
+        # Check that it has 200 response
+        assert "200" in get_spec["responses"]
+        
+        # Verify description mentions it's disabled by default
+        assert "description" in get_spec
+        assert "disabled by default" in get_spec["description"].lower() or "debug mode only" in get_spec["description"].lower()

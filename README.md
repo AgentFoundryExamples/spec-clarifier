@@ -140,6 +140,9 @@ Example:
 export APP_APP_NAME="My Spec Clarifier"
 export APP_DEBUG=true
 export APP_SHOW_JOB_RESULT=true  # Enable for development/debugging
+export APP_ENABLE_DEBUG_ENDPOINT=true  # Enable debug endpoint for development
+export APP_LLM_DEFAULT_PROVIDER="openai"  # or "anthropic", "google"
+export APP_LLM_DEFAULT_MODEL="gpt-5"  # or "gpt-5.1", "claude-sonnet-4.5", etc.
 export APP_CORS_ORIGINS="http://localhost:3000,http://localhost:8080,https://myapp.com"
 uvicorn app.main:app --reload
 ```
