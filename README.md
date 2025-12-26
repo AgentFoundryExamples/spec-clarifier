@@ -103,6 +103,29 @@ The application can be configured via environment variables with the `APP_` pref
   - **Use Case**: Enable in development/debugging to inspect results directly in the API response
   - **Note**: Settings are cached at application startup. To change this flag at runtime, restart the service or use environment variables before starting the application.
 
+- `APP_ENABLE_DEBUG_ENDPOINT`: Enable the debug endpoint GET /v1/clarifications/{job_id}/debug (default: False)
+  - **Production Mode (False)**: Debug endpoint returns 403 Forbidden
+  - **Development Mode (True)**: Debug endpoint returns sanitized metadata about jobs
+  - **Security**: Even when enabled, this endpoint intentionally excludes raw prompts and LLM responses
+  - **Use Case**: Enable in development to inspect job configuration, timestamps, and metadata
+  - **Important**: This is a security-sensitive feature. Only enable in trusted environments.
+
+#### LLM Configuration
+
+The service uses LLM providers for specification clarification. Configure the default provider and model:
+
+- `APP_LLM_DEFAULT_PROVIDER`: Default LLM provider (default: "openai")
+  - Supported values: "openai", "anthropic", "google"
+  - This sets the default provider when no explicit configuration is provided
+
+- `APP_LLM_DEFAULT_MODEL`: Default model identifier (default: "gpt-5")
+  - For OpenAI: "gpt-5", "gpt-5.1" (uses Responses API)
+  - For Anthropic: "claude-sonnet-4.5", "claude-opus-4" (uses Messages API)
+  - For Google: "gemini-3.0-pro" (uses Gemini API)
+  - See LLMs.md for detailed provider information
+
+**Note**: The LLM pipeline intentionally redacts prompts, answers, and raw responses from logs to protect sensitive data. Only metadata (provider, model, elapsed time, error messages) is logged.
+
 #### CORS Configuration
 
 CORS (Cross-Origin Resource Sharing) is configured to allow requests from localhost by default:
@@ -612,7 +635,62 @@ curl -s "http://localhost:8000/v1/clarifications/$JOB_ID" | jq .
 # }
 ```
 
-#### Step 6: Handle Edge Cases
+#### Step 6: Access Debug Information (Optional, Development Only)
+
+If you need to inspect job configuration and metadata during development, you can enable the debug endpoint:
+
+```bash
+# Start server with debug endpoint enabled
+export APP_ENABLE_DEBUG_ENDPOINT=true
+uvicorn app.main:app --reload
+
+# Access debug information for a job
+curl -s "http://localhost:8000/v1/clarifications/$JOB_ID/debug" | jq .
+
+# Response:
+# {
+#   "job_id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "SUCCESS",
+#   "created_at": "2025-12-26T06:00:00.000000Z",
+#   "updated_at": "2025-12-26T06:00:01.500000Z",
+#   "last_error": null,
+#   "has_request": true,
+#   "has_result": true,
+#   "config": {"llm_config": {"provider": "openai", "model": "gpt-5"}},
+#   "request_metadata": {
+#     "num_specs": 1,
+#     "num_answers": 0,
+#     "spec_summaries": [
+#       {
+#         "purpose_length": 22,
+#         "vision_length": 28,
+#         "num_must": 2,
+#         "num_dont": 1,
+#         "num_nice": 2,
+#         "num_open_questions": 1,
+#         "num_assumptions": 1
+#       }
+#     ]
+#   },
+#   "result_metadata": {
+#     "num_specs": 1,
+#     "spec_summaries": [
+#       {
+#         "purpose_length": 22,
+#         "vision_length": 28,
+#         "num_must": 2,
+#         "num_dont": 1,
+#         "num_nice": 2,
+#         "num_assumptions": 1
+#       }
+#     ]
+#   }
+# }
+```
+
+**Important**: The debug endpoint is disabled by default for security. When enabled, it returns sanitized metadata only - raw prompts and LLM responses are intentionally excluded to prevent data leakage.
+
+#### Step 7: Handle Edge Cases
 
 ```bash
 # Non-existent job (404)
@@ -725,6 +803,59 @@ The job store handles several important edge cases:
 - **Missing jobs**: Raises `JobNotFoundError` with clear error messages
 - **Timestamp management**: All timestamps are UTC-aware and `updated_at` is always refreshed on updates
 - **Optional config**: Config parameter defaults to None and doesn't require client input
+
+## Privacy and Logging
+
+The spec-clarifier service is designed with privacy and security in mind. The LLM pipeline and API endpoints intentionally redact sensitive information from logs and responses.
+
+### What is Logged
+
+The service logs the following **non-sensitive** information:
+
+- Job IDs and status transitions (PENDING → RUNNING → SUCCESS/FAILED)
+- LLM provider and model names (e.g., "openai", "gpt-5")
+- Request/response elapsed times and performance metrics
+- Sanitized error messages (without prompts or data)
+- HTTP request methods and status codes
+
+### What is NOT Logged
+
+The following **sensitive information** is intentionally excluded from all logs:
+
+- ❌ User prompts and system prompts sent to LLMs
+- ❌ Raw LLM responses and completions
+- ❌ Specification content (purpose, vision, must, dont, nice, assumptions, open_questions)
+- ❌ Question answers provided by users
+- ❌ ClarifiedPlan results and clarified specifications
+
+### Debug Endpoint Safety
+
+Even when the debug endpoint (`/v1/clarifications/{job_id}/debug`) is enabled via `APP_ENABLE_DEBUG_ENDPOINT=true`, it returns only sanitized metadata:
+
+- Job configuration (provider, model, temperature, etc.)
+- Timestamps and status information
+- **Counts** of specs, questions, and answers (not content)
+- **Length** of text fields (not actual text)
+- Error messages (already sanitized)
+
+The debug endpoint **never** returns raw prompts, LLM responses, or full specification content.
+
+### Logging in Production
+
+For production deployments:
+
+1. Keep `APP_DEBUG=false` to use production logging levels
+2. Keep `APP_ENABLE_DEBUG_ENDPOINT=false` to disable debug access
+3. Keep `APP_SHOW_JOB_RESULT=false` to prevent result exposure in GET responses
+4. Configure log aggregation to capture structured logs for monitoring
+5. Review middleware and reverse proxy logs to ensure they don't capture request bodies
+
+The service uses Python's standard logging module with the following format:
+```
+%(asctime)s - %(name)s - %(levelname)s - %(message)s
+```
+
+All sensitive data is intentionally excluded from log messages to prevent accidental exposure through log aggregation systems, SIEM tools, or log files.
 
 ## Development
 

@@ -162,3 +162,101 @@ def get_clarification_job(job_id: UUID) -> JobStatusResponse:
         )
     except JobNotFoundError:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+
+@router.get(
+    "/{job_id}/debug",
+    response_model=dict,
+    summary="Get debug information for a clarification job (debug mode only)",
+    description=(
+        "⚠️ DEBUG ENDPOINT - DISABLED BY DEFAULT\n\n"
+        "Returns detailed debug information for a clarification job including configuration, "
+        "timestamps, and metadata. This endpoint is only available when APP_ENABLE_DEBUG_ENDPOINT "
+        "is set to true.\n\n"
+        "This endpoint intentionally excludes raw prompts and LLM responses to prevent "
+        "accidental exposure of sensitive data. Only metadata and sanitized information "
+        "is returned.\n\n"
+        "Returns 403 Forbidden if the debug endpoint is not enabled.\n"
+        "Returns 404 if the job ID is not found."
+    ),
+)
+def get_clarification_job_debug(job_id: UUID) -> dict:
+    """Get debug information for a clarification job.
+    
+    This endpoint is protected by the APP_ENABLE_DEBUG_ENDPOINT flag and returns
+    sanitized debug information about a job. Raw prompts and LLM responses are
+    intentionally excluded to prevent accidental data leakage.
+    
+    Args:
+        job_id: The UUID of the job to retrieve
+        
+    Returns:
+        dict: Debug information including job metadata, config, and sanitized details
+        
+    Raises:
+        HTTPException: 403 if debug endpoint disabled, 404 if job not found
+    """
+    settings = get_settings()
+    
+    # Check if debug endpoint is enabled
+    if not settings.enable_debug_endpoint:
+        raise HTTPException(
+            status_code=403,
+            detail="Debug endpoint is disabled. Set APP_ENABLE_DEBUG_ENDPOINT=true to enable."
+        )
+    
+    try:
+        job = get_job(job_id)
+        
+        # Build sanitized debug response
+        debug_info = {
+            "job_id": str(job.id),
+            "status": job.status.value,
+            "created_at": job.created_at.isoformat(),
+            "updated_at": job.updated_at.isoformat(),
+            "last_error": job.last_error,
+            "has_request": job.request is not None,
+            "has_result": job.result is not None,
+            "config": job.config if job.config else None,
+        }
+        
+        # Add request metadata (not full content)
+        if job.request:
+            debug_info["request_metadata"] = {
+                "num_specs": len(job.request.plan.specs),
+                "num_answers": len(job.request.answers),
+                "spec_summaries": [
+                    {
+                        "purpose_length": len(spec.purpose),
+                        "vision_length": len(spec.vision),
+                        "num_must": len(spec.must),
+                        "num_dont": len(spec.dont),
+                        "num_nice": len(spec.nice),
+                        "num_open_questions": len(spec.open_questions),
+                        "num_assumptions": len(spec.assumptions),
+                    }
+                    for spec in job.request.plan.specs
+                ]
+            }
+        
+        # Add result metadata (not full content)
+        if job.result:
+            debug_info["result_metadata"] = {
+                "num_specs": len(job.result.specs),
+                "spec_summaries": [
+                    {
+                        "purpose_length": len(spec.purpose),
+                        "vision_length": len(spec.vision),
+                        "num_must": len(spec.must),
+                        "num_dont": len(spec.dont),
+                        "num_nice": len(spec.nice),
+                        "num_assumptions": len(spec.assumptions),
+                    }
+                    for spec in job.result.specs
+                ]
+            }
+        
+        return debug_info
+        
+    except JobNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
