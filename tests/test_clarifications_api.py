@@ -66,6 +66,17 @@ def mock_llm_client():
         yield
 
 
+@pytest.fixture
+def enabled_debug_client(monkeypatch):
+    """Return a TestClient with the debug endpoint enabled."""
+    monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
+    from app.config import get_settings
+    get_settings.cache_clear()
+    from app.main import create_app
+    from fastapi.testclient import TestClient
+    return TestClient(create_app())
+
+
 class TestPreviewClarificationsEndpoint:
     """Tests for POST /v1/clarifications/preview endpoint."""
     
@@ -1217,3 +1228,359 @@ class TestAsyncJobLifecycleAPI:
         assert data["last_error"] is not None
         assert "Forced failure for testing" in data["last_error"]
         assert data["result"] is None
+
+
+class TestDebugEndpoint:
+    """Tests for GET /v1/clarifications/{job_id}/debug endpoint."""
+    
+    def test_debug_endpoint_disabled_by_default(self, client):
+        """Test that debug endpoint returns 403 when disabled (default)."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # Create job
+        post_response = client.post("/v1/clarifications", json=request_data)
+        job_id = post_response.json()["id"]
+        
+        # Try to access debug endpoint (should be disabled by default)
+        debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
+        
+        assert debug_response.status_code == 403
+        assert "detail" in debug_response.json()
+        assert "disabled" in debug_response.json()["detail"].lower()
+    
+    def test_debug_endpoint_enabled_returns_metadata(self, enabled_debug_client):
+        """Test that debug endpoint returns sanitized metadata when enabled."""
+        client = enabled_debug_client
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test Service",
+                        "vision": "High performance API",
+                        "must": ["Fast", "Reliable"],
+                        "dont": ["Slow"],
+                        "nice": ["Configurable"],
+                        "open_questions": ["Which cloud?"],
+                        "assumptions": ["Cloud deployment"],
+                    }
+                ]
+            },
+            "answers": [
+                {
+                    "spec_index": 0,
+                    "question_index": 0,
+                    "question": "Which cloud?",
+                    "answer": "AWS",
+                }
+            ],
+        }
+        
+        # Create job
+        post_response = client.post("/v1/clarifications", json=request_data)
+        job_id = post_response.json()["id"]
+        
+        # Wait for completion
+        max_wait = 5.0
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            get_response = client.get(f"/v1/clarifications/{job_id}")
+            job_data = get_response.json()
+            
+            if job_data["status"] in ["SUCCESS", "FAILED"]:
+                break
+            
+            time.sleep(0.1)
+        
+        # Access debug endpoint
+        debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
+        
+        assert debug_response.status_code == 200
+        debug_data = debug_response.json()
+        
+        # Verify debug data structure
+        assert "job_id" in debug_data
+        assert "status" in debug_data
+        assert "created_at" in debug_data
+        assert "updated_at" in debug_data
+        assert "has_request" in debug_data
+        assert "has_result" in debug_data
+        assert "config" in debug_data
+        
+        # Verify request metadata (not full content)
+        assert "request_metadata" in debug_data
+        req_meta = debug_data["request_metadata"]
+        assert req_meta["num_specs"] == 1
+        assert req_meta["num_answers"] == 1
+        assert len(req_meta["spec_summaries"]) == 1
+        
+        spec_summary = req_meta["spec_summaries"][0]
+        assert "purpose_length" in spec_summary
+        assert "vision_length" in spec_summary
+        assert spec_summary["num_must"] == 2
+        assert spec_summary["num_dont"] == 1
+        assert spec_summary["num_nice"] == 1
+        assert spec_summary["num_open_questions"] == 1
+        assert spec_summary["num_assumptions"] == 1
+        
+        # Verify result metadata is present if job succeeded
+        if debug_data["status"] == "SUCCESS":
+            assert "result_metadata" in debug_data
+            result_meta = debug_data["result_metadata"]
+            assert result_meta["num_specs"] == 1
+            assert len(result_meta["spec_summaries"]) == 1
+    
+    def test_debug_endpoint_excludes_sensitive_content(self, enabled_debug_client):
+        """Test that debug endpoint does not expose prompts or raw content."""
+        client = enabled_debug_client
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Sensitive purpose text",
+                        "vision": "Sensitive vision text",
+                        "must": ["Sensitive requirement"],
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # Create job
+        post_response = client.post("/v1/clarifications", json=request_data)
+        job_id = post_response.json()["id"]
+        
+        # Access debug endpoint
+        debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
+        debug_data = debug_response.json()
+        
+        # Convert to string to search for sensitive content
+        debug_str = str(debug_data).lower()
+        
+        # Verify sensitive content is NOT present
+        assert "sensitive purpose text" not in debug_str
+        assert "sensitive vision text" not in debug_str
+        assert "sensitive requirement" not in debug_str
+        
+        # Verify only metadata is present
+        assert "purpose_length" in str(debug_data)
+        assert "vision_length" in str(debug_data)
+        assert "num_must" in str(debug_data)
+    
+    def test_debug_endpoint_returns_404_for_nonexistent_job(self, enabled_debug_client):
+        """Test that debug endpoint returns 404 for nonexistent jobs."""
+        client = enabled_debug_client
+        
+        from uuid import uuid4
+        fake_id = uuid4()
+        
+        debug_response = client.get(f"/v1/clarifications/{fake_id}/debug")
+        
+        assert debug_response.status_code == 404
+        assert "not found" in debug_response.json()["detail"].lower()
+    
+    def test_debug_endpoint_invalid_uuid_returns_422(self, enabled_debug_client):
+        """Test that debug endpoint returns 422 for invalid UUIDs."""
+        client = enabled_debug_client
+        
+        debug_response = client.get("/v1/clarifications/invalid-uuid/debug")
+        
+        assert debug_response.status_code == 422
+    
+    def test_debug_endpoint_shows_config_when_present(self, enabled_debug_client):
+        """Test that debug endpoint shows job config when available."""
+        client = enabled_debug_client
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # Create job
+        post_response = client.post("/v1/clarifications", json=request_data)
+        job_id = post_response.json()["id"]
+        
+        # Access debug endpoint
+        debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
+        debug_data = debug_response.json()
+        
+        # Should have config field
+        assert "config" in debug_data
+        # Config should contain llm_config since that's set by default
+        if debug_data["config"]:
+            assert "llm_config" in debug_data["config"]
+    
+    def test_debug_endpoint_sanitizes_config(self, enabled_debug_client):
+        """Test that debug endpoint sanitizes sensitive fields from config."""
+        from app.services.job_store import create_job
+        from app.models.specs import ClarificationRequest, PlanInput, SpecInput
+        
+        client = enabled_debug_client
+        
+        # Create a job with potentially sensitive config
+        plan = PlanInput(specs=[SpecInput(purpose="Test", vision="Test vision")])
+        request = ClarificationRequest(plan=plan, answers=[])
+        
+        # Manually create a job with sensitive config data
+        from app.services import job_store
+        job = job_store.create_job(request, config={
+            "llm_config": {
+                "provider": "openai",
+                "model": "gpt-5",
+                "api_key": "sk-secret-key-12345",  # This should be filtered
+                "temperature": 0.5
+            },
+            "api_key": "should-be-filtered",  # This should be filtered
+            "token": "should-be-filtered",  # This should be filtered
+            "safe_field": "should-be-included"  # This should be included
+        })
+        
+        # Access debug endpoint
+        debug_response = client.get(f"/v1/clarifications/{job.id}/debug")
+        debug_data = debug_response.json()
+        
+        # Verify config is sanitized
+        assert "config" in debug_data
+        config = debug_data["config"]
+        
+        # llm_config should only have safe fields
+        assert "llm_config" in config
+        assert config["llm_config"]["provider"] == "openai"
+        assert config["llm_config"]["model"] == "gpt-5"
+        assert config["llm_config"]["temperature"] == 0.5
+        assert "api_key" not in config["llm_config"]  # Should be filtered out
+        
+        # Top-level sensitive fields should be filtered
+        assert "api_key" not in config
+        assert "token" not in config
+        
+        # Safe fields should be preserved
+        assert config["safe_field"] == "should-be-included"
+    
+    def test_debug_endpoint_sanitizes_error_messages(self, enabled_debug_client):
+        """Test that debug endpoint sanitizes error messages containing sensitive data."""
+        from app.services.job_store import create_job, update_job
+        from app.models.specs import ClarificationRequest, PlanInput, SpecInput, JobStatus
+        
+        client = enabled_debug_client
+        
+        # Create a job
+        plan = PlanInput(specs=[SpecInput(purpose="Test", vision="Test vision")])
+        request = ClarificationRequest(plan=plan, answers=[])
+        
+        from app.services import job_store
+        job = job_store.create_job(request)
+        
+        # Update job with error message containing sensitive data
+        error_message = "Authentication failed with api_key=sk-secret-12345 and token=bearer-token-xyz"
+        job_store.update_job(job.id, status=JobStatus.FAILED, last_error=error_message)
+        
+        # Access debug endpoint
+        debug_response = client.get(f"/v1/clarifications/{job.id}/debug")
+        debug_data = debug_response.json()
+        
+        # Verify error message is sanitized
+        assert "last_error" in debug_data
+        sanitized_error = debug_data["last_error"]
+        
+        # Sensitive data should be redacted
+        assert "sk-secret-12345" not in sanitized_error
+        assert "bearer-token-xyz" not in sanitized_error
+        assert "[REDACTED]" in sanitized_error
+    
+    def test_debug_endpoint_includes_num_open_questions_in_result(self, enabled_debug_client):
+        """Test that result metadata includes num_open_questions field for consistency."""
+        client = enabled_debug_client
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": ["Feature 1"],
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # Create job
+        post_response = client.post("/v1/clarifications", json=request_data)
+        job_id = post_response.json()["id"]
+        
+        # Wait for completion
+        max_wait = 5.0
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            get_response = client.get(f"/v1/clarifications/{job_id}")
+            job_data = get_response.json()
+            
+            if job_data["status"] in ["SUCCESS", "FAILED"]:
+                break
+            
+            time.sleep(0.1)
+        
+        # Access debug endpoint
+        debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
+        debug_data = debug_response.json()
+        
+        # Verify result metadata includes num_open_questions
+        if debug_data["status"] == "SUCCESS" and "result_metadata" in debug_data:
+            result_meta = debug_data["result_metadata"]
+            assert "spec_summaries" in result_meta
+            for spec_summary in result_meta["spec_summaries"]:
+                # Verify field exists and is numeric (ClarifiedSpec doesn't have open_questions)
+                assert "num_open_questions" in spec_summary
+                assert isinstance(spec_summary["num_open_questions"], int)
+                assert spec_summary["num_open_questions"] >= 0
+
+
+class TestDebugEndpointOpenAPI:
+    """Tests for OpenAPI documentation of debug endpoint."""
+    
+    def test_openapi_includes_debug_endpoint(self, client):
+        """Test that OpenAPI schema includes debug endpoint."""
+        response = client.get("/openapi.json")
+        
+        assert response.status_code == 200
+        openapi = response.json()
+        
+        # Check that the debug endpoint is documented
+        assert "/v1/clarifications/{job_id}/debug" in openapi["paths"]
+        
+        endpoint = openapi["paths"]["/v1/clarifications/{job_id}/debug"]
+        assert "get" in endpoint
+        
+        # Check GET method documentation
+        get_spec = endpoint["get"]
+        assert "Clarifications" in get_spec["tags"]
+        assert "summary" in get_spec
+        assert "debug" in get_spec["summary"].lower()
+        
+        # Check that it has 200 response
+        assert "200" in get_spec["responses"]
+        
+        # Verify description mentions it's disabled by default
+        assert "description" in get_spec
+        assert "disabled by default" in get_spec["description"].lower() or "debug mode only" in get_spec["description"].lower()

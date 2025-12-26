@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # Development flag for exposing job results
     show_job_result: bool = False
     
+    # Debug endpoint flag (off by default for security)
+    enable_debug_endpoint: bool = False
+    
+    # LLM configuration defaults
+    llm_default_provider: str = "openai"
+    llm_default_model: str = "gpt-5"
+    
     # CORS settings
     cors_origins: str = "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
     cors_allow_credentials: bool = True

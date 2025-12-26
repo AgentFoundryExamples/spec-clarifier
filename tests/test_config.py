@@ -36,6 +36,9 @@ def test_settings_defaults():
     assert settings.app_description == "A service for clarifying specifications"
     assert settings.debug is False
     assert settings.show_job_result is False
+    assert settings.enable_debug_endpoint is False
+    assert settings.llm_default_provider == "openai"
+    assert settings.llm_default_model == "gpt-5"
     assert settings.cors_origins == "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
     assert settings.cors_allow_credentials is True
     assert settings.cors_allow_methods == "*"
@@ -203,3 +206,80 @@ def test_show_job_result_false_from_environment(monkeypatch):
     settings = get_settings()
     
     assert settings.show_job_result is False
+
+
+def test_enable_debug_endpoint_default():
+    """Test that enable_debug_endpoint defaults to False."""
+    settings = get_settings()
+    
+    assert settings.enable_debug_endpoint is False
+
+
+def test_enable_debug_endpoint_from_environment(monkeypatch):
+    """Test that enable_debug_endpoint can be set from environment."""
+    monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
+    
+    get_settings.cache_clear()
+    settings = get_settings()
+    
+    assert settings.enable_debug_endpoint is True
+
+
+def test_enable_debug_endpoint_false_from_environment(monkeypatch):
+    """Test that enable_debug_endpoint can be explicitly set to False."""
+    monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "false")
+    
+    get_settings.cache_clear()
+    settings = get_settings()
+    
+    assert settings.enable_debug_endpoint is False
+
+
+def test_llm_default_provider_default():
+    """Test that llm_default_provider has correct default."""
+    settings = get_settings()
+    
+    assert settings.llm_default_provider == "openai"
+
+
+def test_llm_default_provider_from_environment(monkeypatch):
+    """Test that llm_default_provider can be set from environment."""
+    monkeypatch.setenv("APP_LLM_DEFAULT_PROVIDER", "anthropic")
+    
+    get_settings.cache_clear()
+    settings = get_settings()
+    
+    assert settings.llm_default_provider == "anthropic"
+
+
+def test_llm_default_model_default():
+    """Test that llm_default_model has correct default."""
+    settings = get_settings()
+    
+    assert settings.llm_default_model == "gpt-5"
+
+
+def test_llm_default_model_from_environment(monkeypatch):
+    """Test that llm_default_model can be set from environment."""
+    monkeypatch.setenv("APP_LLM_DEFAULT_MODEL", "gpt-5.1")
+    
+    get_settings.cache_clear()
+    settings = get_settings()
+    
+    assert settings.llm_default_model == "gpt-5.1"
+
+
+def test_all_new_config_flags_together(monkeypatch):
+    """Test that all new config flags work together."""
+    monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
+    monkeypatch.setenv("APP_LLM_DEFAULT_PROVIDER", "google")
+    monkeypatch.setenv("APP_LLM_DEFAULT_MODEL", "gemini-3.0-pro")
+    monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
+    
+    get_settings.cache_clear()
+    settings = get_settings()
+    
+    assert settings.enable_debug_endpoint is True
+    assert settings.llm_default_provider == "google"
+    assert settings.llm_default_model == "gemini-3.0-pro"
+    assert settings.show_job_result is True

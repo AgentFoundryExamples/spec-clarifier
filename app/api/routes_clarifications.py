@@ -162,3 +162,130 @@ def get_clarification_job(job_id: UUID) -> JobStatusResponse:
         )
     except JobNotFoundError:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+
+@router.get(
+    "/{job_id}/debug",
+    response_model=dict,
+    summary="Get debug information for a clarification job (debug mode only)",
+    description=(
+        "⚠️ DEBUG ENDPOINT - DISABLED BY DEFAULT\n\n"
+        "Returns detailed debug information for a clarification job including configuration, "
+        "timestamps, and metadata. This endpoint is only available when APP_ENABLE_DEBUG_ENDPOINT "
+        "is set to true.\n\n"
+        "This endpoint intentionally excludes raw prompts and LLM responses to prevent "
+        "accidental exposure of sensitive data. Only metadata and sanitized information "
+        "is returned.\n\n"
+        "Returns 403 Forbidden if the debug endpoint is not enabled.\n"
+        "Returns 404 if the job ID is not found."
+    ),
+)
+def get_clarification_job_debug(job_id: UUID) -> dict:
+    """Get debug information for a clarification job.
+    
+    This endpoint is protected by the APP_ENABLE_DEBUG_ENDPOINT flag and returns
+    sanitized debug information about a job. Raw prompts and LLM responses are
+    intentionally excluded to prevent accidental data leakage.
+    
+    Args:
+        job_id: The UUID of the job to retrieve
+        
+    Returns:
+        dict: Debug information including job metadata, config, and sanitized details
+        
+    Raises:
+        HTTPException: 403 if debug endpoint disabled, 404 if job not found
+    """
+    settings = get_settings()
+    
+    # Check if debug endpoint is enabled
+    if not settings.enable_debug_endpoint:
+        raise HTTPException(
+            status_code=403,
+            detail="Debug endpoint is disabled. Set APP_ENABLE_DEBUG_ENDPOINT=true to enable."
+        )
+    
+    try:
+        job = get_job(job_id)
+        
+        # Sanitize config to remove sensitive data (API keys, tokens, etc.)
+        sanitized_config = None
+        if job.config:
+            sanitized_config = {}
+            for key, value in job.config.items():
+                # Only include safe config keys, exclude anything that might contain credentials
+                if key == "llm_config" and isinstance(value, dict):
+                    # For llm_config, only expose non-sensitive fields
+                    llm_config_safe = {
+                        "provider": value.get("provider"),
+                        "model": value.get("model"),
+                        "temperature": value.get("temperature"),
+                        "max_tokens": value.get("max_tokens"),
+                    }
+                    # Filter out None values for cleaner output
+                    sanitized_config["llm_config"] = {k: v for k, v in llm_config_safe.items() if v is not None}
+                elif key not in ["api_key", "token", "secret", "password", "credential", "auth"]:
+                    # For other keys, only include if they don't contain sensitive keywords
+                    if not any(sensitive in key.lower() for sensitive in ["key", "token", "secret", "password", "credential", "auth"]):
+                        sanitized_config[key] = value
+        
+        # Sanitize error message to remove potential sensitive information
+        sanitized_error = None
+        if job.last_error:
+            # Use the same sanitization as LLMCallError for consistency
+            from app.services.llm_clients import LLMCallError
+            sanitized_error = LLMCallError._sanitize_message(job.last_error)
+        
+        # Build sanitized debug response
+        debug_info = {
+            "job_id": str(job.id),
+            "status": job.status.value,
+            "created_at": job.created_at.isoformat(),
+            "updated_at": job.updated_at.isoformat(),
+            "last_error": sanitized_error,
+            "has_request": job.request is not None,
+            "has_result": job.result is not None,
+            "config": sanitized_config,
+        }
+        
+        # Add request metadata (not full content)
+        if job.request:
+            debug_info["request_metadata"] = {
+                "num_specs": len(job.request.plan.specs),
+                "num_answers": len(job.request.answers),
+                "spec_summaries": [
+                    {
+                        "purpose_length": len(spec.purpose),
+                        "vision_length": len(spec.vision),
+                        "num_must": len(spec.must),
+                        "num_dont": len(spec.dont),
+                        "num_nice": len(spec.nice),
+                        "num_open_questions": len(spec.open_questions),
+                        "num_assumptions": len(spec.assumptions),
+                    }
+                    for spec in job.request.plan.specs
+                ]
+            }
+        
+        # Add result metadata (not full content)
+        if job.result:
+            debug_info["result_metadata"] = {
+                "num_specs": len(job.result.specs),
+                "spec_summaries": [
+                    {
+                        "purpose_length": len(spec.purpose),
+                        "vision_length": len(spec.vision),
+                        "num_must": len(spec.must),
+                        "num_dont": len(spec.dont),
+                        "num_nice": len(spec.nice),
+                        "num_open_questions": 0,  # ClarifiedSpec never has open_questions
+                        "num_assumptions": len(spec.assumptions),
+                    }
+                    for spec in job.result.specs
+                ]
+            }
+        
+        return debug_info
+        
+    except JobNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
