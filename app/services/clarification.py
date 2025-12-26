@@ -67,6 +67,7 @@ def build_clarification_prompts(
     
     Raises:
         ValueError: If request is None or invalid
+        TypeError: If request is not a ClarificationRequest instance
     
     Example:
         >>> request = ClarificationRequest(plan=plan_input, answers=answers)
@@ -80,7 +81,14 @@ def build_clarification_prompts(
     if request is None:
         raise ValueError("request must not be None")
     
-    if not hasattr(request, 'plan') or request.plan is None:
+    # Validate request type
+    if not isinstance(request, ClarificationRequest):
+        raise TypeError(
+            f"request must be a ClarificationRequest instance, got {type(request).__name__}"
+        )
+    
+    # Validate plan exists (should always be present in valid ClarificationRequest)
+    if request.plan is None:
         raise ValueError("request.plan must not be None")
     
     # Build system prompt
@@ -240,6 +248,9 @@ def cleanup_and_parse_json(
     Args:
         raw_response: Raw text response from LLM
         max_attempts: Maximum number of cleanup attempts (default: 3)
+                     Note: The function has 3 built-in cleanup strategies.
+                     If max_attempts is greater than 3, only 3 attempts will be made.
+                     If max_attempts is less than 3, only that many strategies will be tried.
     
     Returns:
         Parsed JSON object as a Python dictionary
@@ -253,11 +264,19 @@ def cleanup_and_parse_json(
         >>> data = cleanup_and_parse_json(response)
         >>> print(data)
         {'key': 'value'}
+        
+        >>> # Try only first strategy
+        >>> data = cleanup_and_parse_json(response, max_attempts=1)
     
     Cleanup Strategies (applied in order until success):
         1. Remove markdown fences and basic whitespace trimming
         2. Extract JSON between first { and last }
         3. Remove common prose patterns (e.g., "Here is...", "The result is...")
+    
+    Note:
+        The number of attempts will be limited to the number of available strategies (3).
+        If you request max_attempts=5, only 3 attempts will be made since there are
+        only 3 cleanup strategies implemented.
     """
     if raw_response is None:
         raise ValueError("raw_response must not be None")
@@ -281,8 +300,9 @@ def cleanup_and_parse_json(
     # Track attempts for error reporting
     last_error = None
     
-    # Try each strategy up to max_attempts
-    for attempt_num in range(min(max_attempts, len(strategies))):
+    # Try each strategy up to max_attempts (limited by available strategies)
+    num_attempts = min(max_attempts, len(strategies))
+    for attempt_num in range(num_attempts):
         cleaned = strategies[attempt_num](raw_response)
         
         if not cleaned:
@@ -294,12 +314,11 @@ def cleanup_and_parse_json(
             last_error = e
     
     # If all strategies failed, raise error
-    attempt_count = min(max_attempts, len(strategies))
     raise JSONCleanupError(
-        f"Failed to parse JSON after {attempt_count} attempt(s). "
+        f"Failed to parse JSON after {num_attempts} attempt(s). "
         f"Last error: {str(last_error) if last_error else 'Unknown error'}",
         raw_response,
-        attempt_count
+        num_attempts
     )
 
 
@@ -360,7 +379,8 @@ def _remove_prose_patterns(text: str) -> str:
     prose_patterns = [
         r'^\s*(?:here\s+is|here\'s|the\s+result\s+is|the\s+answer\s+is|the\s+clarified\s+plan\s+is)\s*[:\s]*',
         r'^\s*(?:sure|okay|certainly)[,\s]*',
-        r'^\s*(?:i\s+can\s+help|let\s+me\s+help|i\'ll\s+help)\s+.*?\s*',
+        # Match "I can/let me/I'll help..." followed by anything up to newline or colon
+        r'^\s*(?:i\s+can\s+help|let\s+me\s+help|i\'ll\s+help)(?:[^\n:]*?[:]\s*)?',
     ]
     
     for pattern in prose_patterns:

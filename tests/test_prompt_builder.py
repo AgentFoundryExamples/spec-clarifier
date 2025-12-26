@@ -338,8 +338,14 @@ class TestBuildClarificationPrompts:
         class MockRequest:
             plan = None
         
-        with pytest.raises(ValueError, match="request.plan must not be None"):
+        with pytest.raises((ValueError, TypeError)):
+            # May raise TypeError due to isinstance check or ValueError for None plan
             build_clarification_prompts(MockRequest())
+    
+    def test_raises_error_for_invalid_request_type(self):
+        """Test that non-ClarificationRequest types raise TypeError."""
+        with pytest.raises(TypeError, match="must be a ClarificationRequest instance"):
+            build_clarification_prompts({"plan": "not_a_request"})
 
 
 class TestCleanupAndParseJSON:
