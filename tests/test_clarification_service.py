@@ -13,10 +13,13 @@
 # limitations under the License.
 """Tests for clarification service."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from app.models.specs import PlanInput, SpecInput
-from app.services.clarification import clarify_plan
+from app.models.specs import JobStatus, PlanInput, SpecInput
+from app.services.clarification import clarify_plan, process_clarification_job, start_clarification_job
+from app.services.job_store import clear_all_jobs, get_job
 
 
 class TestClarifyPlan:
@@ -174,3 +177,116 @@ class TestClarifyPlan:
         assert clarified.vision == "🚀 Modern & scalable <system>"
         assert "UTF-8 支持" in clarified.must
         assert "Émojis 👍" in clarified.must
+
+
+@pytest.fixture(autouse=True)
+def clean_job_store_for_service_tests():
+    """Clean the job store before and after each async test."""
+    clear_all_jobs()
+    yield
+    clear_all_jobs()
+
+
+class TestProcessClarificationJobService:
+    """Tests for async job processing in the service layer."""
+    
+    def test_job_status_transitions_pending_to_running_to_success(self):
+        """Test that job transitions through PENDING -> RUNNING -> SUCCESS with timestamps."""
+        spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature 1"])
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create job
+        job = start_clarification_job(request, background_tasks)
+        assert job.status == JobStatus.PENDING
+        original_created_at = job.created_at
+        original_updated_at = job.updated_at
+        
+        # Process job (manually invoke)
+        process_clarification_job(job.id)
+        
+        # Verify final state
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result is not None
+        assert len(processed_job.result.specs) == 1
+        assert processed_job.result.specs[0].purpose == "Test"
+        
+        # Verify timestamps
+        assert processed_job.created_at == original_created_at
+        assert processed_job.updated_at > original_updated_at
+        assert processed_job.last_error is None
+    
+    def test_job_processing_failure_sets_failed_status_and_error(self):
+        """Test that exceptions during processing mark job as FAILED with error message."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create job
+        job = start_clarification_job(request, background_tasks)
+        
+        # Mock clarify_plan to raise an exception
+        with patch('app.services.clarification.clarify_plan') as mock_clarify:
+            mock_clarify.side_effect = ValueError("Simulated processing error")
+            
+            # Process should handle exception gracefully
+            process_clarification_job(job.id)
+        
+        # Verify job is marked as FAILED
+        failed_job = get_job(job.id)
+        assert failed_job.status == JobStatus.FAILED
+        assert failed_job.last_error is not None
+        assert "ValueError" in failed_job.last_error
+        assert "Simulated processing error" in failed_job.last_error
+        assert failed_job.result is None
+    
+    def test_job_processing_updates_timestamps_on_each_state_change(self):
+        """Test that timestamps are updated during state transitions."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        job = start_clarification_job(request, background_tasks)
+        initial_updated_at = job.updated_at
+        
+        # Process the job
+        process_clarification_job(job.id)
+        
+        # Check updated_at changed
+        final_job = get_job(job.id)
+        assert final_job.updated_at > initial_updated_at
+    
+    def test_manual_job_invocation_for_testing(self):
+        """Test that process_clarification_job can be invoked directly for testing."""
+        spec = SpecInput(
+            purpose="Test Service",
+            vision="High performance",
+            must=["Fast", "Reliable"],
+            dont=["Slow"],
+            nice=["Configurable"],
+            assumptions=["Cloud deployment"]
+        )
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create job
+        job = start_clarification_job(request, background_tasks)
+        
+        # Manually invoke processing (deterministic for testing)
+        process_clarification_job(job.id)
+        
+        # Verify successful processing
+        result = get_job(job.id)
+        assert result.status == JobStatus.SUCCESS
+        assert result.result is not None
+        assert result.result.specs[0].purpose == "Test Service"
+        assert result.result.specs[0].must == ["Fast", "Reliable"]

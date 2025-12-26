@@ -178,3 +178,97 @@ def test_cors_with_credentials():
     )
     assert response.status_code == 200
     assert response.headers.get("access-control-allow-credentials") == "true"
+
+
+class TestBackgroundTasksWiring:
+    """Tests for BackgroundTasks integration with async job processing."""
+    
+    def test_background_tasks_available_in_endpoints(self):
+        """Test that BackgroundTasks can be used in endpoints."""
+        from fastapi.testclient import TestClient
+        from app.main import create_app
+        
+        app = create_app()
+        client = TestClient(app)
+        
+        # Create a job which uses BackgroundTasks
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        # Should succeed with 202 (job created with background task scheduled)
+        assert response.status_code == 202
+        data = response.json()
+        assert "id" in data
+        assert data["status"] == "PENDING"
+    
+    def test_preview_endpoint_remains_functional_after_async_changes(self):
+        """Test that preview endpoint still works synchronously."""
+        from fastapi.testclient import TestClient
+        from app.main import create_app
+        
+        app = create_app()
+        client = TestClient(app)
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": ["Feature 1"],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": ["Question?"],
+                        "assumptions": [],
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        response = client.post("/v1/clarifications/preview", json=request_data)
+        
+        # Should return 200 with immediate result
+        assert response.status_code == 200
+        data = response.json()
+        assert "specs" in data
+        assert len(data["specs"]) == 1
+        assert data["specs"][0]["purpose"] == "Test"
+        # open_questions should not be in preview result
+        assert "open_questions" not in data["specs"][0]
+    
+    def test_openapi_documentation_includes_both_sync_and_async_endpoints(self):
+        """Test that OpenAPI schema documents both preview and async endpoints."""
+        from fastapi.testclient import TestClient
+        from app.main import create_app
+        
+        app = create_app()
+        client = TestClient(app)
+        
+        response = client.get("/openapi.json")
+        assert response.status_code == 200
+        
+        openapi = response.json()
+        paths = openapi["paths"]
+        
+        # Preview endpoint (synchronous)
+        assert "/v1/clarifications/preview" in paths
+        assert "post" in paths["/v1/clarifications/preview"]
+        
+        # Async endpoints
+        assert "/v1/clarifications" in paths
+        assert "post" in paths["/v1/clarifications"]
+        
+        assert "/v1/clarifications/{job_id}" in paths
+        assert "get" in paths["/v1/clarifications/{job_id}"]
