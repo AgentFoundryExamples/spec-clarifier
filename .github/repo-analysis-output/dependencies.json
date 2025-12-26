@@ -146,6 +146,26 @@
       }
     },
     {
+      "id": "app/services/llm_clients.py",
+      "path": "app/services/llm_clients.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "abc.ABC",
+          "abc.abstractmethod",
+          "re",
+          "typing.Any",
+          "typing.Optional",
+          "typing.Protocol"
+        ],
+        "third-party": [
+          "pydantic.BaseModel",
+          "pydantic.Field",
+          "pydantic.field_validator"
+        ]
+      }
+    },
+    {
       "id": "tests/__init__.py",
       "path": "tests/__init__.py",
       "type": "file",
@@ -238,6 +258,17 @@
           "time",
           "uuid.uuid4"
         ],
+        "third-party": [
+          "pytest"
+        ]
+      }
+    },
+    {
+      "id": "tests/test_llm_clients.py",
+      "path": "tests/test_llm_clients.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
         "third-party": [
           "pytest"
         ]
@@ -387,6 +418,10 @@
       "target": "app/services/job_store.py"
     },
     {
+      "source": "tests/test_llm_clients.py",
+      "target": "app/services/llm_clients.py"
+    },
+    {
       "source": "tests/test_main.py",
       "target": "app/main.py"
     },
@@ -401,6 +436,8 @@
   ],
   "external_dependencies_summary": {
     "stdlib": [
+      "abc.ABC",
+      "abc.abstractmethod",
       "datetime.datetime",
       "datetime.timedelta",
       "datetime.timezone",
@@ -408,11 +445,14 @@
       "functools.lru_cache",
       "logging",
       "os",
+      "re",
       "threading",
       "time",
+      "typing.Any",
       "typing.Dict",
       "typing.List",
       "typing.Optional",
+      "typing.Protocol",
       "unittest.mock.MagicMock",
       "unittest.mock.Mock",
       "unittest.mock.patch",
@@ -432,12 +472,13 @@
       "pydantic.ConfigDict",
       "pydantic.Field",
       "pydantic.ValidationError",
+      "pydantic.field_validator",
       "pydantic_settings.BaseSettings",
       "pydantic_settings.SettingsConfigDict",
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 17,
-    "third-party_count": 16
+    "stdlib_count": 22,
+    "third-party_count": 17
   }
 }

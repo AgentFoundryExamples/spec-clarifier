@@ -113,6 +113,10 @@
             {
               "type": "file",
               "name": "job_store.py"
+            },
+            {
+              "type": "file",
+              "name": "llm_clients.py"
             }
           ]
         },
@@ -161,6 +165,10 @@
         {
           "type": "file",
           "name": "test_job_store.py"
+        },
+        {
+          "type": "file",
+          "name": "test_llm_clients.py"
         },
         {
           "type": "file",

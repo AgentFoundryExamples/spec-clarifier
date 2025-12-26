@@ -8,17 +8,19 @@ Includes classification of external dependencies as stdlib vs third-party.
 
 ## Statistics
 
-- **Total files**: 20
-- **Intra-repo dependencies**: 30
-- **External stdlib dependencies**: 17
-- **External third-party dependencies**: 16
+- **Total files**: 22
+- **Intra-repo dependencies**: 31
+- **External stdlib dependencies**: 22
+- **External third-party dependencies**: 17
 
 ## External Dependencies
 
 ### Standard Library / Core Modules
 
-Total: 17 unique modules
+Total: 22 unique modules
 
+- `abc.ABC`
+- `abc.abstractmethod`
 - `datetime.datetime`
 - `datetime.timedelta`
 - `datetime.timezone`
@@ -26,20 +28,22 @@ Total: 17 unique modules
 - `functools.lru_cache`
 - `logging`
 - `os`
+- `re`
 - `threading`
 - `time`
+- `typing.Any`
 - `typing.Dict`
 - `typing.List`
 - `typing.Optional`
+- `typing.Protocol`
 - `unittest.mock.MagicMock`
 - `unittest.mock.Mock`
 - `unittest.mock.patch`
-- `uuid.UUID`
-- `uuid.uuid4`
+- ... and 2 more (see JSON for full list)
 
 ### Third-Party Packages
 
-Total: 16 unique packages
+Total: 17 unique packages
 
 - `fastapi.APIRouter`
 - `fastapi.BackgroundTasks`
@@ -53,6 +57,7 @@ Total: 16 unique packages
 - `pydantic.ConfigDict`
 - `pydantic.Field`
 - `pydantic.ValidationError`
+- `pydantic.field_validator`
 - `pydantic_settings.BaseSettings`
 - `pydantic_settings.SettingsConfigDict`
 - `pytest`
@@ -67,6 +72,7 @@ Total: 16 unique packages
 - `app/main.py` (3 dependents)
 - `app/api/routes_health.py` (1 dependents)
 - `app/api/routes_clarifications.py` (1 dependents)
+- `app/services/llm_clients.py` (1 dependents)
 
 ## Files with Most Dependencies (Intra-Repo)
 
