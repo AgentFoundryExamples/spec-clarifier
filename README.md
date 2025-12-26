@@ -218,6 +218,218 @@ Returned when the request payload is malformed or missing required fields:
 }
 ```
 
+#### Start Async Clarification Job
+
+```bash
+POST /v1/clarifications
+```
+
+Creates an asynchronous clarification job and returns immediately with job details. The job will be processed in the background, transitioning through PENDING → RUNNING → SUCCESS/FAILED states. Use the returned job ID to poll for status and retrieve results.
+
+**Request Body:**
+
+Same format as the preview endpoint:
+
+```json
+{
+  "plan": {
+    "specs": [
+      {
+        "purpose": "Build a web application",
+        "vision": "A modern, scalable web app",
+        "must": ["User authentication", "Database integration"],
+        "dont": ["Complex UI frameworks"],
+        "nice": ["Dark mode", "Mobile responsive"],
+        "open_questions": ["Which database should we use?", "What auth provider?"],
+        "assumptions": ["Users have modern browsers"]
+      }
+    ]
+  },
+  "answers": []
+}
+```
+
+**Response (202 Accepted):**
+
+Returns immediately with job details in PENDING status:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "PENDING",
+  "created_at": "2025-12-26T05:40:11.545362Z",
+  "updated_at": "2025-12-26T05:40:11.545362Z",
+  "last_error": null,
+  "request": {
+    "plan": {
+      "specs": [
+        {
+          "purpose": "Build a web application",
+          "vision": "A modern, scalable web app",
+          "must": ["User authentication", "Database integration"],
+          "dont": ["Complex UI frameworks"],
+          "nice": ["Dark mode", "Mobile responsive"],
+          "open_questions": ["Which database should we use?", "What auth provider?"],
+          "assumptions": ["Users have modern browsers"]
+        }
+      ]
+    },
+    "answers": []
+  },
+  "result": null,
+  "config": null
+}
+```
+
+**Example using curl:**
+
+```bash
+# Create job
+JOB_ID=$(curl -s -X POST "http://localhost:8000/v1/clarifications" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "plan": {
+      "specs": [
+        {
+          "purpose": "Build a web application",
+          "vision": "A modern, scalable web app",
+          "must": ["User authentication"],
+          "dont": [],
+          "nice": ["Dark mode"],
+          "open_questions": ["Which database?"],
+          "assumptions": []
+        }
+      ]
+    },
+    "answers": []
+  }' | jq -r '.id')
+
+echo "Created job: $JOB_ID"
+```
+
+#### Get Clarification Job Status
+
+```bash
+GET /v1/clarifications/{job_id}
+```
+
+Retrieves the current status and details of a clarification job. Use this endpoint to poll for job completion after creating an async job.
+
+**Path Parameters:**
+
+- `job_id` (UUID): The unique identifier of the job
+
+**Response (200 OK) - Job in Progress:**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "RUNNING",
+  "created_at": "2025-12-26T05:40:11.545362Z",
+  "updated_at": "2025-12-26T05:40:11.546315Z",
+  "last_error": null,
+  "request": {
+    "plan": {
+      "specs": [...]
+    },
+    "answers": []
+  },
+  "result": null,
+  "config": null
+}
+```
+
+**Response (200 OK) - Job Completed Successfully:**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "SUCCESS",
+  "created_at": "2025-12-26T05:40:11.545362Z",
+  "updated_at": "2025-12-26T05:40:11.890234Z",
+  "last_error": null,
+  "request": {
+    "plan": {
+      "specs": [...]
+    },
+    "answers": []
+  },
+  "result": {
+    "specs": [
+      {
+        "purpose": "Build a web application",
+        "vision": "A modern, scalable web app",
+        "must": ["User authentication"],
+        "dont": [],
+        "nice": ["Dark mode"],
+        "assumptions": []
+      }
+    ]
+  },
+  "config": null
+}
+```
+
+**Response (200 OK) - Job Failed:**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "FAILED",
+  "created_at": "2025-12-26T05:40:11.545362Z",
+  "updated_at": "2025-12-26T05:40:11.789012Z",
+  "last_error": "ValueError: Invalid specification format",
+  "request": {
+    "plan": {
+      "specs": [...]
+    },
+    "answers": []
+  },
+  "result": null,
+  "config": null
+}
+```
+
+**Response (404 Not Found):**
+
+Returned when the job ID doesn't exist:
+
+```json
+{
+  "detail": "Job 550e8400-e29b-41d4-a716-446655440000 not found"
+}
+```
+
+**Example using curl:**
+
+```bash
+# Poll for job completion
+JOB_ID="550e8400-e29b-41d4-a716-446655440000"
+
+while true; do
+  STATUS=$(curl -s "http://localhost:8000/v1/clarifications/$JOB_ID" | jq -r '.status')
+  echo "Job status: $STATUS"
+  
+  if [ "$STATUS" = "SUCCESS" ] || [ "$STATUS" = "FAILED" ]; then
+    curl -s "http://localhost:8000/v1/clarifications/$JOB_ID" | jq .
+    break
+  fi
+  
+  sleep 0.5
+done
+```
+
+### Job Lifecycle
+
+The async clarification workflow follows this lifecycle:
+
+1. **PENDING**: Job created and queued for processing
+2. **RUNNING**: Job is actively being processed
+3. **SUCCESS**: Job completed successfully, `result` contains the clarified plan
+4. **FAILED**: Job encountered an error, `last_error` contains the error message
+
+Jobs always update the `updated_at` timestamp when their status or result changes.
+
 ## Job Store
 
 The spec-clarifier includes a thread-safe in-memory job store for managing asynchronous clarification workflows. This enables clients to create jobs, poll for status, and retrieve results.
