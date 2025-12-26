@@ -343,3 +343,215 @@ class TestLLMPipelineIntegration:
         
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.SUCCESS
+    
+    async def test_stored_clarification_config_with_system_prompt_id(self):
+        """Test that stored ClarificationConfig with system_prompt_id is used."""
+        from app.models.config_models import ClarificationConfig
+        from app.services import job_store
+        from unittest.mock import MagicMock
+        
+        spec = SpecInput(purpose="System Prompt Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        # Create config with system_prompt_id
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="strict_json",
+            temperature=0.2,
+            max_tokens=2000
+        )
+        
+        # Store job with config
+        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        
+        # Track what system_prompt_id is used by checking the template retrieval
+        captured_template_ids = []
+        
+        from app.services.clarification import get_system_prompt_template
+        original_get_template = get_system_prompt_template
+        
+        def capture_template_id(system_prompt_id):
+            captured_template_ids.append(system_prompt_id)
+            return original_get_template(system_prompt_id)
+        
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        with patch('app.services.clarification.get_system_prompt_template', side_effect=capture_template_id):
+            await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Verify system_prompt_id was used
+        assert len(captured_template_ids) == 1
+        assert captured_template_ids[0] == 'strict_json'
+        
+        # Job should succeed
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+    
+    async def test_config_without_system_prompt_id_uses_default(self):
+        """Test that config without system_prompt_id defaults to 'default' template."""
+        from app.models.config_models import ClarificationConfig
+        from app.services import job_store
+        
+        spec = SpecInput(purpose="Default Template Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        # Create config without system_prompt_id
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1"
+        )
+        
+        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        
+        # Track what system_prompt_id is used
+        captured_template_ids = []
+        
+        from app.services.clarification import get_system_prompt_template
+        original_get_template = get_system_prompt_template
+        
+        def capture_template_id(system_prompt_id):
+            captured_template_ids.append(system_prompt_id)
+            return original_get_template(system_prompt_id)
+        
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        with patch('app.services.clarification.get_system_prompt_template', side_effect=capture_template_id):
+            await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Verify default system_prompt_id was used
+        assert len(captured_template_ids) == 1
+        assert captured_template_ids[0] == 'default'
+        
+        # Job should succeed
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+    
+    async def test_temperature_and_max_tokens_passed_to_llm_client(self):
+        """Test that temperature and max_tokens from config are passed to LLM client."""
+        from app.models.config_models import ClarificationConfig
+        from app.services import job_store
+        
+        spec = SpecInput(purpose="Params Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        # Create config with specific temperature and max_tokens
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            temperature=0.7,
+            max_tokens=3000
+        )
+        
+        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        
+        # Track what kwargs are passed to client
+        captured_kwargs = []
+        
+        class ParamCapturingClient:
+            async def complete(self, system_prompt, user_prompt, model, **kwargs):
+                captured_kwargs.append(kwargs)
+                return json.dumps({
+                    "specs": [{
+                        "purpose": "Params Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "assumptions": []
+                    }]
+                })
+        
+        await process_clarification_job(job.id, llm_client=ParamCapturingClient())
+        
+        # Verify temperature and max_tokens were passed
+        assert len(captured_kwargs) == 1
+        assert captured_kwargs[0]['temperature'] == 0.7
+        assert captured_kwargs[0]['max_tokens'] == 3000
+        
+        # Job should succeed
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+    
+    async def test_max_tokens_none_omits_parameter(self):
+        """Test that max_tokens=None omits the parameter from LLM call."""
+        from app.models.config_models import ClarificationConfig
+        from app.services import job_store
+        
+        spec = SpecInput(purpose="No Max Tokens Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        # Create config with max_tokens=None (explicit)
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            temperature=0.1,
+            max_tokens=None
+        )
+        
+        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        
+        # Track what kwargs are passed to client
+        captured_kwargs = []
+        
+        class ParamCapturingClient:
+            async def complete(self, system_prompt, user_prompt, model, **kwargs):
+                captured_kwargs.append(kwargs)
+                return json.dumps({
+                    "specs": [{
+                        "purpose": "No Max Tokens Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "assumptions": []
+                    }]
+                })
+        
+        await process_clarification_job(job.id, llm_client=ParamCapturingClient())
+        
+        # Verify max_tokens is NOT in kwargs
+        assert len(captured_kwargs) == 1
+        assert 'max_tokens' not in captured_kwargs[0]
+        # But temperature should still be present
+        assert 'temperature' in captured_kwargs[0]
+        
+        # Job should succeed
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+    
+    async def test_unknown_system_prompt_id_falls_back_gracefully(self):
+        """Test that unknown system_prompt_id falls back to default without failing job."""
+        from app.models.config_models import ClarificationConfig
+        from app.services import job_store
+        
+        spec = SpecInput(purpose="Unknown Template Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        # Create config with unknown system_prompt_id
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="nonexistent_template"
+        )
+        
+        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        # Capture warnings
+        import logging
+        with patch.object(logging.getLogger('app.services.clarification'), 'warning') as mock_warn:
+            await process_clarification_job(job.id, llm_client=dummy_client)
+            
+            # Verify warning was logged
+            warning_calls = [str(call) for call in mock_warn.call_args_list]
+            assert any('nonexistent_template' in call for call in warning_calls)
+        
+        # Job should still succeed with fallback template
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
