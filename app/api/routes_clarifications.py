@@ -216,12 +216,14 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
                 # Only include safe config keys, exclude anything that might contain credentials
                 if key == "llm_config" and isinstance(value, dict):
                     # For llm_config, only expose non-sensitive fields
-                    sanitized_config["llm_config"] = {
+                    llm_config_safe = {
                         "provider": value.get("provider"),
                         "model": value.get("model"),
                         "temperature": value.get("temperature"),
                         "max_tokens": value.get("max_tokens"),
                     }
+                    # Filter out None values for cleaner output
+                    sanitized_config["llm_config"] = {k: v for k, v in llm_config_safe.items() if v is not None}
                 elif key not in ["api_key", "token", "secret", "password", "credential", "auth"]:
                     # For other keys, only include if they don't contain sensitive keywords
                     if not any(sensitive in key.lower() for sensitive in ["key", "token", "secret", "password", "credential", "auth"]):
