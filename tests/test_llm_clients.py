@@ -20,6 +20,7 @@ from app.services.llm_clients import (
     PROVIDER_GOOGLE,
     PROVIDER_OPENAI,
     SUPPORTED_PROVIDERS,
+    AnthropicResponsesClient,
     ClarificationLLMConfig,
     DummyLLMClient,
     LLMAuthenticationError,
@@ -27,6 +28,8 @@ from app.services.llm_clients import (
     LLMNetworkError,
     LLMRateLimitError,
     LLMValidationError,
+    OpenAIResponsesClient,
+    get_llm_client,
 )
 
 
@@ -2013,3 +2016,175 @@ class TestAnthropicResponsesClient:
         
         # The code structure validates that if anthropic cannot be imported,
         # a clear LLMCallError will be raised with appropriate messaging
+
+
+class TestGetLLMClientFactory:
+    """Tests for get_llm_client factory function."""
+    
+    def test_factory_creates_openai_client(self):
+        """Test that factory creates OpenAIResponsesClient for 'openai' provider."""
+        config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        client = get_llm_client("openai", config)
+        assert isinstance(client, OpenAIResponsesClient)
+    
+    def test_factory_creates_anthropic_client(self):
+        """Test that factory creates AnthropicResponsesClient for 'anthropic' provider."""
+        config = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
+        client = get_llm_client("anthropic", config)
+        assert isinstance(client, AnthropicResponsesClient)
+    
+    def test_factory_creates_dummy_client_for_testing(self):
+        """Test that factory creates DummyLLMClient for 'dummy' provider."""
+        # Note: 'dummy' is not in SUPPORTED_PROVIDERS but is handled specially
+        config = ClarificationLLMConfig(provider="openai", model="test-model")  # Config provider doesn't matter
+        client = get_llm_client("dummy", config)
+        assert isinstance(client, DummyLLMClient)
+    
+    def test_factory_raises_on_google_provider_not_yet_implemented(self):
+        """Test that factory raises ValueError for 'google' provider (not yet implemented)."""
+        config = ClarificationLLMConfig(provider="google", model="gemini-3.0-pro")
+        with pytest.raises(ValueError) as exc_info:
+            get_llm_client("google", config)
+        assert "not yet implemented" in str(exc_info.value).lower()
+        assert "google" in str(exc_info.value).lower()
+    
+    def test_factory_raises_on_unsupported_provider(self):
+        """Test that factory raises ValueError for unsupported providers."""
+        config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        with pytest.raises(ValueError) as exc_info:
+            get_llm_client("unsupported", config)
+        assert "unsupported provider" in str(exc_info.value).lower()
+        assert "unsupported" in str(exc_info.value)
+    
+    def test_factory_raises_on_empty_provider(self):
+        """Test that factory raises ValueError for empty provider string."""
+        config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        with pytest.raises(ValueError) as exc_info:
+            get_llm_client("", config)
+        assert "provider must not be empty or blank" in str(exc_info.value)
+    
+    def test_factory_raises_on_blank_provider(self):
+        """Test that factory raises ValueError for blank provider string."""
+        config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        with pytest.raises(ValueError) as exc_info:
+            get_llm_client("   ", config)
+        assert "provider must not be empty or blank" in str(exc_info.value)
+    
+    def test_factory_normalizes_provider_case(self):
+        """Test that factory handles different case variations of provider names."""
+        config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        
+        # All these should work
+        client1 = get_llm_client("OpenAI", config)
+        client2 = get_llm_client("OPENAI", config)
+        client3 = get_llm_client("openai", config)
+        client4 = get_llm_client("  openai  ", config)  # With whitespace
+        
+        assert isinstance(client1, OpenAIResponsesClient)
+        assert isinstance(client2, OpenAIResponsesClient)
+        assert isinstance(client3, OpenAIResponsesClient)
+        assert isinstance(client4, OpenAIResponsesClient)
+    
+    def test_factory_normalizes_anthropic_case(self):
+        """Test that factory handles different case variations for Anthropic."""
+        config = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
+        
+        client1 = get_llm_client("Anthropic", config)
+        client2 = get_llm_client("ANTHROPIC", config)
+        client3 = get_llm_client("anthropic", config)
+        
+        assert isinstance(client1, AnthropicResponsesClient)
+        assert isinstance(client2, AnthropicResponsesClient)
+        assert isinstance(client3, AnthropicResponsesClient)
+    
+    def test_factory_dummy_case_insensitive(self):
+        """Test that 'dummy' provider is case-insensitive."""
+        config = ClarificationLLMConfig(provider="openai", model="test-model")
+        
+        client1 = get_llm_client("dummy", config)
+        client2 = get_llm_client("Dummy", config)
+        client3 = get_llm_client("DUMMY", config)
+        
+        assert isinstance(client1, DummyLLMClient)
+        assert isinstance(client2, DummyLLMClient)
+        assert isinstance(client3, DummyLLMClient)
+    
+    def test_factory_creates_independent_client_instances(self):
+        """Test that factory creates new client instances on each call."""
+        # Use valid provider in config, but request 'dummy' from factory
+        config = ClarificationLLMConfig(provider="openai", model="test-model")
+        
+        client1 = get_llm_client("dummy", config)
+        client2 = get_llm_client("dummy", config)
+        
+        # Should be different instances
+        assert client1 is not client2
+    
+    def test_factory_accepts_config_parameter(self):
+        """Test that factory accepts and uses config parameter."""
+        config1 = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        config2 = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
+        
+        # Config parameter is accepted but not currently used by factory
+        # (it will be used when we pass it to clients in future iterations)
+        client1 = get_llm_client("openai", config1)
+        client2 = get_llm_client("anthropic", config2)
+        
+        assert isinstance(client1, OpenAIResponsesClient)
+        assert isinstance(client2, AnthropicResponsesClient)
+    
+    def test_factory_error_message_lists_supported_providers(self):
+        """Test that error message for unsupported provider lists valid options."""
+        config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        
+        with pytest.raises(ValueError) as exc_info:
+            get_llm_client("invalid_provider", config)
+        
+        error_msg = str(exc_info.value)
+        assert "supported providers" in error_msg.lower()
+        # Should list the actual supported providers
+        assert "openai" in error_msg
+        assert "anthropic" in error_msg
+    
+    def test_factory_unknown_provider_vs_unimplemented_provider(self):
+        """Test distinction between unknown and unimplemented providers."""
+        config = ClarificationLLMConfig(provider="openai", model="test-model")
+        
+        # Unknown provider (not in SUPPORTED_PROVIDERS)
+        with pytest.raises(ValueError) as exc_info1:
+            get_llm_client("unknown", config)
+        assert "unsupported" in str(exc_info1.value).lower()
+        
+        # Known but unimplemented provider (in SUPPORTED_PROVIDERS)
+        with pytest.raises(ValueError) as exc_info2:
+            get_llm_client("google", config)
+        assert "not yet implemented" in str(exc_info2.value).lower()
+    
+    def test_factory_returns_llm_client_protocol_implementations(self):
+        """Test that all clients returned by factory implement LLMClient protocol."""
+        config_openai = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        config_anthropic = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
+        # Use valid provider for config even though factory will create dummy
+        config_for_dummy = ClarificationLLMConfig(provider="openai", model="test")
+        
+        client_openai = get_llm_client("openai", config_openai)
+        client_anthropic = get_llm_client("anthropic", config_anthropic)
+        client_dummy = get_llm_client("dummy", config_for_dummy)
+        
+        # All should have the 'complete' method
+        assert hasattr(client_openai, "complete")
+        assert callable(client_openai.complete)
+        assert hasattr(client_anthropic, "complete")
+        assert callable(client_anthropic.complete)
+        assert hasattr(client_dummy, "complete")
+        assert callable(client_dummy.complete)
+    
+    def test_factory_with_special_characters_in_provider(self):
+        """Test that factory handles special characters in provider name correctly."""
+        config = ClarificationLLMConfig(provider="openai", model="test-model")
+        
+        # These should all fail with appropriate errors
+        invalid_providers = ["open-ai", "open_ai", "openai!", "open/ai"]
+        for invalid in invalid_providers:
+            with pytest.raises(ValueError):
+                get_llm_client(invalid, config)

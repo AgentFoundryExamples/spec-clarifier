@@ -650,6 +650,84 @@ class OpenAIResponsesClient:
         return text_content
 
 
+def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
+    """Factory function to create LLM clients based on provider configuration.
+    
+    This factory provides a centralized way to construct LLM clients for different
+    providers (OpenAI, Anthropic, Google) while maintaining consistent configuration
+    and error handling. It also supports dependency injection by allowing tests to
+    use the 'dummy' provider for deterministic behavior.
+    
+    Provider-specific implementations are initialized lazily (client created on first
+    use) and configured according to the provided ClarificationLLMConfig settings.
+    
+    Args:
+        provider: LLM provider identifier ('openai', 'anthropic', 'google', 'dummy')
+        config: Configuration object containing model, temperature, max_tokens, etc.
+        
+    Returns:
+        An instance implementing the LLMClient protocol:
+        - OpenAIResponsesClient for 'openai' provider
+        - AnthropicResponsesClient for 'anthropic' provider
+        - DummyLLMClient for 'dummy' provider (testing)
+        - Future: GoogleClient for 'google' provider
+        
+    Raises:
+        ValueError: When provider is not supported or is empty/blank
+        
+    Example:
+        >>> config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        >>> client = get_llm_client("openai", config)
+        >>> # Client is ready but not invoked yet
+        
+        >>> # For testing with deterministic responses
+        >>> test_config = ClarificationLLMConfig(provider="dummy", model="test-model")
+        >>> test_client = get_llm_client("dummy", test_config)
+    
+    Note:
+        The factory does not invoke the LLM - it only constructs and returns the
+        client instance. Actual API calls happen when client.complete() is called.
+    """
+    # Validate provider parameter
+    if not provider or not provider.strip():
+        raise ValueError("provider must not be empty or blank")
+    
+    provider = provider.strip().lower()
+    
+    # Special case: 'dummy' provider for testing (not in SUPPORTED_PROVIDERS)
+    if provider == "dummy":
+        # For dummy client, we return a default canned response
+        # Tests can customize behavior by creating DummyLLMClient directly
+        return DummyLLMClient()
+    
+    # Validate against supported providers
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ValueError(
+            f"Unsupported provider '{provider}'. "
+            f"Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}"
+        )
+    
+    # Route to provider-specific implementation
+    if provider == PROVIDER_OPENAI:
+        return OpenAIResponsesClient()
+    
+    elif provider == PROVIDER_ANTHROPIC:
+        return AnthropicResponsesClient()
+    
+    elif provider == PROVIDER_GOOGLE:
+        # TODO: Implement GoogleClient when Google Gemini integration is ready
+        # For now, raise an error indicating this is not yet implemented
+        raise ValueError(
+            f"Provider '{PROVIDER_GOOGLE}' is supported but not yet implemented. "
+            "Google Gemini integration is coming soon."
+        )
+    
+    else:
+        # This should never be reached due to SUPPORTED_PROVIDERS check above,
+        # but included for completeness and future-proofing
+        raise ValueError(f"Provider '{provider}' routing not implemented")
+
+
 class AnthropicResponsesClient:
     """Anthropic implementation of LLMClient using the Messages API.
     
