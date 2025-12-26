@@ -24,6 +24,7 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
+          "logging",
           "uuid.UUID"
         ],
         "third-party": [
@@ -54,7 +55,8 @@
           "os",
           "threading",
           "typing.Dict",
-          "typing.List"
+          "typing.List",
+          "typing.Optional"
         ],
         "third-party": [
           "pydantic_settings.BaseSettings",
@@ -282,6 +284,7 @@
           "threading"
         ],
         "third-party": [
+          "pydantic.ValidationError",
           "pytest"
         ]
       }
@@ -461,6 +464,10 @@
     },
     {
       "source": "app/services/clarification.py",
+      "target": "app/models/config_models.py"
+    },
+    {
+      "source": "app/services/clarification.py",
       "target": "app/models/specs.py"
     },
     {
@@ -534,6 +541,10 @@
     {
       "source": "tests/test_config.py",
       "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_config.py",
+      "target": "app/models/config_models.py"
     },
     {
       "source": "tests/test_health.py",
