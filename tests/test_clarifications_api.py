@@ -1584,3 +1584,356 @@ class TestDebugEndpointOpenAPI:
         # Verify description mentions it's disabled by default
         assert "description" in get_spec
         assert "disabled by default" in get_spec["description"].lower() or "debug mode only" in get_spec["description"].lower()
+
+
+def _wait_for_job_completion(client, job_id, timeout=5.0):
+    """Poll the API until the job is complete or timeout is reached.
+    
+    Args:
+        client: TestClient instance
+        job_id: Job ID to poll
+        timeout: Maximum time to wait in seconds
+        
+    Returns:
+        Job data dictionary
+        
+    Raises:
+        AssertionError if job doesn't complete within timeout
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        response = client.get(f"/v1/clarifications/{job_id}")
+        job_data = response.json()
+        if job_data["status"] in ["SUCCESS", "FAILED"]:
+            return job_data
+        time.sleep(0.1)
+    pytest.fail(f"Job {job_id} did not complete within {timeout} seconds.")
+
+
+@pytest.fixture
+def client_with_job_results(monkeypatch):
+    """Fixture to provide a TestClient with APP_SHOW_JOB_RESULT enabled."""
+    monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
+    from app.config import get_settings
+    get_settings.cache_clear()
+    from app.main import create_app
+    from fastapi.testclient import TestClient
+    return TestClient(create_app())
+
+
+class TestOpenQuestionsNeverExposed:
+    """Tests ensuring open_questions are never exposed in API responses.
+    
+    These tests verify the acceptance criteria that GET responses never expose
+    open_questions, while must/dont/nice arrays retain prior entries.
+    """
+    
+    def test_preview_response_never_includes_open_questions(self, client):
+        """Test that preview endpoint response excludes open_questions."""
+        request_data = {
+            "plan": {
+                "specs": [{
+                    "purpose": "Test",
+                    "vision": "Test vision",
+                    "must": ["Feature 1"],
+                    "dont": [],
+                    "nice": [],
+                    "open_questions": ["Question 1?", "Question 2?"],
+                    "assumptions": []
+                }]
+            },
+            "answers": []
+        }
+        
+        response = client.post("/v1/clarifications/preview", json=request_data)
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify response structure
+        assert "specs" in data
+        assert len(data["specs"]) == 1
+        spec = data["specs"][0]
+        
+        # Verify open_questions is NOT in response
+        assert "open_questions" not in spec
+        
+        # Verify the 6 allowed keys are present
+        assert "purpose" in spec
+        assert "vision" in spec
+        assert "must" in spec
+        assert "dont" in spec
+        assert "nice" in spec
+        assert "assumptions" in spec
+    
+    def test_get_job_result_never_includes_open_questions_when_enabled(self, client_with_job_results):
+        """Test that GET job result never includes open_questions (development mode)."""
+        client = client_with_job_results
+        
+        request_data = {
+            "plan": {
+                "specs": [{
+                    "purpose": "Test",
+                    "vision": "Test vision",
+                    "must": ["Feature 1"],
+                    "open_questions": ["Question 1?"]
+                }]
+            },
+            "answers": []
+        }
+        
+        # Create job
+        response = client.post("/v1/clarifications", json=request_data)
+        job_id = response.json()["id"]
+        
+        # Wait for completion using helper
+        job_data = _wait_for_job_completion(client, job_id)
+        
+        assert job_data["status"] == "SUCCESS", f"Job failed or timed out: {job_data.get('last_error', 'unknown')}"
+        
+        # Verify result exists and open_questions is not present
+        assert job_data["result"] is not None
+        assert "specs" in job_data["result"]
+        spec = job_data["result"]["specs"][0]
+        
+        # open_questions should NOT be in result
+        assert "open_questions" not in spec
+        
+        # Verify only the 6 allowed keys
+        spec_keys = set(spec.keys())
+        expected_keys = {"purpose", "vision", "must", "dont", "nice", "assumptions"}
+        assert spec_keys == expected_keys
+    
+    def test_post_response_never_includes_open_questions_in_metadata(self, client):
+        """Test that POST response doesn't leak open_questions in any field."""
+        request_data = {
+            "plan": {
+                "specs": [{
+                    "purpose": "Test",
+                    "vision": "Test vision",
+                    "open_questions": ["Secret question?"]
+                }]
+            },
+            "answers": []
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        assert response.status_code == 202
+        data = response.json()
+        
+        # Convert entire response to string and verify no open_questions leak
+        response_str = str(data).lower()
+        assert "secret question" not in response_str
+        
+        # Verify lightweight response (no request/result fields)
+        assert "request" not in data
+        assert "result" not in data
+    
+    def test_must_dont_nice_arrays_preserved_in_result(self, client_with_job_results):
+        """Test that must/dont/nice arrays retain prior entries in result."""
+        from unittest.mock import patch
+        from app.services.llm_clients import DummyLLMClient
+        import json
+        
+        # Create a custom mock that preserves the input arrays
+        def create_preserving_client(provider, config):
+            return DummyLLMClient(canned_response=json.dumps({
+                "specs": [{
+                    "purpose": "Test",
+                    "vision": "Test vision",
+                    "must": ["Existing feature A", "Existing feature B"],
+                    "dont": ["Existing constraint X"],
+                    "nice": ["Existing nice-to-have Y"],
+                    "assumptions": []
+                }]
+            }))
+        
+        with patch('app.services.clarification.get_llm_client', side_effect=create_preserving_client):
+            client = client_with_job_results
+            
+            request_data = {
+                "plan": {
+                    "specs": [{
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": ["Existing feature A", "Existing feature B"],
+                        "dont": ["Existing constraint X"],
+                        "nice": ["Existing nice-to-have Y"],
+                        "open_questions": ["Add feature C?"]
+                    }]
+                },
+                "answers": []
+            }
+            
+            # Create and wait for job
+            response = client.post("/v1/clarifications", json=request_data)
+            job_id = response.json()["id"]
+            
+            # Wait for completion using helper
+            job_data = _wait_for_job_completion(client, job_id)
+            
+            assert job_data["status"] == "SUCCESS", f"Job failed: {job_data.get('last_error', 'unknown')}"
+            
+            result_spec = job_data["result"]["specs"][0]
+            
+            # Verify prior entries are preserved
+            assert isinstance(result_spec["must"], list)
+            assert isinstance(result_spec["dont"], list)
+            assert isinstance(result_spec["nice"], list)
+            
+            # Validate that the arrays contain the expected values
+            assert "Existing feature A" in result_spec["must"]
+            assert "Existing feature B" in result_spec["must"]
+            assert "Existing constraint X" in result_spec["dont"]
+            assert "Existing nice-to-have Y" in result_spec["nice"]
+            
+            # Verify open_questions is NOT present
+            assert "open_questions" not in result_spec
+    
+    def test_multiple_specs_none_include_open_questions(self, client):
+        """Test that with multiple specs, none include open_questions in response."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Spec 1",
+                        "vision": "Vision 1",
+                        "open_questions": ["Q1?"]
+                    },
+                    {
+                        "purpose": "Spec 2",
+                        "vision": "Vision 2",
+                        "open_questions": ["Q2?", "Q3?"]
+                    },
+                    {
+                        "purpose": "Spec 3",
+                        "vision": "Vision 3",
+                        "open_questions": []
+                    }
+                ]
+            },
+            "answers": []
+        }
+        
+        response = client.post("/v1/clarifications/preview", json=request_data)
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify none of the specs include open_questions
+        for spec in data["specs"]:
+            assert "open_questions" not in spec
+            # Verify only the 6 allowed keys
+            spec_keys = set(spec.keys())
+            expected_keys = {"purpose", "vision", "must", "dont", "nice", "assumptions"}
+            assert spec_keys == expected_keys
+
+
+class TestAPIWithVariousDummyClientResponses:
+    """API-level tests with various DummyLLMClient response scenarios.
+    
+    These tests verify the full API workflow with different LLM response patterns.
+    """
+    
+    def test_api_handles_markdown_wrapped_response(self, client):
+        """Test that API successfully handles markdown-wrapped LLM responses."""
+        from unittest.mock import patch
+        from app.services.llm_clients import DummyLLMClient
+        
+        # Create a dummy client that returns markdown-wrapped JSON
+        def create_markdown_client(provider, config):
+            return DummyLLMClient(canned_response='''```json
+{
+  "specs": [{
+    "purpose": "Test",
+    "vision": "Test",
+    "must": [],
+    "dont": [],
+    "nice": [],
+    "assumptions": []
+  }]
+}
+```''')
+        
+        with patch('app.services.clarification.get_llm_client', side_effect=create_markdown_client):
+            request_data = {
+                "plan": {
+                    "specs": [{
+                        "purpose": "Test",
+                        "vision": "Test"
+                    }]
+                },
+                "answers": []
+            }
+            
+            # Create job
+            response = client.post("/v1/clarifications", json=request_data)
+            assert response.status_code == 202
+            job_id = response.json()["id"]
+            
+            # Poll for completion using helper
+            job_data = _wait_for_job_completion(client, job_id)
+            
+            # Should succeed despite markdown
+            assert job_data["status"] == "SUCCESS"
+    
+    def test_api_handles_malformed_response_gracefully(self, client):
+        """Test that API gracefully handles malformed LLM responses."""
+        from unittest.mock import patch
+        from app.services.llm_clients import DummyLLMClient
+        
+        def create_malformed_client(provider, config):
+            return DummyLLMClient(canned_response='{"incomplete": "json"')
+        
+        with patch('app.services.clarification.get_llm_client', side_effect=create_malformed_client):
+            request_data = {
+                "plan": {
+                    "specs": [{
+                        "purpose": "Test",
+                        "vision": "Test"
+                    }]
+                },
+                "answers": []
+            }
+            
+            response = client.post("/v1/clarifications", json=request_data)
+            job_id = response.json()["id"]
+            
+            # Poll for completion using helper
+            job_data = _wait_for_job_completion(client, job_id)
+            
+            # Should be FAILED with error
+            assert job_data["status"] == "FAILED"
+            assert job_data["last_error"] is not None
+            assert "parse" in job_data["last_error"].lower() or "failed" in job_data["last_error"].lower()
+    
+    def test_api_backward_compatible_with_existing_clients(self, client):
+        """Test that API remains backward compatible."""
+        # Test that old-style requests still work
+        request_data = {
+            "plan": {
+                "specs": [{
+                    "purpose": "Backward Compatible",
+                    "vision": "Still works",
+                    "must": ["Feature"],
+                    "dont": [],
+                    "nice": [],
+                    "open_questions": [],
+                    "assumptions": []
+                }]
+            },
+            "answers": []
+        }
+        
+        # POST should work
+        response = client.post("/v1/clarifications", json=request_data)
+        assert response.status_code == 202
+        
+        # Preview should work
+        preview_response = client.post("/v1/clarifications/preview", json=request_data)
+        assert preview_response.status_code == 200
+        
+        # Result should not include open_questions
+        preview_data = preview_response.json()
+        assert "open_questions" not in preview_data["specs"][0]
