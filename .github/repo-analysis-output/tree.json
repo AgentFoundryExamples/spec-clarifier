@@ -80,6 +80,10 @@
             },
             {
               "type": "file",
+              "name": "routes_config.py"
+            },
+            {
+              "type": "file",
               "name": "routes_health.py"
             }
           ]
@@ -161,6 +165,10 @@
         {
           "type": "file",
           "name": "test_config.py"
+        },
+        {
+          "type": "file",
+          "name": "test_config_admin_api.py"
         },
         {
           "type": "file",

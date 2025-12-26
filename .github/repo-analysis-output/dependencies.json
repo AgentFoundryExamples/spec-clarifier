@@ -35,6 +35,24 @@
       }
     },
     {
+      "id": "app/api/routes_config.py",
+      "path": "app/api/routes_config.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "logging",
+          "typing.Dict",
+          "typing.List"
+        ],
+        "third-party": [
+          "fastapi.APIRouter",
+          "fastapi.HTTPException",
+          "pydantic.BaseModel",
+          "pydantic.Field"
+        ]
+      }
+    },
+    {
       "id": "app/api/routes_health.py",
       "path": "app/api/routes_health.py",
       "type": "file",
@@ -290,6 +308,21 @@
       }
     },
     {
+      "id": "tests/test_config_admin_api.py",
+      "path": "tests/test_config_admin_api.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "concurrent.futures",
+          "threading"
+        ],
+        "third-party": [
+          "fastapi.testclient.TestClient",
+          "pytest"
+        ]
+      }
+    },
+    {
       "id": "tests/test_health.py",
       "path": "tests/test_health.py",
       "type": "file",
@@ -432,6 +465,14 @@
       "target": "app/services/llm_clients.py"
     },
     {
+      "source": "app/api/routes_config.py",
+      "target": "app/config.py"
+    },
+    {
+      "source": "app/api/routes_config.py",
+      "target": "app/models/config_models.py"
+    },
+    {
       "source": "app/config.py",
       "target": "app/models/config_models.py"
     },
@@ -446,6 +487,10 @@
     {
       "source": "app/main.py",
       "target": "app/api/routes_clarifications.py"
+    },
+    {
+      "source": "app/main.py",
+      "target": "app/api/routes_config.py"
     },
     {
       "source": "app/models/__init__.py",
@@ -548,6 +593,18 @@
       "target": "app/models/config_models.py"
     },
     {
+      "source": "tests/test_config_admin_api.py",
+      "target": "app/main.py"
+    },
+    {
+      "source": "tests/test_config_admin_api.py",
+      "target": "app/config.py"
+    },
+    {
+      "source": "tests/test_config_admin_api.py",
+      "target": "app/models/config_models.py"
+    },
+    {
       "source": "tests/test_health.py",
       "target": "app/main.py"
     },
@@ -609,6 +666,7 @@
       "abc.ABC",
       "abc.abstractmethod",
       "asyncio",
+      "concurrent.futures",
       "copy",
       "datetime.datetime",
       "datetime.timedelta",
@@ -672,7 +730,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 28,
+    "stdlib_count": 29,
     "third-party_count": 35
   }
 }
