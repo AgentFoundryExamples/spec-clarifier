@@ -19,6 +19,7 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from app.models.specs import (
+    ClarificationConfig,
     ClarificationJob,
     ClarificationRequest,
     ClarifiedPlan,
@@ -655,3 +656,289 @@ class TestClarificationJob:
         
         errors = exc_info.value.errors()
         assert any(error["loc"] == ("status",) for error in errors)
+
+
+class TestClarificationConfig:
+    """Tests for ClarificationConfig model."""
+    
+    def test_clarification_config_with_all_required_fields(self):
+        """Test creating ClarificationConfig with all required fields."""
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="default"
+        )
+        
+        assert config.provider == "openai"
+        assert config.model == "gpt-5.1"
+        assert config.system_prompt_id == "default"
+        assert config.temperature == 0.1  # default value
+        assert config.max_tokens is None  # default value
+    
+    def test_clarification_config_with_all_fields(self):
+        """Test creating ClarificationConfig with all fields including optional ones."""
+        config = ClarificationConfig(
+            provider="anthropic",
+            model="claude-sonnet-4.5",
+            system_prompt_id="advanced",
+            temperature=0.7,
+            max_tokens=2000
+        )
+        
+        assert config.provider == "anthropic"
+        assert config.model == "claude-sonnet-4.5"
+        assert config.system_prompt_id == "advanced"
+        assert config.temperature == 0.7
+        assert config.max_tokens == 2000
+    
+    def test_clarification_config_openai_provider(self):
+        """Test ClarificationConfig with OpenAI provider."""
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5",
+            system_prompt_id="default"
+        )
+        
+        assert config.provider == "openai"
+        assert config.model == "gpt-5"
+    
+    def test_clarification_config_anthropic_provider(self):
+        """Test ClarificationConfig with Anthropic provider."""
+        config = ClarificationConfig(
+            provider="anthropic",
+            model="claude-opus-4",
+            system_prompt_id="default"
+        )
+        
+        assert config.provider == "anthropic"
+        assert config.model == "claude-opus-4"
+    
+    def test_clarification_config_invalid_provider(self):
+        """Test that invalid provider values are rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationConfig(
+                provider="invalid",
+                model="some-model",
+                system_prompt_id="default"
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("provider",) for error in errors)
+    
+    def test_clarification_config_empty_model(self):
+        """Test that empty model string is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationConfig(
+                provider="openai",
+                model="",
+                system_prompt_id="default"
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("model",) for error in errors)
+    
+    def test_clarification_config_empty_system_prompt_id(self):
+        """Test that empty system_prompt_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationConfig(
+                provider="openai",
+                model="gpt-5.1",
+                system_prompt_id=""
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("system_prompt_id",) for error in errors)
+    
+    def test_clarification_config_temperature_defaults_to_0_1(self):
+        """Test that temperature defaults to 0.1."""
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="default"
+        )
+        
+        assert config.temperature == 0.1
+    
+    def test_clarification_config_temperature_range_valid(self):
+        """Test that valid temperature values are accepted."""
+        # Test minimum boundary
+        config_min = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="default",
+            temperature=0.0
+        )
+        assert config_min.temperature == 0.0
+        
+        # Test maximum boundary
+        config_max = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="default",
+            temperature=2.0
+        )
+        assert config_max.temperature == 2.0
+        
+        # Test middle value
+        config_mid = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="default",
+            temperature=1.0
+        )
+        assert config_mid.temperature == 1.0
+    
+    def test_clarification_config_temperature_below_minimum(self):
+        """Test that temperature below 0.0 is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationConfig(
+                provider="openai",
+                model="gpt-5.1",
+                system_prompt_id="default",
+                temperature=-0.1
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("temperature",) for error in errors)
+    
+    def test_clarification_config_temperature_above_maximum(self):
+        """Test that temperature above 2.0 is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationConfig(
+                provider="openai",
+                model="gpt-5.1",
+                system_prompt_id="default",
+                temperature=2.1
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("temperature",) for error in errors)
+    
+    def test_clarification_config_max_tokens_none_allowed(self):
+        """Test that max_tokens=None is allowed."""
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="default",
+            max_tokens=None
+        )
+        
+        assert config.max_tokens is None
+    
+    def test_clarification_config_max_tokens_positive(self):
+        """Test that positive max_tokens values are accepted."""
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="default",
+            max_tokens=1000
+        )
+        
+        assert config.max_tokens == 1000
+    
+    def test_clarification_config_max_tokens_zero_rejected(self):
+        """Test that max_tokens=0 is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationConfig(
+                provider="openai",
+                model="gpt-5.1",
+                system_prompt_id="default",
+                max_tokens=0
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("max_tokens",) for error in errors)
+    
+    def test_clarification_config_max_tokens_negative_rejected(self):
+        """Test that negative max_tokens is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationConfig(
+                provider="openai",
+                model="gpt-5.1",
+                system_prompt_id="default",
+                max_tokens=-100
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("max_tokens",) for error in errors)
+    
+    def test_clarification_config_rejects_extra_fields(self):
+        """Test that extra fields are rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationConfig(
+                provider="openai",
+                model="gpt-5.1",
+                system_prompt_id="default",
+                extra_field="should not be allowed"
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["type"] == "extra_forbidden" for error in errors)
+    
+    def test_clarification_config_missing_required_field(self):
+        """Test that missing required fields raise validation error."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationConfig(
+                provider="openai",
+                model="gpt-5.1"
+                # Missing system_prompt_id
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("system_prompt_id",) for error in errors)
+    
+    def test_clarification_config_serialization(self):
+        """Test that ClarificationConfig can be serialized to dict."""
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="default",
+            temperature=0.5,
+            max_tokens=1500
+        )
+        
+        data = config.model_dump()
+        
+        assert data["provider"] == "openai"
+        assert data["model"] == "gpt-5.1"
+        assert data["system_prompt_id"] == "default"
+        assert data["temperature"] == 0.5
+        assert data["max_tokens"] == 1500
+    
+    def test_clarification_config_deserialization(self):
+        """Test that ClarificationConfig can be deserialized from dict."""
+        data = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4.5",
+            "system_prompt_id": "advanced",
+            "temperature": 0.3,
+            "max_tokens": 2000
+        }
+        
+        config = ClarificationConfig(**data)
+        
+        assert config.provider == "anthropic"
+        assert config.model == "claude-sonnet-4.5"
+        assert config.system_prompt_id == "advanced"
+        assert config.temperature == 0.3
+        assert config.max_tokens == 2000
+    
+    def test_clarification_config_model_copy(self):
+        """Test that ClarificationConfig can be copied."""
+        original = ClarificationConfig(
+            provider="openai",
+            model="gpt-5.1",
+            system_prompt_id="default",
+            temperature=0.7
+        )
+        
+        copy = original.model_copy()
+        
+        assert copy.provider == original.provider
+        assert copy.model == original.model
+        assert copy.system_prompt_id == original.system_prompt_id
+        assert copy.temperature == original.temperature
+        assert copy.max_tokens == original.max_tokens
+        
+        # Ensure it's a deep copy
+        assert copy is not original

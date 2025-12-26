@@ -15,7 +15,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -35,6 +35,65 @@ class JobStatus(str, Enum):
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
+
+
+class ClarificationConfig(BaseModel):
+    """Configuration for clarification LLM calls.
+    
+    This model defines the runtime configuration for LLM-based specification
+    clarification, including provider selection, model specification, system
+    prompt identification, and generation parameters.
+    
+    The config is designed to be:
+    - Validated at creation time (provider/model membership checks)
+    - Serializable for storage in job configs or API responses
+    - Reusable across API and service layers
+    - Compatible with global defaults and runtime overrides
+    
+    Attributes:
+        provider: LLM provider identifier (must be 'openai' or 'anthropic')
+        model: Model identifier specific to the provider (e.g., 'gpt-5.1', 'claude-sonnet-4.5')
+        system_prompt_id: Identifier for the system prompt template to use
+        temperature: Sampling temperature for response generation (0.0-2.0), defaults to 0.1
+        max_tokens: Optional maximum tokens to generate in response
+    
+    Example:
+        >>> config = ClarificationConfig(
+        ...     provider="openai",
+        ...     model="gpt-5.1",
+        ...     system_prompt_id="default",
+        ...     temperature=0.1,
+        ...     max_tokens=2000
+        ... )
+    """
+    
+    model_config = ConfigDict(extra="forbid")
+    
+    provider: Literal["openai", "anthropic"] = Field(
+        ...,
+        description="LLM provider identifier (must be 'openai' or 'anthropic')"
+    )
+    model: str = Field(
+        ...,
+        min_length=1,
+        description="Model identifier specific to the provider"
+    )
+    system_prompt_id: str = Field(
+        ...,
+        min_length=1,
+        description="Identifier for the system prompt template to use"
+    )
+    temperature: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature for response generation"
+    )
+    max_tokens: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="Maximum tokens to generate in response"
+    )
 
 
 class SpecInput(BaseModel):
