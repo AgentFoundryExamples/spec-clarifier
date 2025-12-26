@@ -172,6 +172,10 @@
         },
         {
           "type": "file",
+          "name": "test_llm_integration.py"
+        },
+        {
+          "type": "file",
           "name": "test_main.py"
         },
         {

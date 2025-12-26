@@ -8,19 +8,20 @@ Includes classification of external dependencies as stdlib vs third-party.
 
 ## Statistics
 
-- **Total files**: 23
-- **Intra-repo dependencies**: 35
-- **External stdlib dependencies**: 26
+- **Total files**: 24
+- **Intra-repo dependencies**: 41
+- **External stdlib dependencies**: 27
 - **External third-party dependencies**: 35
 
 ## External Dependencies
 
 ### Standard Library / Core Modules
 
-Total: 26 unique modules
+Total: 27 unique modules
 
 - `abc.ABC`
 - `abc.abstractmethod`
+- `asyncio`
 - `copy`
 - `datetime.datetime`
 - `datetime.timedelta`
@@ -38,8 +39,7 @@ Total: 26 unique modules
 - `typing.Dict`
 - `typing.List`
 - `typing.Optional`
-- `typing.Protocol`
-- ... and 6 more (see JSON for full list)
+- ... and 7 more (see JSON for full list)
 
 ### Third-Party Packages
 
@@ -69,24 +69,24 @@ Total: 35 unique packages
 
 ## Most Depended Upon Files (Intra-Repo)
 
-- `app/models/specs.py` (10 dependents)
-- `app/services/job_store.py` (7 dependents)
+- `app/models/specs.py` (11 dependents)
+- `app/services/job_store.py` (8 dependents)
+- `app/services/clarification.py` (6 dependents)
+- `app/services/llm_clients.py` (6 dependents)
 - `app/config.py` (5 dependents)
-- `app/services/clarification.py` (5 dependents)
-- `app/services/llm_clients.py` (3 dependents)
 - `app/main.py` (3 dependents)
 - `app/api/routes_health.py` (1 dependents)
 - `app/api/routes_clarifications.py` (1 dependents)
 
 ## Files with Most Dependencies (Intra-Repo)
 
+- `tests/test_clarifications_api.py` (5 dependencies)
 - `app/api/routes_clarifications.py` (4 dependencies)
+- `tests/test_async_job_lifecycle.py` (4 dependencies)
 - `tests/test_clarification_service.py` (4 dependencies)
-- `tests/test_clarifications_api.py` (4 dependencies)
+- `tests/test_llm_integration.py` (4 dependencies)
 - `app/main.py` (3 dependencies)
 - `app/services/clarification.py` (3 dependencies)
-- `tests/test_async_job_lifecycle.py` (3 dependencies)
 - `app/services/__init__.py` (2 dependencies)
 - `tests/test_job_store.py` (2 dependencies)
 - `tests/test_main.py` (2 dependencies)
-- `tests/test_prompt_builder.py` (2 dependencies)

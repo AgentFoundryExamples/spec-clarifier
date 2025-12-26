@@ -117,17 +117,20 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
+          "asyncio",
           "copy",
           "json",
           "logging",
           "re",
+          "time",
           "typing.Any",
           "typing.Optional",
           "typing.Tuple",
           "uuid.UUID"
         ],
         "third-party": [
-          "fastapi.BackgroundTasks"
+          "fastapi.BackgroundTasks",
+          "pydantic.ValidationError"
         ]
       }
     },
@@ -205,6 +208,7 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
+          "json",
           "unittest.mock.MagicMock",
           "unittest.mock.Mock",
           "unittest.mock.patch",
@@ -221,6 +225,7 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
+          "json",
           "unittest.mock.MagicMock",
           "unittest.mock.patch"
         ],
@@ -235,6 +240,7 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
+          "json",
           "time",
           "unittest.mock.patch",
           "uuid.uuid4"
@@ -311,6 +317,22 @@
           "openai.AuthenticationError",
           "openai.BadRequestError",
           "openai.RateLimitError",
+          "pytest"
+        ]
+      }
+    },
+    {
+      "id": "tests/test_llm_integration.py",
+      "path": "tests/test_llm_integration.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "json",
+          "logging",
+          "unittest.mock.MagicMock",
+          "unittest.mock.patch"
+        ],
+        "third-party": [
           "pytest"
         ]
       }
@@ -432,6 +454,10 @@
       "target": "app/services/job_store.py"
     },
     {
+      "source": "tests/test_async_job_lifecycle.py",
+      "target": "app/services/llm_clients.py"
+    },
+    {
       "source": "tests/test_clarification_service.py",
       "target": "app/models/specs.py"
     },
@@ -461,6 +487,10 @@
     },
     {
       "source": "tests/test_clarifications_api.py",
+      "target": "app/services/llm_clients.py"
+    },
+    {
+      "source": "tests/test_clarifications_api.py",
       "target": "app/config.py"
     },
     {
@@ -481,6 +511,22 @@
     },
     {
       "source": "tests/test_llm_clients.py",
+      "target": "app/services/llm_clients.py"
+    },
+    {
+      "source": "tests/test_llm_integration.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_llm_integration.py",
+      "target": "app/services/clarification.py"
+    },
+    {
+      "source": "tests/test_llm_integration.py",
+      "target": "app/services/job_store.py"
+    },
+    {
+      "source": "tests/test_llm_integration.py",
       "target": "app/services/llm_clients.py"
     },
     {
@@ -508,6 +554,7 @@
     "stdlib": [
       "abc.ABC",
       "abc.abstractmethod",
+      "asyncio",
       "copy",
       "datetime.datetime",
       "datetime.timedelta",
@@ -570,7 +617,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 26,
+    "stdlib_count": 27,
     "third-party_count": 35
   }
 }
