@@ -22,6 +22,7 @@ from uuid import UUID
 
 from fastapi import BackgroundTasks
 
+from app.models.config_models import ClarificationConfig
 from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan, ClarifiedSpec, JobStatus, PlanInput
 from app.services import job_store
 from app.services.llm_clients import ClarificationLLMConfig, get_llm_client
@@ -543,7 +544,6 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         llm_config = None
         if job.config and 'clarification_config' in job.config:
             # Reconstruct ClarificationConfig from stored dict
-            from app.models.config_models import ClarificationConfig
             clarification_config_dict = job.config['clarification_config']
             clarification_config = ClarificationConfig(**clarification_config_dict)
             

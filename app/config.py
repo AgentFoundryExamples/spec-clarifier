@@ -435,15 +435,12 @@ def validate_and_merge_config(
     default = get_default_config()
     
     # Merge: request fields override defaults, None fields inherit from default
-    # Build a dict with merged values
-    merged_values = {}
-    
-    # Merge each field: use request value if not None, otherwise use default
-    merged_values['provider'] = request_config.provider if request_config.provider is not None else default.provider
-    merged_values['model'] = request_config.model if request_config.model is not None else default.model
-    merged_values['system_prompt_id'] = request_config.system_prompt_id if request_config.system_prompt_id is not None else default.system_prompt_id
-    merged_values['temperature'] = request_config.temperature if request_config.temperature is not None else default.temperature
-    merged_values['max_tokens'] = request_config.max_tokens if request_config.max_tokens is not None else default.max_tokens
+    # Build a dict with merged values using dict comprehension
+    field_names = ['provider', 'model', 'system_prompt_id', 'temperature', 'max_tokens']
+    merged_values = {
+        field: getattr(request_config, field) if getattr(request_config, field) is not None else getattr(default, field)
+        for field in field_names
+    }
     
     # Create merged config
     merged = ClarificationConfig(**merged_values)
