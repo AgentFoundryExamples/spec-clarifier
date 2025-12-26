@@ -20,7 +20,9 @@ from typing import Dict, List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Import ClarificationConfig from config_models to avoid circular dependency
+# Import ClarificationConfig from config_models to avoid circular dependency.
+# This is an internal import - public API should import from app.models.specs
+# for backward compatibility and consistency.
 from app.models.config_models import ClarificationConfig
 
 
