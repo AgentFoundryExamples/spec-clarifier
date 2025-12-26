@@ -8,6 +8,8 @@ A FastAPI service for clarifying specifications.
 - Health check endpoint
 - OpenAPI documentation (Swagger UI)
 - Configuration via environment variables
+- In-memory job store for async clarification workflows
+- Thread-safe job management with TTL cleanup
 
 ## Prerequisites
 
@@ -215,6 +217,90 @@ Returned when the request payload is malformed or missing required fields:
   ]
 }
 ```
+
+## Job Store
+
+The spec-clarifier includes a thread-safe in-memory job store for managing asynchronous clarification workflows. This enables clients to create jobs, poll for status, and retrieve results.
+
+### Job Model
+
+Jobs are represented by the `ClarificationJob` model with the following fields:
+
+- `id` (UUID): Unique identifier for the job
+- `status` (JobStatus): Current job status (PENDING, RUNNING, SUCCESS, FAILED)
+- `created_at` (datetime): UTC timestamp when job was created
+- `updated_at` (datetime): UTC timestamp when job was last updated
+- `last_error` (Optional[str]): Error message if job failed
+- `request` (ClarificationRequest): The original clarification request
+- `result` (Optional[ClarifiedPlan]): The clarified plan result (when SUCCESS)
+- `config` (Optional[dict]): Optional configuration for job processing
+
+### Job Store API
+
+The job store provides the following operations:
+
+```python
+from app.services.job_store import (
+    create_job,
+    get_job,
+    update_job,
+    list_jobs,
+    delete_job,
+    cleanup_expired_jobs,
+    JobNotFoundError
+)
+
+# Create a new job
+job = create_job(request, config={"model": "gpt-4"})
+
+# Retrieve a job by ID
+job = get_job(job_id)
+
+# Update job status and result
+updated_job = update_job(
+    job_id,
+    status=JobStatus.SUCCESS,
+    result=clarified_plan
+)
+
+# List all jobs or filter by status
+all_jobs = list_jobs()
+pending_jobs = list_jobs(status=JobStatus.PENDING, limit=10)
+
+# Delete a job
+delete_job(job_id)
+
+# Clean up expired completed jobs (default TTL: 24 hours)
+cleanup_count = cleanup_expired_jobs(ttl_seconds=86400)
+```
+
+### Thread Safety
+
+All job store operations are protected by a module-level lock, ensuring thread-safe access in multi-worker environments. The store is safe to use with:
+
+- Development servers with multiple workers
+- Concurrent read/write operations
+- Multi-threaded background tasks
+
+### TTL Cleanup
+
+The job store includes a TTL (Time-To-Live) cleanup mechanism that automatically removes expired jobs:
+
+- **Default TTL**: 24 hours (86,400 seconds)
+- **Eligible for cleanup**: Jobs with SUCCESS or FAILED status
+- **Protected**: RUNNING and PENDING jobs are never cleaned up
+- **Configurable**: TTL can be adjusted via the `ttl_seconds` parameter
+
+To implement automated cleanup, you can schedule periodic calls to `cleanup_expired_jobs()` in your application startup or background tasks.
+
+### Edge Cases
+
+The job store handles several important edge cases:
+
+- **Concurrent access**: Lock protection prevents race conditions
+- **Missing jobs**: Raises `JobNotFoundError` with clear error messages
+- **Timestamp management**: All timestamps are UTC-aware and `updated_at` is always refreshed on updates
+- **Optional config**: Config parameter defaults to None and doesn't require client input
 
 ## Development
 
