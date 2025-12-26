@@ -664,6 +664,9 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
     Args:
         provider: LLM provider identifier ('openai', 'anthropic', 'google', 'dummy')
         config: Configuration object containing model, temperature, max_tokens, etc.
+                Note: Currently, clients retrieve API keys from environment variables.
+                The config parameter is reserved for future extensibility (e.g., passing
+                API keys, custom endpoints, or other provider-specific settings).
         
     Returns:
         An instance implementing the LLMClient protocol:
@@ -681,12 +684,14 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
         >>> # Client is ready but not invoked yet
         
         >>> # For testing with deterministic responses
-        >>> test_config = ClarificationLLMConfig(provider="dummy", model="test-model")
+        >>> test_config = ClarificationLLMConfig(provider="openai", model="test-model")
         >>> test_client = get_llm_client("dummy", test_config)
     
     Note:
         The factory does not invoke the LLM - it only constructs and returns the
         client instance. Actual API calls happen when client.complete() is called.
+        Model, temperature, and other parameters from config are passed during the
+        complete() invocation, not during client construction.
     """
     # Validate provider parameter
     if not provider or not provider.strip():
@@ -708,6 +713,8 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
         )
     
     # Route to provider-specific implementation
+    # Note: Clients currently use environment variables for API keys.
+    # Future enhancement: Pass config.api_key if/when added to ClarificationLLMConfig
     if provider == PROVIDER_OPENAI:
         return OpenAIResponsesClient()
     

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Service for clarifying specifications."""
 
+import copy
 import logging
 from typing import Any, Optional
 from uuid import UUID
@@ -21,7 +22,7 @@ from fastapi import BackgroundTasks
 
 from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan, ClarifiedSpec, JobStatus, PlanInput
 from app.services import job_store
-from app.services.llm_clients import ClarificationLLMConfig, get_llm_client
+from app.services.llm_clients import ClarificationLLMConfig, get_llm_client, LLMCallError
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,8 @@ def start_clarification_job(
     # Create job in PENDING state, storing llm_config in the config dict if provided
     if llm_config is not None:
         # Merge llm_config into config dict for storage
-        job_config = config.copy() if config else {}
+        # Use deepcopy to avoid mutating nested structures in the original config
+        job_config = copy.deepcopy(config) if config else {}
         job_config['llm_config'] = llm_config.model_dump()
         job = job_store.create_job(request, config=job_config)
     else:
@@ -147,8 +149,10 @@ def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = None) ->
                     f"Initialized {llm_config.provider} LLM client for job {job_id} "
                     f"with model {llm_config.model}"
                 )
-            except (ValueError, Exception) as e:
+            except (ValueError, LLMCallError) as e:
                 # Log client initialization failure but continue with deterministic processing
+                # ValueError: Invalid/unsupported provider
+                # LLMCallError: SDK missing or other client-specific initialization errors
                 logger.warning(
                     f"Failed to initialize LLM client for job {job_id}: {e}. "
                     "Continuing with deterministic clarification."
