@@ -50,7 +50,11 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "functools.lru_cache"
+          "functools.lru_cache",
+          "os",
+          "threading",
+          "typing.Dict",
+          "typing.List"
         ],
         "third-party": [
           "pydantic_settings.BaseSettings",
@@ -81,6 +85,22 @@
       "external_dependencies": {
         "stdlib": [],
         "third-party": []
+      }
+    },
+    {
+      "id": "app/models/config_models.py",
+      "path": "app/models/config_models.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "typing.Literal",
+          "typing.Optional"
+        ],
+        "third-party": [
+          "pydantic.BaseModel",
+          "pydantic.ConfigDict",
+          "pydantic.Field"
+        ]
       }
     },
     {
@@ -258,7 +278,8 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "os"
+          "os",
+          "threading"
         ],
         "third-party": [
           "pytest"
@@ -407,6 +428,10 @@
       "target": "app/services/llm_clients.py"
     },
     {
+      "source": "app/config.py",
+      "target": "app/models/config_models.py"
+    },
+    {
       "source": "app/main.py",
       "target": "app/config.py"
     },
@@ -421,6 +446,10 @@
     {
       "source": "app/models/__init__.py",
       "target": "app/models/specs.py"
+    },
+    {
+      "source": "app/models/specs.py",
+      "target": "app/models/config_models.py"
     },
     {
       "source": "app/services/__init__.py",
@@ -503,6 +532,10 @@
       "target": "app/config.py"
     },
     {
+      "source": "tests/test_config.py",
+      "target": "app/models/specs.py"
+    },
+    {
       "source": "tests/test_health.py",
       "target": "app/main.py"
     },
@@ -576,6 +609,7 @@
       "typing.Any",
       "typing.Dict",
       "typing.List",
+      "typing.Literal",
       "typing.Optional",
       "typing.Protocol",
       "typing.Tuple",
@@ -622,7 +656,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 27,
+    "stdlib_count": 28,
     "third-party_count": 35
   }
 }

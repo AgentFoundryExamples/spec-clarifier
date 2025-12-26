@@ -94,6 +94,10 @@
             },
             {
               "type": "file",
+              "name": "config_models.py"
+            },
+            {
+              "type": "file",
               "name": "specs.py"
             }
           ]

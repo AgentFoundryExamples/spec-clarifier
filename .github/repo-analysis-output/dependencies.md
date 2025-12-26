@@ -8,16 +8,16 @@ Includes classification of external dependencies as stdlib vs third-party.
 
 ## Statistics
 
-- **Total files**: 24
-- **Intra-repo dependencies**: 42
-- **External stdlib dependencies**: 27
+- **Total files**: 25
+- **Intra-repo dependencies**: 45
+- **External stdlib dependencies**: 28
 - **External third-party dependencies**: 35
 
 ## External Dependencies
 
 ### Standard Library / Core Modules
 
-Total: 27 unique modules
+Total: 28 unique modules
 
 - `abc.ABC`
 - `abc.abstractmethod`
@@ -38,8 +38,8 @@ Total: 27 unique modules
 - `typing.Any`
 - `typing.Dict`
 - `typing.List`
-- `typing.Optional`
-- ... and 7 more (see JSON for full list)
+- `typing.Literal`
+- ... and 8 more (see JSON for full list)
 
 ### Third-Party Packages
 
@@ -69,12 +69,13 @@ Total: 35 unique packages
 
 ## Most Depended Upon Files (Intra-Repo)
 
-- `app/models/specs.py` (11 dependents)
+- `app/models/specs.py` (12 dependents)
 - `app/services/job_store.py` (8 dependents)
 - `app/services/llm_clients.py` (7 dependents)
 - `app/services/clarification.py` (6 dependents)
 - `app/config.py` (5 dependents)
 - `app/main.py` (3 dependents)
+- `app/models/config_models.py` (2 dependents)
 - `app/api/routes_health.py` (1 dependents)
 - `app/api/routes_clarifications.py` (1 dependents)
 
@@ -88,5 +89,5 @@ Total: 35 unique packages
 - `app/main.py` (3 dependencies)
 - `app/services/clarification.py` (3 dependencies)
 - `app/services/__init__.py` (2 dependencies)
+- `tests/test_config.py` (2 dependencies)
 - `tests/test_job_store.py` (2 dependencies)
-- `tests/test_main.py` (2 dependencies)

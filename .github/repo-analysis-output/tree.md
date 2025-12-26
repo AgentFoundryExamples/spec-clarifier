@@ -20,6 +20,7 @@
     └── routes_health.py
   ├── models
     ├── __init__.py
+    ├── config_models.py
     └── specs.py
   ├── services
     ├── __init__.py
