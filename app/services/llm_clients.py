@@ -648,3 +648,274 @@ class OpenAIResponsesClient:
         )
         
         return text_content
+
+
+class AnthropicResponsesClient:
+    """Anthropic implementation of LLMClient using the Messages API.
+    
+    This client wraps the Anthropic Python SDK and implements the LLMClient
+    protocol using the Messages API (API version 2023-06-01 or newer).
+    
+    The client:
+    1. Initializes lazily for testability (client created on first use)
+    2. Uses AsyncAnthropic for non-blocking I/O
+    3. Formats messages according to Messages API schema (system + user messages)
+    4. Extracts text from response.content array
+    5. Maps Anthropic errors to LLMCallError hierarchy
+    6. Logs provider/model/duration but not prompts/responses
+    
+    Configuration:
+        - Requires ANTHROPIC_API_KEY environment variable
+        - Defaults to claude-sonnet-4.5 (Claude Sonnet 4.5)
+        - Supports claude-opus-4 (Claude Opus 4) via model parameter
+        - Passes through kwargs like temperature, max_tokens
+    
+    Example usage:
+        client = AnthropicResponsesClient()
+        response = await client.complete(
+            system_prompt="You are a helpful assistant",
+            user_prompt="Explain quantum computing",
+            model="claude-sonnet-4.5",
+            temperature=0.7,
+            max_tokens=500
+        )
+    """
+    
+    # Default model constants
+    DEFAULT_MODEL = "claude-sonnet-4.5"
+    
+    def __init__(self, api_key: Optional[str] = None):
+        """Initialize AnthropicResponsesClient with optional API key.
+        
+        Args:
+            api_key: Anthropic API key. If not provided, will use ANTHROPIC_API_KEY
+                    environment variable. Lazy initialization defers client
+                    creation until first API call.
+        """
+        self._api_key = api_key
+        self._client: Optional[Any] = None
+        self._logger = logging.getLogger(__name__)
+    
+    def _get_client(self) -> Any:
+        """Get or create AsyncAnthropic client instance (lazy initialization).
+        
+        Returns:
+            AsyncAnthropic client instance
+            
+        Raises:
+            LLMCallError: If ANTHROPIC_API_KEY is not available
+        """
+        if self._client is None:
+            # Import here to avoid import errors if anthropic is not installed
+            try:
+                from anthropic import AsyncAnthropic
+            except ImportError as e:
+                raise LLMCallError(
+                    "Anthropic SDK not installed. Install with: pip install anthropic",
+                    original_error=e,
+                    provider=PROVIDER_ANTHROPIC
+                )
+            
+            # Get API key from instance or environment
+            import os
+            api_key = self._api_key or os.environ.get("ANTHROPIC_API_KEY")
+            
+            if not api_key:
+                raise LLMCallError(
+                    "ANTHROPIC_API_KEY environment variable is not set. "
+                    "Please set it with a valid Anthropic API key.",
+                    provider=PROVIDER_ANTHROPIC
+                )
+            
+            self._client = AsyncAnthropic(api_key=api_key)
+            self._logger.debug("Initialized AsyncAnthropic client")
+        
+        return self._client
+    
+    async def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        **kwargs: Any
+    ) -> str:
+        """Generate a completion from Anthropic using the Messages API.
+        
+        This method sends a request to Anthropic's Messages API with system and
+        user prompts, waits for the response, and extracts the text content.
+        
+        The Messages API uses:
+        - `system` parameter for system-level instructions
+        - `messages` parameter for user/assistant conversation history
+        - `model` parameter for model selection
+        - `max_tokens` parameter is required by Anthropic
+        
+        Additional parameters (temperature, etc.) are passed through via kwargs.
+        
+        Args:
+            system_prompt: System-level instructions for the LLM
+            user_prompt: User's actual request/query
+            model: Model identifier (e.g., "claude-sonnet-4.5", "claude-opus-4")
+            **kwargs: Additional parameters:
+                - temperature: Sampling temperature (0.0-2.0)
+                - max_tokens: Maximum tokens to generate (required by Anthropic)
+                - Other Anthropic-specific parameters
+        
+        Returns:
+            Raw text string response from Anthropic
+            
+        Raises:
+            ValueError: When prompts are empty or invalid
+            LLMAuthenticationError: When API key is invalid
+            LLMRateLimitError: When rate limits are exceeded
+            LLMValidationError: When request validation fails
+            LLMNetworkError: When network/connectivity issues occur
+            LLMCallError: For other API errors
+        """
+        # Validate inputs
+        if not system_prompt or not system_prompt.strip():
+            raise ValueError("system_prompt must not be empty or blank")
+        if not user_prompt or not user_prompt.strip():
+            raise ValueError("user_prompt must not be empty or blank")
+        if not model or not model.strip():
+            raise ValueError("model must not be empty or blank")
+        
+        # Get or create client
+        client = self._get_client()
+        
+        # Prepare API parameters - Anthropic Messages API format
+        api_params = {
+            "model": model,
+            "system": system_prompt,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": user_prompt
+                }
+            ],
+        }
+        
+        # Ensure max_tokens is present (required by Anthropic)
+        if "max_tokens" not in kwargs:
+            # Use a reasonable default if not specified
+            api_params["max_tokens"] = 4096
+        else:
+            api_params["max_tokens"] = kwargs.pop("max_tokens")
+        
+        # Pass through other parameters
+        api_params.update(kwargs)
+        
+        # Track timing for logging using perf_counter for better async performance
+        import time
+        start_time = time.perf_counter()
+        
+        try:
+            from anthropic import (
+                APIError,
+                AuthenticationError,
+                RateLimitError,
+                APIConnectionError,
+                BadRequestError,
+                APITimeoutError,
+                UnprocessableEntityError,
+            )
+        except ImportError as import_err:
+            raise LLMCallError(
+                "Anthropic SDK not installed or accessible. Install with: pip install anthropic",
+                original_error=import_err,
+                provider=PROVIDER_ANTHROPIC
+            ) from import_err
+        
+        try:
+            # Call Anthropic Messages API
+            response = await client.messages.create(**api_params)
+            
+        except (AuthenticationError, RateLimitError, BadRequestError, UnprocessableEntityError, 
+                APIConnectionError, APITimeoutError, APIError) as e:
+            # Calculate elapsed time for error logging
+            elapsed_time = time.perf_counter() - start_time
+            
+            # Map Anthropic errors to our error hierarchy
+            if isinstance(e, AuthenticationError):
+                self._logger.error(
+                    f"Anthropic authentication failed: provider={PROVIDER_ANTHROPIC}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s"
+                )
+                raise LLMAuthenticationError(
+                    "Anthropic authentication failed. Please check your API key.",
+                    original_error=e,
+                    provider=PROVIDER_ANTHROPIC
+                ) from e
+            
+            if isinstance(e, RateLimitError):
+                self._logger.warning(
+                    f"Anthropic rate limit exceeded: provider={PROVIDER_ANTHROPIC}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s"
+                )
+                raise LLMRateLimitError(
+                    "Anthropic rate limit exceeded. Please retry after a delay.",
+                    original_error=e,
+                    provider=PROVIDER_ANTHROPIC
+                ) from e
+            
+            if isinstance(e, (BadRequestError, UnprocessableEntityError)):
+                self._logger.error(
+                    f"Anthropic request validation failed: provider={PROVIDER_ANTHROPIC}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                    f"error={str(e)}"
+                )
+                raise LLMValidationError(
+                    f"Anthropic request validation failed: {str(e)}",
+                    original_error=e,
+                    provider=PROVIDER_ANTHROPIC
+                ) from e
+            
+            if isinstance(e, (APIConnectionError, APITimeoutError)):
+                self._logger.error(
+                    f"Anthropic network error: provider={PROVIDER_ANTHROPIC}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                    f"error={type(e).__name__}"
+                )
+                raise LLMNetworkError(
+                    f"Anthropic network error: {type(e).__name__}",
+                    original_error=e,
+                    provider=PROVIDER_ANTHROPIC
+                ) from e
+            
+            # Fallback for other APIError subclasses
+            self._logger.error(
+                f"Anthropic API error: provider={PROVIDER_ANTHROPIC}, "
+                f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                f"error={str(e)}"
+            )
+            raise LLMCallError(
+                f"Anthropic API error: {str(e)}",
+                original_error=e,
+                provider=PROVIDER_ANTHROPIC
+            ) from e
+        
+        # Extract text from response content array
+        text_parts = []
+        for content_block in response.content:
+            # Handle text blocks
+            if hasattr(content_block, "type") and content_block.type == "text":
+                if hasattr(content_block, "text"):
+                    text_parts.append(content_block.text)
+        
+        text_content = "".join(text_parts)
+        
+        # Validate that we got some content
+        if not text_content:
+            self._logger.warning(
+                f"Anthropic response contained no text content: provider={PROVIDER_ANTHROPIC}, "
+                f"model={model}"
+            )
+        
+        # Log success (provider, model, duration only)
+        elapsed_time = time.perf_counter() - start_time
+        self._logger.info(
+            f"Anthropic completion successful: provider={PROVIDER_ANTHROPIC}, "
+            f"model={model}, elapsed_time={elapsed_time:.2f}s"
+        )
+        
+        return text_content

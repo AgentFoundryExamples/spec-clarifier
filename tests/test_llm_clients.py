@@ -1315,3 +1315,701 @@ class TestOpenAIResponsesClient:
         
         # The code structure validates that if openai cannot be imported,
         # a clear LLMCallError will be raised with appropriate messaging
+
+
+class TestAnthropicResponsesClient:
+    """Tests for AnthropicResponsesClient implementation."""
+    
+    async def test_anthropic_client_successful_completion(self, monkeypatch):
+        """Test successful completion with Anthropic Messages API."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        # Mock content block that matches Anthropic Messages API structure
+        class MockTextBlock:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+        
+        # Mock response object
+        class MockMessage:
+            def __init__(self):
+                self.content = [MockTextBlock("This is the AI response text.")]
+        
+        # Mock AsyncAnthropic client
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    return MockMessage()
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        # Monkeypatch the API key
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
+        
+        client = AnthropicResponsesClient()
+        # Inject mock client
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key-12345")
+        
+        response = await client.complete(
+            system_prompt="You are a helpful assistant",
+            user_prompt="Hello, world!",
+            model="claude-sonnet-4.5"
+        )
+        
+        assert response == "This is the AI response text."
+    
+    async def test_anthropic_client_default_model(self):
+        """Test that DEFAULT_MODEL constant is correctly set."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        assert AnthropicResponsesClient.DEFAULT_MODEL == "claude-sonnet-4.5"
+    
+    async def test_anthropic_client_kwargs_propagation(self, monkeypatch):
+        """Test that kwargs are properly passed to Anthropic API."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        captured_params = {}
+        
+        # Mock content block
+        class MockTextBlock:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+        
+        # Mock response object
+        class MockMessage:
+            def __init__(self):
+                self.content = [MockTextBlock("Response with custom params")]
+        
+        # Mock AsyncAnthropic client that captures parameters
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    captured_params.update(kwargs)
+                    return MockMessage()
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key-12345")
+        
+        await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="claude-opus-4",
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        # Verify parameters were passed correctly
+        assert captured_params["model"] == "claude-opus-4"
+        assert captured_params["system"] == "System"
+        assert captured_params["messages"] == [{"role": "user", "content": "User"}]
+        assert captured_params["temperature"] == 0.7
+        assert captured_params["max_tokens"] == 500
+    
+    async def test_anthropic_client_default_max_tokens(self, monkeypatch):
+        """Test that max_tokens defaults to 4096 when not specified."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        captured_params = {}
+        
+        # Mock response
+        class MockTextBlock:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+        
+        class MockMessage:
+            def __init__(self):
+                self.content = [MockTextBlock("Response")]
+        
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    captured_params.update(kwargs)
+                    return MockMessage()
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key-12345")
+        
+        await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="claude-sonnet-4.5"
+        )
+        
+        # Verify default max_tokens was set
+        assert captured_params["max_tokens"] == 4096
+    
+    async def test_anthropic_client_multiple_content_blocks(self, monkeypatch):
+        """Test extraction from multiple text content blocks."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        # Mock content blocks
+        class MockTextBlock:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+        
+        # Mock response with multiple text blocks
+        class MockMessage:
+            def __init__(self):
+                self.content = [
+                    MockTextBlock("First part. "),
+                    MockTextBlock("Second part.")
+                ]
+        
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    return MockMessage()
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key-12345")
+        
+        response = await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="claude-sonnet-4.5"
+        )
+        
+        assert response == "First part. Second part."
+    
+    async def test_anthropic_client_ignore_non_text_blocks(self, monkeypatch):
+        """Test that non-text content blocks are ignored gracefully."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        # Mock content blocks
+        class MockTextBlock:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+        
+        class MockToolUseBlock:
+            def __init__(self):
+                self.type = "tool_use"
+                self.name = "calculator"
+        
+        # Mock response with mixed content types
+        class MockMessage:
+            def __init__(self):
+                self.content = [
+                    MockTextBlock("Text before tool. "),
+                    MockToolUseBlock(),
+                    MockTextBlock("Text after tool.")
+                ]
+        
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    return MockMessage()
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key-12345")
+        
+        response = await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="claude-sonnet-4.5"
+        )
+        
+        # Only text blocks should be extracted
+        assert response == "Text before tool. Text after tool."
+    
+    async def test_anthropic_client_missing_api_key_error(self, monkeypatch):
+        """Test that missing API key raises LLMCallError."""
+        from app.services.llm_clients import AnthropicResponsesClient, LLMCallError
+        
+        # Remove API key from environment
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        
+        client = AnthropicResponsesClient()
+        
+        with pytest.raises(LLMCallError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="claude-sonnet-4.5"
+            )
+        
+        assert "ANTHROPIC_API_KEY" in str(exc_info.value)
+        assert exc_info.value.provider == "anthropic"
+    
+    async def test_anthropic_client_authentication_error(self, monkeypatch):
+        """Test that Anthropic AuthenticationError is mapped to LLMAuthenticationError."""
+        from app.services.llm_clients import AnthropicResponsesClient, LLMAuthenticationError
+        import httpx
+        
+        # Create proper httpx request and response for Anthropic error
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(401, json={"error": {"message": "Invalid API key"}}, request=request)
+        
+        # Mock AsyncAnthropic to raise AuthenticationError
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    from anthropic import AuthenticationError
+                    raise AuthenticationError("Invalid API key", response=response, body=None)
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-invalid-key")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-invalid-key")
+        
+        with pytest.raises(LLMAuthenticationError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="claude-sonnet-4.5"
+            )
+        
+        assert "authentication failed" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "anthropic"
+        assert exc_info.value.original_error is not None
+    
+    async def test_anthropic_client_rate_limit_error(self, monkeypatch):
+        """Test that Anthropic RateLimitError is mapped to LLMRateLimitError."""
+        from app.services.llm_clients import AnthropicResponsesClient, LLMRateLimitError
+        import httpx
+        
+        # Create proper httpx request and response
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(429, json={"error": {"message": "Rate limit exceeded"}}, request=request)
+        
+        # Mock AsyncAnthropic to raise RateLimitError
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    from anthropic import RateLimitError
+                    raise RateLimitError("Rate limit exceeded", response=response, body=None)
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
+        
+        with pytest.raises(LLMRateLimitError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="claude-sonnet-4.5"
+            )
+        
+        assert "rate limit" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "anthropic"
+    
+    async def test_anthropic_client_validation_error(self, monkeypatch):
+        """Test that Anthropic BadRequestError is mapped to LLMValidationError."""
+        from app.services.llm_clients import AnthropicResponsesClient, LLMValidationError
+        import httpx
+        
+        # Create proper httpx request and response
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(400, json={"error": {"message": "Invalid request format"}}, request=request)
+        
+        # Mock AsyncAnthropic to raise BadRequestError
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    from anthropic import BadRequestError
+                    raise BadRequestError("Invalid request format", response=response, body=None)
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
+        
+        with pytest.raises(LLMValidationError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="claude-sonnet-4.5"
+            )
+        
+        assert "validation failed" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "anthropic"
+    
+    async def test_anthropic_client_unprocessable_entity_error(self, monkeypatch):
+        """Test that Anthropic UnprocessableEntityError is mapped to LLMValidationError."""
+        from app.services.llm_clients import AnthropicResponsesClient, LLMValidationError
+        import httpx
+        
+        # Create proper httpx request and response
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(422, json={"error": {"message": "Invalid parameter"}}, request=request)
+        
+        # Mock AsyncAnthropic to raise UnprocessableEntityError
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    from anthropic import UnprocessableEntityError
+                    raise UnprocessableEntityError("Invalid parameter", response=response, body=None)
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
+        
+        with pytest.raises(LLMValidationError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="claude-sonnet-4.5"
+            )
+        
+        assert "validation failed" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "anthropic"
+    
+    async def test_anthropic_client_network_error(self, monkeypatch):
+        """Test that Anthropic connection errors are mapped to LLMNetworkError."""
+        from app.services.llm_clients import AnthropicResponsesClient, LLMNetworkError
+        
+        # Mock request object for Anthropic exception
+        class MockRequest:
+            url = "https://api.anthropic.com/v1/messages"
+            method = "POST"
+        
+        # Mock AsyncAnthropic to raise APIConnectionError
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    from anthropic import APIConnectionError
+                    raise APIConnectionError(request=MockRequest())
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
+        
+        with pytest.raises(LLMNetworkError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="claude-sonnet-4.5"
+            )
+        
+        assert "network error" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "anthropic"
+    
+    async def test_anthropic_client_timeout_error(self, monkeypatch):
+        """Test that Anthropic timeout errors are mapped to LLMNetworkError."""
+        from app.services.llm_clients import AnthropicResponsesClient, LLMNetworkError
+        
+        # Mock request object for Anthropic exception
+        class MockRequest:
+            url = "https://api.anthropic.com/v1/messages"
+            method = "POST"
+        
+        # Mock AsyncAnthropic to raise APITimeoutError
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    from anthropic import APITimeoutError
+                    raise APITimeoutError(request=MockRequest())
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
+        
+        with pytest.raises(LLMNetworkError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="claude-sonnet-4.5"
+            )
+        
+        assert "network error" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "anthropic"
+    
+    async def test_anthropic_client_generic_api_error(self, monkeypatch):
+        """Test that generic Anthropic APIError is mapped to LLMCallError."""
+        from app.services.llm_clients import AnthropicResponsesClient, LLMCallError
+        
+        # Mock AsyncAnthropic to raise APIError
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    from anthropic import APIError
+                    raise APIError("Internal server error", request=None, body=None)
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
+        
+        with pytest.raises(LLMCallError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="claude-sonnet-4.5"
+            )
+        
+        # Should not be a more specific error type
+        assert type(exc_info.value).__name__ == "LLMCallError"
+        assert exc_info.value.provider == "anthropic"
+    
+    async def test_anthropic_client_validates_empty_system_prompt(self, monkeypatch):
+        """Test that AnthropicResponsesClient validates empty system_prompt."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        
+        with pytest.raises(ValueError) as exc_info:
+            await client.complete(
+                system_prompt="",
+                user_prompt="User query",
+                model="claude-sonnet-4.5"
+            )
+        
+        assert "system_prompt must not be empty or blank" in str(exc_info.value)
+    
+    async def test_anthropic_client_validates_empty_user_prompt(self, monkeypatch):
+        """Test that AnthropicResponsesClient validates empty user_prompt."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        
+        with pytest.raises(ValueError) as exc_info:
+            await client.complete(
+                system_prompt="System instruction",
+                user_prompt="",
+                model="claude-sonnet-4.5"
+            )
+        
+        assert "user_prompt must not be empty or blank" in str(exc_info.value)
+    
+    async def test_anthropic_client_validates_empty_model(self, monkeypatch):
+        """Test that AnthropicResponsesClient validates empty model."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        
+        with pytest.raises(ValueError) as exc_info:
+            await client.complete(
+                system_prompt="System instruction",
+                user_prompt="User query",
+                model=""
+            )
+        
+        assert "model must not be empty or blank" in str(exc_info.value)
+    
+    async def test_anthropic_client_lazy_initialization(self, monkeypatch):
+        """Test that client is initialized lazily on first use."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        assert client._client is None  # Not initialized yet
+        
+        # Mock the client after instantiation
+        class MockTextBlock:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+        
+        class MockMessage:
+            def __init__(self):
+                self.content = [MockTextBlock("Response")]
+        
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    return MockMessage()
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
+        
+        await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="claude-sonnet-4.5"
+        )
+        
+        assert client._client is not None  # Now initialized
+    
+    async def test_anthropic_client_custom_api_key(self, monkeypatch):
+        """Test that client can be initialized with custom API key."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        # Don't set environment variable
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        
+        # Mock response
+        class MockTextBlock:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+        
+        class MockMessage:
+            def __init__(self):
+                self.content = [MockTextBlock("Response with custom key")]
+        
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    return MockMessage()
+            
+            def __init__(self, api_key):
+                self.api_key = api_key
+                self.messages = self.MockMessages()
+        
+        client = AnthropicResponsesClient(api_key="sk-ant-custom-key-789")
+        client._client = MockAsyncAnthropic(api_key="sk-ant-custom-key-789")
+        
+        response = await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="claude-sonnet-4.5"
+        )
+        
+        assert response == "Response with custom key"
+    
+    async def test_anthropic_client_implements_protocol(self, monkeypatch):
+        """Test that AnthropicResponsesClient implements the LLMClient protocol."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        
+        # Test that complete method exists and has the right signature
+        assert hasattr(client, "complete")
+        assert callable(client.complete)
+        
+        # Mock the client
+        class MockTextBlock:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+        
+        class MockMessage:
+            def __init__(self):
+                self.content = [MockTextBlock("Protocol test response")]
+        
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    return MockMessage()
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
+        
+        # Test that it's async and returns a string
+        result = client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="claude-sonnet-4.5"
+        )
+        assert hasattr(result, '__await__')
+        
+        response = await result
+        assert isinstance(response, str)
+    
+    async def test_anthropic_client_opus_model_override(self, monkeypatch):
+        """Test that client correctly handles claude-opus-4 model override."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        
+        captured_params = {}
+        
+        # Mock response
+        class MockTextBlock:
+            def __init__(self, text):
+                self.type = "text"
+                self.text = text
+        
+        class MockMessage:
+            def __init__(self):
+                self.content = [MockTextBlock("Opus response")]
+        
+        class MockAsyncAnthropic:
+            class MockMessages:
+                async def create(self, **kwargs):
+                    captured_params.update(kwargs)
+                    return MockMessage()
+            
+            def __init__(self, api_key):
+                self.messages = self.MockMessages()
+        
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key")
+        
+        client = AnthropicResponsesClient()
+        client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
+        
+        response = await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="claude-opus-4"
+        )
+        
+        # Verify Opus model was passed correctly
+        assert captured_params["model"] == "claude-opus-4"
+        assert response == "Opus response"
+    
+    def test_anthropic_client_has_import_error_handling(self):
+        """Verify that the complete method has ImportError handling for missing Anthropic SDK."""
+        from app.services.llm_clients import AnthropicResponsesClient
+        import inspect
+        
+        # Get the source code of the complete method
+        source = inspect.getsource(AnthropicResponsesClient.complete)
+        
+        # Verify the ImportError handling is present
+        assert "except ImportError" in source, "Missing ImportError exception handler"
+        assert "Anthropic SDK not installed or accessible" in source, "Missing SDK not installed error message"
+        assert "from anthropic import" in source, "Missing anthropic module import"
+        
+        # The code structure validates that if anthropic cannot be imported,
+        # a clear LLMCallError will be raised with appropriate messaging
