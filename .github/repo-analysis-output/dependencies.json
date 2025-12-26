@@ -401,7 +401,8 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "json"
+          "json",
+          "logging"
         ],
         "third-party": [
           "pytest"
@@ -577,6 +578,10 @@
     {
       "source": "tests/test_llm_integration.py",
       "target": "app/services/llm_clients.py"
+    },
+    {
+      "source": "tests/test_llm_integration.py",
+      "target": "app/models/config_models.py"
     },
     {
       "source": "tests/test_main.py",
