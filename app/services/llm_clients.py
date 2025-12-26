@@ -722,8 +722,8 @@ class AnthropicResponsesClient:
             
             if not api_key:
                 raise LLMCallError(
-                    "ANTHROPIC_API_KEY environment variable is not set. "
-                    "Please set it with a valid Anthropic API key.",
+                    "Anthropic API key is not set. Please provide it via the "
+                    "'api_key' argument or set the ANTHROPIC_API_KEY environment variable.",
                     provider=PROVIDER_ANTHROPIC
                 )
             
@@ -783,6 +783,24 @@ class AnthropicResponsesClient:
         # Get or create client
         client = self._get_client()
         
+        # Import exception classes (after client is created, so anthropic is available)
+        try:
+            from anthropic import (
+                APIError,
+                AuthenticationError,
+                RateLimitError,
+                APIConnectionError,
+                BadRequestError,
+                APITimeoutError,
+                UnprocessableEntityError,
+            )
+        except ImportError as import_err:
+            raise LLMCallError(
+                "Anthropic SDK not installed or accessible. Install with: pip install anthropic",
+                original_error=import_err,
+                provider=PROVIDER_ANTHROPIC
+            ) from import_err
+        
         # Prepare API parameters - Anthropic Messages API format
         api_params = {
             "model": model,
@@ -810,23 +828,6 @@ class AnthropicResponsesClient:
         start_time = time.perf_counter()
         
         try:
-            from anthropic import (
-                APIError,
-                AuthenticationError,
-                RateLimitError,
-                APIConnectionError,
-                BadRequestError,
-                APITimeoutError,
-                UnprocessableEntityError,
-            )
-        except ImportError as import_err:
-            raise LLMCallError(
-                "Anthropic SDK not installed or accessible. Install with: pip install anthropic",
-                original_error=import_err,
-                provider=PROVIDER_ANTHROPIC
-            ) from import_err
-        
-        try:
             # Call Anthropic Messages API
             response = await client.messages.create(**api_params)
             
@@ -847,7 +848,7 @@ class AnthropicResponsesClient:
                     provider=PROVIDER_ANTHROPIC
                 ) from e
             
-            if isinstance(e, RateLimitError):
+            elif isinstance(e, RateLimitError):
                 self._logger.warning(
                     f"Anthropic rate limit exceeded: provider={PROVIDER_ANTHROPIC}, "
                     f"model={model}, elapsed_time={elapsed_time:.2f}s"
@@ -858,7 +859,7 @@ class AnthropicResponsesClient:
                     provider=PROVIDER_ANTHROPIC
                 ) from e
             
-            if isinstance(e, (BadRequestError, UnprocessableEntityError)):
+            elif isinstance(e, (BadRequestError, UnprocessableEntityError)):
                 self._logger.error(
                     f"Anthropic request validation failed: provider={PROVIDER_ANTHROPIC}, "
                     f"model={model}, elapsed_time={elapsed_time:.2f}s, "
@@ -870,7 +871,7 @@ class AnthropicResponsesClient:
                     provider=PROVIDER_ANTHROPIC
                 ) from e
             
-            if isinstance(e, (APIConnectionError, APITimeoutError)):
+            elif isinstance(e, (APIConnectionError, APITimeoutError)):
                 self._logger.error(
                     f"Anthropic network error: provider={PROVIDER_ANTHROPIC}, "
                     f"model={model}, elapsed_time={elapsed_time:.2f}s, "
@@ -882,17 +883,18 @@ class AnthropicResponsesClient:
                     provider=PROVIDER_ANTHROPIC
                 ) from e
             
-            # Fallback for other APIError subclasses
-            self._logger.error(
-                f"Anthropic API error: provider={PROVIDER_ANTHROPIC}, "
-                f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                f"error={str(e)}"
-            )
-            raise LLMCallError(
-                f"Anthropic API error: {str(e)}",
-                original_error=e,
-                provider=PROVIDER_ANTHROPIC
-            ) from e
+            else:
+                # Fallback for other APIError subclasses
+                self._logger.error(
+                    f"Anthropic API error: provider={PROVIDER_ANTHROPIC}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                    f"error={str(e)}"
+                )
+                raise LLMCallError(
+                    f"Anthropic API error: {str(e)}",
+                    original_error=e,
+                    provider=PROVIDER_ANTHROPIC
+                ) from e
         
         # Extract text from response content array
         text_parts = []
