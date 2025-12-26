@@ -475,10 +475,8 @@ def start_clarification_job(
         request: The clarification request to process
         background_tasks: FastAPI BackgroundTasks instance for scheduling
         config: Optional configuration dictionary for job processing
-        llm_config: Optional LLM configuration for future AI-powered clarification.
-                   If provided, an LLM client will be initialized during processing
-                   but not invoked in this iteration. Defaults to None to preserve
-                   existing deterministic behavior.
+        llm_config: Optional LLM configuration for LLM-powered clarification.
+                   If not provided, defaults to provider="openai", model="gpt-5".
         
     Returns:
         ClarificationJob: The newly created job with PENDING status
@@ -493,18 +491,18 @@ def start_clarification_job(
     else:
         job = job_store.create_job(request, config=config)
     
-    # Schedule background processing
+    # Schedule background processing (FastAPI handles async functions automatically)
     background_tasks.add_task(process_clarification_job, job.id)
     
     logger.info(f"Started clarification job {job.id} with status PENDING")
     return job
 
 
-def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = None) -> None:
+async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = None) -> None:
     """Process a clarification job asynchronously.
     
-    Loads the job from the store, marks it RUNNING, invokes the synchronous
-    clarification logic, saves the result, and marks it SUCCESS. If any
+    Loads the job from the store, marks it RUNNING, invokes the LLM pipeline
+    to clarify specifications, saves the result, and marks it SUCCESS. If any
     exception occurs during processing, marks the job FAILED and captures
     the error message.
     
@@ -517,6 +515,10 @@ def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = None) ->
                    If not provided and job has llm_config, a client will be created.
                    Used primarily for testing with DummyLLMClient.
     """
+    import asyncio
+    import time
+    from pydantic import ValidationError
+    
     try:
         # Load the job
         job = job_store.get_job(job_id)
@@ -535,17 +537,28 @@ def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = None) ->
         job_store.update_job(job_id, status=JobStatus.RUNNING)
         
         # ====================================================================
-        # LLM CLIENT INITIALIZATION (not yet invoked)
+        # LLM CONFIG RESOLUTION
         # ====================================================================
-        # Check if LLM configuration is provided in the job config
-        client = llm_client  # Use injected client if provided (for testing)
-        
-        if client is None and job.config and 'llm_config' in job.config:
+        # Resolve LLM configuration: use stored config or apply defaults
+        llm_config = None
+        if job.config and 'llm_config' in job.config:
             # Reconstruct ClarificationLLMConfig from stored dict
             llm_config_dict = job.config['llm_config']
             llm_config = ClarificationLLMConfig(**llm_config_dict)
-            
-            # Initialize LLM client using factory (but don't invoke it yet)
+        else:
+            # Apply default configuration: provider="openai", model="gpt-5"
+            llm_config = ClarificationLLMConfig(
+                provider="openai",
+                model="gpt-5"
+            )
+        
+        # ====================================================================
+        # LLM CLIENT INITIALIZATION
+        # ====================================================================
+        client = llm_client  # Use injected client if provided (for testing)
+        
+        if client is None:
+            # Initialize LLM client using factory
             try:
                 client = get_llm_client(llm_config.provider, llm_config)
                 logger.info(
@@ -553,50 +566,143 @@ def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = None) ->
                     f"with model {llm_config.model}"
                 )
             except ValueError as e:
-                # Log client initialization failure but continue with deterministic processing
-                # ValueError: Invalid/unsupported provider or factory-level errors
-                logger.warning(
-                    f"Failed to initialize LLM client for job {job_id}: {e}. "
-                    "Continuing with deterministic clarification."
+                # Invalid/unsupported provider - fail the job immediately
+                error_message = f"Invalid LLM provider '{llm_config.provider}': {str(e)}"
+                logger.error(f"Job {job_id} failed: {error_message}")
+                job_store.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    last_error=error_message,
+                    result=None
                 )
-                client = None
+                return
         
         # ====================================================================
-        # PLACEHOLDER: FUTURE LLM INVOCATION POINT
+        # VALIDATE JOB HAS CLARIFICATION REQUEST
         # ====================================================================
-        # TODO: In a future iteration, invoke the LLM client here to perform
-        # AI-powered specification clarification. The invocation should:
-        #
-        # 1. Format the plan into appropriate prompts (system + user)
-        # 2. Call client.complete(system_prompt, user_prompt, model, **kwargs)
-        # 3. Parse the LLM response and transform it into ClarifiedPlan
-        # 4. Handle LLMCallError exceptions appropriately
-        # 5. Fall back to deterministic clarification on errors
-        #
-        # Example pseudocode:
-        #     if client is not None:
-        #         try:
-        #             system_prompt = "You are a specification clarifier..."
-        #             user_prompt = format_plan_as_prompt(job.request.plan)
-        #             response = await client.complete(
-        #                 system_prompt=system_prompt,
-        #                 user_prompt=user_prompt,
-        #                 model=llm_config.model,
-        #                 temperature=llm_config.temperature,
-        #                 max_tokens=llm_config.max_tokens
-        #             )
-        #             result = parse_llm_response_to_plan(response)
-        #         except LLMCallError as e:
-        #             logger.error(f"LLM invocation failed: {e}")
-        #             result = clarify_plan(job.request.plan)  # Fallback
-        #     else:
-        #         result = clarify_plan(job.request.plan)  # No LLM configured
+        if job.request is None:
+            error_message = "Job missing ClarificationRequest - cannot process"
+            logger.error(f"Job {job_id} failed: {error_message}")
+            job_store.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                last_error=error_message,
+                result=None
+            )
+            return
+        
         # ====================================================================
+        # BUILD PROMPTS
+        # ====================================================================
+        try:
+            system_prompt, user_prompt = build_clarification_prompts(
+                job.request,
+                provider=llm_config.provider,
+                model=llm_config.model
+            )
+        except Exception as e:
+            error_message = f"Failed to build prompts: {type(e).__name__}: {str(e)}"
+            logger.error(f"Job {job_id} failed: {error_message}")
+            job_store.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                last_error=error_message,
+                result=None
+            )
+            return
         
-        # For now, use existing deterministic logic (LLM not invoked)
-        result = clarify_plan(job.request.plan)
+        # ====================================================================
+        # INVOKE LLM
+        # ====================================================================
+        start_time = time.perf_counter()
+        try:
+            # Prepare kwargs for LLM call
+            llm_kwargs = {}
+            if llm_config.temperature is not None:
+                llm_kwargs['temperature'] = llm_config.temperature
+            if llm_config.max_tokens is not None:
+                llm_kwargs['max_tokens'] = llm_config.max_tokens
+            
+            # Call LLM exactly once
+            raw_response = await client.complete(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                model=llm_config.model,
+                **llm_kwargs
+            )
+            elapsed_time = time.perf_counter() - start_time
+            
+            # Log success metrics (without prompts or full response)
+            logger.info(
+                f"LLM call successful for job {job_id}: "
+                f"provider={llm_config.provider}, model={llm_config.model}, "
+                f"elapsed_time={elapsed_time:.2f}s"
+            )
+            
+        except Exception as e:
+            elapsed_time = time.perf_counter() - start_time
+            # Sanitize error message (LLMCallError already does this, but be safe)
+            error_message = str(e)
+            logger.error(
+                f"LLM call failed for job {job_id}: "
+                f"provider={llm_config.provider}, model={llm_config.model}, "
+                f"elapsed_time={elapsed_time:.2f}s, error={error_message}"
+            )
+            job_store.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                last_error=f"LLM call failed: {error_message}",
+                result=None
+            )
+            return
         
-        # Mark as SUCCESS with result
+        # ====================================================================
+        # PARSE AND VALIDATE LLM RESPONSE
+        # ====================================================================
+        try:
+            # Clean up and parse JSON
+            parsed_json = cleanup_and_parse_json(raw_response)
+            
+            # Validate as ClarifiedPlan
+            result = ClarifiedPlan(**parsed_json)
+            
+            logger.info(f"Successfully parsed and validated LLM response for job {job_id}")
+            
+        except JSONCleanupError as e:
+            error_message = f"Failed to parse LLM response: {e.message}"
+            logger.error(f"Job {job_id} failed: {error_message}")
+            job_store.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                last_error=error_message,
+                result=None
+            )
+            return
+        except ValidationError as e:
+            error_message = f"LLM response validation failed: {str(e)}"
+            logger.error(f"Job {job_id} failed: {error_message}")
+            job_store.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                last_error=error_message,
+                result=None
+            )
+            return
+        except Exception as e:
+            error_message = f"Unexpected error parsing response: {type(e).__name__}: {str(e)}"
+            logger.error(f"Job {job_id} failed: {error_message}")
+            job_store.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                last_error=error_message,
+                result=None
+            )
+            return
+        
+        # ====================================================================
+        # PERSIST RESULT
+        # ====================================================================
+        # Mark as SUCCESS with result (updated_at will be refreshed automatically)
         job_store.update_job(job_id, status=JobStatus.SUCCESS, result=result)
         logger.info(f"Clarification job {job_id} completed successfully")
         
@@ -606,7 +712,7 @@ def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = None) ->
         return
         
     except Exception as e:
-        # Capture any exception and mark job as FAILED
+        # Capture any unexpected exception and mark job as FAILED
         error_message = f"{type(e).__name__}: {str(e)}"
         logger.error(f"Clarification job {job_id} failed: {error_message}", exc_info=True)
         
