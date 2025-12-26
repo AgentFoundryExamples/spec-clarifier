@@ -197,15 +197,16 @@ def get_system_prompt_template(system_prompt_id: str) -> str:
         (using default template) over failing the entire clarification job.
         All templates maintain strict JSON output requirements.
     """
-    if system_prompt_id not in SYSTEM_PROMPT_TEMPLATES:
-        logger.warning(
-            f"Unknown system_prompt_id '{system_prompt_id}'. "
-            f"Available templates: {', '.join(sorted(SYSTEM_PROMPT_TEMPLATES.keys()))}. "
-            "Falling back to 'default' template."
-        )
-        return SYSTEM_PROMPT_TEMPLATES['default']
+    template = SYSTEM_PROMPT_TEMPLATES.get(system_prompt_id)
+    if template:
+        return template
     
-    return SYSTEM_PROMPT_TEMPLATES[system_prompt_id]
+    logger.warning(
+        f"Unknown system_prompt_id '{system_prompt_id}'. "
+        f"Available templates: {', '.join(sorted(SYSTEM_PROMPT_TEMPLATES.keys()))}. "
+        "Falling back to 'default' template."
+    )
+    return SYSTEM_PROMPT_TEMPLATES['default']
 
 
 def build_clarification_prompts(
@@ -729,14 +730,12 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
                     f"Failed to reconstruct clarification_config for job {job_id}: {e}. "
                     "Falling back to default configuration."
                 )
-                llm_config = None
-                system_prompt_id = 'default'
+                # llm_config remains None, will be handled below
         elif job.config and 'llm_config' in job.config:
             # Legacy support: Reconstruct ClarificationLLMConfig from stored dict
             llm_config_dict = job.config['llm_config']
             llm_config = ClarificationLLMConfig(**llm_config_dict)
-            # Legacy configs don't have system_prompt_id, use default
-            system_prompt_id = 'default'
+            # Legacy configs don't have system_prompt_id, so 'default' is used
         
         # If no config loaded, apply default configuration
         if llm_config is None:
@@ -744,7 +743,7 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
                 provider="openai",
                 model="gpt-5"
             )
-            system_prompt_id = 'default'
+            # system_prompt_id is already 'default'
         
         # ====================================================================
         # LLM CLIENT INITIALIZATION
