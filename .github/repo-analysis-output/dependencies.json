@@ -153,12 +153,23 @@
         "stdlib": [
           "abc.ABC",
           "abc.abstractmethod",
+          "logging",
+          "os",
           "re",
+          "time",
           "typing.Any",
           "typing.Optional",
           "typing.Protocol"
         ],
         "third-party": [
+          "openai.",
+          "openai.APIConnectionError",
+          "openai.APIError",
+          "openai.APITimeoutError",
+          "openai.AsyncOpenAI",
+          "openai.AuthenticationError",
+          "openai.BadRequestError",
+          "openai.RateLimitError",
           "pydantic.BaseModel",
           "pydantic.Field",
           "pydantic.field_validator"
@@ -268,8 +279,17 @@
       "path": "tests/test_llm_clients.py",
       "type": "file",
       "external_dependencies": {
-        "stdlib": [],
+        "stdlib": [
+          "inspect"
+        ],
         "third-party": [
+          "httpx",
+          "openai.APIConnectionError",
+          "openai.APIError",
+          "openai.APITimeoutError",
+          "openai.AuthenticationError",
+          "openai.BadRequestError",
+          "openai.RateLimitError",
           "pytest"
         ]
       }
@@ -443,6 +463,7 @@
       "datetime.timezone",
       "enum.Enum",
       "functools.lru_cache",
+      "inspect",
       "logging",
       "os",
       "re",
@@ -468,6 +489,15 @@
       "fastapi.middleware.cors.CORSMiddleware",
       "fastapi.responses.JSONResponse",
       "fastapi.testclient.TestClient",
+      "httpx",
+      "openai.",
+      "openai.APIConnectionError",
+      "openai.APIError",
+      "openai.APITimeoutError",
+      "openai.AsyncOpenAI",
+      "openai.AuthenticationError",
+      "openai.BadRequestError",
+      "openai.RateLimitError",
       "pydantic.BaseModel",
       "pydantic.ConfigDict",
       "pydantic.Field",
@@ -478,7 +508,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 22,
-    "third-party_count": 17
+    "stdlib_count": 23,
+    "third-party_count": 26
   }
 }

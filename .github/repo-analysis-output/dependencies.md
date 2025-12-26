@@ -10,14 +10,14 @@ Includes classification of external dependencies as stdlib vs third-party.
 
 - **Total files**: 22
 - **Intra-repo dependencies**: 31
-- **External stdlib dependencies**: 22
-- **External third-party dependencies**: 17
+- **External stdlib dependencies**: 23
+- **External third-party dependencies**: 26
 
 ## External Dependencies
 
 ### Standard Library / Core Modules
 
-Total: 22 unique modules
+Total: 23 unique modules
 
 - `abc.ABC`
 - `abc.abstractmethod`
@@ -26,6 +26,7 @@ Total: 22 unique modules
 - `datetime.timezone`
 - `enum.Enum`
 - `functools.lru_cache`
+- `inspect`
 - `logging`
 - `os`
 - `re`
@@ -38,12 +39,11 @@ Total: 22 unique modules
 - `typing.Protocol`
 - `unittest.mock.MagicMock`
 - `unittest.mock.Mock`
-- `unittest.mock.patch`
-- ... and 2 more (see JSON for full list)
+- ... and 3 more (see JSON for full list)
 
 ### Third-Party Packages
 
-Total: 17 unique packages
+Total: 26 unique packages
 
 - `fastapi.APIRouter`
 - `fastapi.BackgroundTasks`
@@ -53,15 +53,19 @@ Total: 17 unique packages
 - `fastapi.middleware.cors.CORSMiddleware`
 - `fastapi.responses.JSONResponse`
 - `fastapi.testclient.TestClient`
+- `httpx`
+- `openai.`
+- `openai.APIConnectionError`
+- `openai.APIError`
+- `openai.APITimeoutError`
+- `openai.AsyncOpenAI`
+- `openai.AuthenticationError`
+- `openai.BadRequestError`
+- `openai.RateLimitError`
 - `pydantic.BaseModel`
 - `pydantic.ConfigDict`
 - `pydantic.Field`
-- `pydantic.ValidationError`
-- `pydantic.field_validator`
-- `pydantic_settings.BaseSettings`
-- `pydantic_settings.SettingsConfigDict`
-- `pytest`
-- `starlette.middleware.cors.CORSMiddleware`
+- ... and 6 more (see JSON for full list)
 
 ## Most Depended Upon Files (Intra-Repo)
 
