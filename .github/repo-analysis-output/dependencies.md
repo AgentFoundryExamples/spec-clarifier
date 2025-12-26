@@ -9,7 +9,7 @@ Includes classification of external dependencies as stdlib vs third-party.
 ## Statistics
 
 - **Total files**: 20
-- **Intra-repo dependencies**: 29
+- **Intra-repo dependencies**: 30
 - **External stdlib dependencies**: 17
 - **External third-party dependencies**: 16
 
@@ -61,7 +61,7 @@ Total: 16 unique packages
 ## Most Depended Upon Files (Intra-Repo)
 
 - `app/models/specs.py` (9 dependents)
-- `app/services/job_store.py` (6 dependents)
+- `app/services/job_store.py` (7 dependents)
 - `app/config.py` (5 dependents)
 - `app/services/clarification.py` (4 dependents)
 - `app/main.py` (3 dependents)
@@ -74,9 +74,9 @@ Total: 16 unique packages
 - `tests/test_clarifications_api.py` (4 dependencies)
 - `app/main.py` (3 dependencies)
 - `tests/test_async_job_lifecycle.py` (3 dependencies)
+- `tests/test_clarification_service.py` (3 dependencies)
 - `app/services/__init__.py` (2 dependencies)
 - `app/services/clarification.py` (2 dependencies)
-- `tests/test_clarification_service.py` (2 dependencies)
 - `tests/test_job_store.py` (2 dependencies)
 - `tests/test_main.py` (2 dependencies)
 - `app/models/__init__.py` (1 dependencies)

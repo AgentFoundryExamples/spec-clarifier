@@ -175,7 +175,10 @@
       "path": "tests/test_clarification_service.py",
       "type": "file",
       "external_dependencies": {
-        "stdlib": [],
+        "stdlib": [
+          "unittest.mock.MagicMock",
+          "unittest.mock.patch"
+        ],
         "third-party": [
           "pytest"
         ]
@@ -187,7 +190,9 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "time"
+          "time",
+          "unittest.mock.patch",
+          "uuid.uuid4"
         ],
         "third-party": [
           "fastapi.testclient.TestClient",
@@ -344,6 +349,10 @@
     {
       "source": "tests/test_clarification_service.py",
       "target": "app/services/clarification.py"
+    },
+    {
+      "source": "tests/test_clarification_service.py",
+      "target": "app/services/job_store.py"
     },
     {
       "source": "tests/test_clarifications_api.py",
