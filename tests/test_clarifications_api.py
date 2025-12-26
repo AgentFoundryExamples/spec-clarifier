@@ -1425,9 +1425,9 @@ class TestDebugEndpoint:
         
         # Should have config field
         assert "config" in debug_data
-        # Config should contain llm_config since that's set by default
+        # Config should contain clarification_config since that's set by default now
         if debug_data["config"]:
-            assert "llm_config" in debug_data["config"]
+            assert "clarification_config" in debug_data["config"]
     
     def test_debug_endpoint_sanitizes_config(self, enabled_debug_client):
         """Test that debug endpoint sanitizes sensitive fields from config."""
