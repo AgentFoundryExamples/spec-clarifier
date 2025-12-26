@@ -8,16 +8,16 @@ Includes classification of external dependencies as stdlib vs third-party.
 
 ## Statistics
 
-- **Total files**: 22
-- **Intra-repo dependencies**: 33
-- **External stdlib dependencies**: 24
+- **Total files**: 23
+- **Intra-repo dependencies**: 35
+- **External stdlib dependencies**: 26
 - **External third-party dependencies**: 35
 
 ## External Dependencies
 
 ### Standard Library / Core Modules
 
-Total: 24 unique modules
+Total: 26 unique modules
 
 - `abc.ABC`
 - `abc.abstractmethod`
@@ -28,6 +28,7 @@ Total: 24 unique modules
 - `enum.Enum`
 - `functools.lru_cache`
 - `inspect`
+- `json`
 - `logging`
 - `os`
 - `re`
@@ -38,8 +39,7 @@ Total: 24 unique modules
 - `typing.List`
 - `typing.Optional`
 - `typing.Protocol`
-- `unittest.mock.MagicMock`
-- ... and 4 more (see JSON for full list)
+- ... and 6 more (see JSON for full list)
 
 ### Third-Party Packages
 
@@ -69,10 +69,10 @@ Total: 35 unique packages
 
 ## Most Depended Upon Files (Intra-Repo)
 
-- `app/models/specs.py` (9 dependents)
+- `app/models/specs.py` (10 dependents)
 - `app/services/job_store.py` (7 dependents)
 - `app/config.py` (5 dependents)
-- `app/services/clarification.py` (4 dependents)
+- `app/services/clarification.py` (5 dependents)
 - `app/services/llm_clients.py` (3 dependents)
 - `app/main.py` (3 dependents)
 - `app/api/routes_health.py` (1 dependents)
@@ -89,4 +89,4 @@ Total: 35 unique packages
 - `app/services/__init__.py` (2 dependencies)
 - `tests/test_job_store.py` (2 dependencies)
 - `tests/test_main.py` (2 dependencies)
-- `app/models/__init__.py` (1 dependencies)
+- `tests/test_prompt_builder.py` (2 dependencies)

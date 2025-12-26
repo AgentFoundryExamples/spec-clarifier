@@ -39,7 +39,8 @@
   ├── test_job_store.py
   ├── test_llm_clients.py
   ├── test_main.py
-  └── test_models.py
+  ├── test_models.py
+  └── test_prompt_builder.py
 ├── .dockerignore
 ├── .gitignore
 ├── Dockerfile
