@@ -248,6 +248,71 @@ class TestPreviewClarificationsEndpoint:
         
         assert response.status_code == 422
     
+    def test_preview_extra_field_in_request_returns_422(self, client):
+        """Test that extra fields in ClarificationRequest are rejected (edge case from issue)."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+            "extra_request_field": "should trigger validation error"
+        }
+        
+        response = client.post("/v1/clarifications/preview", json=request_data)
+        
+        assert response.status_code == 422
+        data = response.json()
+        # Verify it's a validation error with sanitized message
+        assert "detail" in data
+        errors = data["detail"]
+        assert any("extra_request_field" in str(error) for error in errors)
+    
+    def test_preview_null_string_rejected(self, client):
+        """Test that null strings are rejected before invoking LLM (edge case from issue)."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": None,
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        response = client.post("/v1/clarifications/preview", json=request_data)
+        
+        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data
+    
+    def test_preview_wrong_list_type_rejected(self, client):
+        """Test that wrong list types are rejected before invoking LLM (edge case from issue)."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": "should be a list, not a string",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        response = client.post("/v1/clarifications/preview", json=request_data)
+        
+        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data
+    
     def test_preview_invalid_json_returns_422(self, client):
         """Test that invalid JSON returns 422."""
         response = client.post(
@@ -605,6 +670,66 @@ class TestCreateClarificationJob:
         response = client.post("/v1/clarifications", json=request_data)
         
         assert response.status_code == 422
+    
+    def test_create_job_with_extra_fields_returns_422(self, client):
+        """Test that extra fields in request trigger validation error (edge case from issue)."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+            "unexpected_field": "should fail"
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data
+    
+    def test_create_job_without_answers_succeeds(self, client):
+        """Test that omitting answers defaults to empty list (edge case from issue)."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            }
+            # Note: answers field is omitted
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        # Should succeed with default empty answers list
+        assert response.status_code == 202
+        data = response.json()
+        assert "id" in data
+        assert data["status"] == "PENDING"
+        
+        # Verify job actually processes correctly with empty answers
+        job_id = data["id"]
+        max_wait = 5.0
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            get_response = client.get(f"/v1/clarifications/{job_id}")
+            job_data = get_response.json()
+            
+            if job_data["status"] in ["SUCCESS", "FAILED"]:
+                break
+            
+            time.sleep(0.1)
+        
+        # Job should complete successfully with empty answers
+        assert job_data["status"] == "SUCCESS", f"Job failed or timed out: {job_data.get('last_error', 'timeout')}"
 
 
 class TestGetClarificationJob:

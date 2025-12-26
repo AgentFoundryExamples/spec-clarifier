@@ -105,6 +105,62 @@ class TestSpecInput:
         assert spec.nice == []
         assert spec.open_questions == []
         assert spec.assumptions == []
+    
+    def test_spec_input_rejects_null_strings(self):
+        """Test that null/None strings are rejected (edge case from issue)."""
+        with pytest.raises(ValidationError) as exc_info:
+            SpecInput(
+                purpose=None,  # type: ignore
+                vision="Valid vision"
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("purpose",) for error in errors)
+        
+        with pytest.raises(ValidationError) as exc_info:
+            SpecInput(
+                purpose="Valid purpose",
+                vision=None  # type: ignore
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("vision",) for error in errors)
+    
+    def test_spec_input_rejects_wrong_list_types(self):
+        """Test that wrong list types are rejected (edge case from issue)."""
+        # Test string instead of list for must
+        with pytest.raises(ValidationError) as exc_info:
+            SpecInput(
+                purpose="Test",
+                vision="Test vision",
+                must="should be a list"  # type: ignore
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("must",) for error in errors)
+        
+        # Test dict instead of list for dont
+        with pytest.raises(ValidationError) as exc_info:
+            SpecInput(
+                purpose="Test",
+                vision="Test vision",
+                dont={"key": "value"}  # type: ignore
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("dont",) for error in errors)
+        
+        # Test list of non-strings
+        with pytest.raises(ValidationError) as exc_info:
+            SpecInput(
+                purpose="Test",
+                vision="Test vision",
+                nice=[1, 2, 3]  # type: ignore
+            )
+        
+        errors = exc_info.value.errors()
+        # Check that the error is for an item inside the 'nice' list
+        assert any(error["loc"][0] == "nice" and len(error["loc"]) == 2 for error in errors)
 
 
 class TestPlanInput:
@@ -171,6 +227,42 @@ class TestClarifiedSpec:
         
         errors = exc_info.value.errors()
         assert any(error["type"] == "extra_forbidden" for error in errors)
+    
+    def test_clarified_spec_only_has_six_fields(self):
+        """Test that ClarifiedSpec exposes exactly 6 fields as per issue requirement."""
+        # Verify the model schema has exactly the 6 required fields
+        # by inspecting the model's fields directly, not an instance's dumped data.
+        assert set(ClarifiedSpec.model_fields.keys()) == {
+            "purpose",
+            "vision",
+            "must",
+            "dont",
+            "nice",
+            "assumptions",
+        }
+    
+    def test_clarified_spec_rejects_null_strings(self):
+        """Test that null/None strings are rejected (edge case from issue)."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarifiedSpec(
+                purpose=None,  # type: ignore
+                vision="Valid vision"
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("purpose",) for error in errors)
+    
+    def test_clarified_spec_rejects_wrong_list_types(self):
+        """Test that wrong list types are rejected (edge case from issue)."""
+        with pytest.raises(ValidationError) as exc_info:
+            ClarifiedSpec(
+                purpose="Test",
+                vision="Test vision",
+                must="should be a list"  # type: ignore
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("must",) for error in errors)
 
 
 class TestClarifiedPlan:
@@ -266,6 +358,33 @@ class TestClarificationRequest:
         
         assert request.plan == plan
         assert request.answers == []
+    
+    def test_clarification_request_answers_default_to_empty_list(self):
+        """Test that omitting answers defaults to empty list (edge case from issue)."""
+        spec = SpecInput(purpose="Build a web app", vision="Modern")
+        plan = PlanInput(specs=[spec])
+        
+        # Create request without providing answers parameter
+        request = ClarificationRequest(plan=plan)
+        
+        # Should default to empty list, not None or crash
+        assert request.answers == []
+        assert isinstance(request.answers, list)
+    
+    def test_clarification_request_rejects_extra_fields(self):
+        """Test that additional user-supplied keys trigger validation errors (edge case from issue)."""
+        spec = SpecInput(purpose="Build a web app", vision="Modern")
+        plan = PlanInput(specs=[spec])
+        
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationRequest(
+                plan=plan,
+                answers=[],
+                extra_field="should not be allowed"
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["type"] == "extra_forbidden" for error in errors)
     
     def test_clarification_request_serialization(self):
         """Test that ClarificationRequest can be serialized to dict."""

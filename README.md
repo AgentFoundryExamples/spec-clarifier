@@ -125,6 +125,77 @@ uvicorn app.main:app --reload
 
 ## API Endpoints
 
+### Schema Contracts
+
+⚠️ **STRICT SCHEMA ENFORCEMENT**
+
+The API enforces strict schema validation at all boundaries to ensure predictable behavior and prevent malformed data from entering the LLM pipeline. All endpoints reject requests with:
+- Missing required fields
+- Extra/unknown fields
+- Wrong data types (e.g., strings instead of lists)
+- Null values for required string fields
+
+**ClarificationRequest Schema (Input):**
+
+The input schema for clarification requests (`POST /v1/clarifications` and `POST /v1/clarifications/preview`) contains exactly two fields:
+
+```json
+{
+  "plan": {
+    "specs": [
+      {
+        "purpose": "string (required)",
+        "vision": "string (required)",
+        "must": ["string array (optional, default: [])"],
+        "dont": ["string array (optional, default: [])"],
+        "nice": ["string array (optional, default: [])"],
+        "open_questions": ["string array (optional, default: [])"],
+        "assumptions": ["string array (optional, default: [])"]
+      }
+    ]
+  },
+  "answers": [
+    {
+      "spec_index": "integer (required, >= 0)",
+      "question_index": "integer (required, >= 0)",
+      "question": "string (required)",
+      "answer": "string (required)"
+    }
+  ]
+}
+```
+
+**Input Schema Notes:**
+- The `answers` field is optional and defaults to an empty list if omitted
+- The `open_questions` field is **allowed in the input** specification to capture questions that need clarification
+- Extra fields in the request will be rejected with a 422 validation error
+- The service validates all fields before invoking any LLM processing
+
+**ClarifiedPlan Schema (Output):**
+
+The output schema for clarified specifications contains **exactly six fields per spec**. The `open_questions` field is intentionally excluded:
+
+```json
+{
+  "specs": [
+    {
+      "purpose": "string (required)",
+      "vision": "string (required)",
+      "must": ["string array"],
+      "dont": ["string array"],
+      "nice": ["string array"],
+      "assumptions": ["string array"]
+    }
+  ]
+}
+```
+
+⚠️ **Important Notes:**
+- `open_questions` are **NOT** present in `ClarifiedPlan` - they are removed during clarification
+- Resolved question answers are integrated into the appropriate fields (`must`, `dont`, `nice`, `assumptions`)
+- The output schema is strictly enforced - no additional fields will be present
+- All validation errors return deterministic 422 responses with sanitized error messages
+
 ### Health Check
 
 ```bash
@@ -190,7 +261,7 @@ This endpoint provides a synchronous preview of the clarification process for de
 }
 ```
 
-Note that `open_questions` are omitted from the clarified specifications in the response.
+**Important:** The `open_questions` field present in the input specification is **NOT included** in the clarified output. Clarified specifications contain only the six fields listed above: `purpose`, `vision`, `must`, `dont`, `nice`, and `assumptions`. Question resolutions are integrated into these fields during the clarification process.
 
 **Example using curl:**
 
@@ -345,6 +416,8 @@ Retrieves the current status and details of a clarification job. Use this endpoi
 
 **Response (200 OK) - Job Completed Successfully (Development Mode with APP_SHOW_JOB_RESULT=true):**
 
+When the development flag is enabled, the result field contains the `ClarifiedPlan` with **exactly six fields per spec** (no `open_questions`):
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -366,6 +439,8 @@ Retrieves the current status and details of a clarification job. Use this endpoi
   }
 }
 ```
+
+Note: Each spec in the `result.specs` array contains **only** the six permitted fields: `purpose`, `vision`, `must`, `dont`, `nice`, and `assumptions`. The `open_questions` field from the input is not present in the output.
 
 **Response (200 OK) - Job Failed:**
 
