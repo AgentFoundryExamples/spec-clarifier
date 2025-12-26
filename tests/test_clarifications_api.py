@@ -532,6 +532,8 @@ class TestCreateClarificationJob:
             
             time.sleep(0.1)
         
+        assert job_data["status"] in ["SUCCESS", "FAILED"], "Job did not complete within timeout"
+        
         # Job should have completed successfully
         assert job_data is not None
         assert job_data["status"] == "SUCCESS"
@@ -592,6 +594,8 @@ class TestCreateClarificationJob:
                 break
             
             time.sleep(0.1)
+        
+        assert job_data["status"] in ["SUCCESS", "FAILED"], "Job did not complete within timeout"
         
         # Should have all specs processed
         assert job_data["status"] == "SUCCESS"

@@ -397,7 +397,28 @@ class TestAsyncJobLifecycleEdgeCases:
         process_clarification_job(job.id)
         process_clarification_job(job.id)
         
-        # Should end in SUCCESS state
+        # Should end in SUCCESS state (second and third calls should skip)
         final_job = get_job(job.id)
         assert final_job.status == JobStatus.SUCCESS
         assert final_job.result is not None
+    
+    def test_process_job_skips_non_pending_status(self):
+        """Test that process_clarification_job skips jobs not in PENDING state."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        job = start_clarification_job(request, background_tasks)
+        
+        # Manually set job to RUNNING
+        from app.services.job_store import update_job
+        update_job(job.id, status=JobStatus.RUNNING)
+        
+        # Try to process - should skip
+        process_clarification_job(job.id)
+        
+        # Job should still be in RUNNING state (not processed)
+        final_job = get_job(job.id)
+        assert final_job.status == JobStatus.RUNNING
+        assert final_job.result is None

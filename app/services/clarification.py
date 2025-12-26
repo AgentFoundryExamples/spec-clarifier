@@ -100,6 +100,15 @@ def process_clarification_job(job_id: UUID) -> None:
     try:
         # Load the job
         job = job_store.get_job(job_id)
+        
+        # Only process jobs that are in PENDING state
+        if job.status != JobStatus.PENDING:
+            logger.warning(
+                f"Skipping processing for job {job_id} because its status is "
+                f"'{job.status.value}' (expected PENDING)."
+            )
+            return
+        
         logger.info(f"Processing clarification job {job_id}")
         
         # Mark as RUNNING
