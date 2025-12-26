@@ -13,7 +13,16 @@
 # limitations under the License.
 """Service for clarifying specifications."""
 
-from app.models.specs import ClarifiedPlan, ClarifiedSpec, PlanInput
+import logging
+from typing import Optional
+from uuid import UUID
+
+from fastapi import BackgroundTasks
+
+from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan, ClarifiedSpec, JobStatus, PlanInput
+from app.services import job_store
+
+logger = logging.getLogger(__name__)
 
 
 def clarify_plan(plan_input: PlanInput) -> ClarifiedPlan:
@@ -43,3 +52,100 @@ def clarify_plan(plan_input: PlanInput) -> ClarifiedPlan:
         clarified_specs.append(clarified_spec)
     
     return ClarifiedPlan(specs=clarified_specs)
+
+
+def start_clarification_job(
+    request: ClarificationRequest,
+    background_tasks: BackgroundTasks,
+    config: Optional[dict] = None
+) -> ClarificationJob:
+    """Start a clarification job asynchronously.
+    
+    Creates a new job with PENDING status, stores it in the job store,
+    and schedules background processing via FastAPI BackgroundTasks.
+    Returns immediately without blocking.
+    
+    Args:
+        request: The clarification request to process
+        background_tasks: FastAPI BackgroundTasks instance for scheduling
+        config: Optional configuration dictionary for job processing
+        
+    Returns:
+        ClarificationJob: The newly created job with PENDING status
+    """
+    # Create job in PENDING state
+    job = job_store.create_job(request, config=config)
+    
+    # Schedule background processing
+    background_tasks.add_task(process_clarification_job, job.id)
+    
+    logger.info(f"Started clarification job {job.id} with status PENDING")
+    return job
+
+
+def process_clarification_job(job_id: UUID) -> None:
+    """Process a clarification job asynchronously.
+    
+    Loads the job from the store, marks it RUNNING, invokes the synchronous
+    clarification logic, saves the result, and marks it SUCCESS. If any
+    exception occurs during processing, marks the job FAILED and captures
+    the error message.
+    
+    This function is designed to be called via FastAPI BackgroundTasks but
+    can also be invoked directly for testing purposes.
+    
+    Args:
+        job_id: The UUID of the job to process
+    """
+    try:
+        # Load the job
+        job = job_store.get_job(job_id)
+        
+        # Only process jobs that are in PENDING state
+        if job.status != JobStatus.PENDING:
+            logger.warning(
+                f"Skipping processing for job {job_id} because its status is "
+                f"'{job.status.value}' (expected PENDING)."
+            )
+            return
+        
+        logger.info(f"Processing clarification job {job_id}")
+        
+        # Mark as RUNNING
+        job_store.update_job(job_id, status=JobStatus.RUNNING)
+        
+        # Perform the clarification using existing synchronous logic
+        result = clarify_plan(job.request.plan)
+        
+        # Mark as SUCCESS with result
+        job_store.update_job(job_id, status=JobStatus.SUCCESS, result=result)
+        logger.info(f"Clarification job {job_id} completed successfully")
+        
+    except job_store.JobNotFoundError:
+        # Job doesn't exist - log and return cleanly without crashing
+        logger.warning(f"Job {job_id} not found during processing - skipping")
+        return
+        
+    except Exception as e:
+        # Capture any exception and mark job as FAILED
+        error_message = f"{type(e).__name__}: {str(e)}"
+        logger.error(f"Clarification job {job_id} failed: {error_message}", exc_info=True)
+        
+        try:
+            # Try to update the job with error status
+            # Clear result to ensure no partial data is stored
+            job_store.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                last_error=error_message,
+                result=None
+            )
+        except job_store.JobNotFoundError:
+            # Job was deleted while processing - log and continue
+            logger.warning(f"Job {job_id} not found when trying to mark as FAILED")
+        except Exception as update_error:
+            # Failed to update job status - log but don't raise
+            logger.error(
+                f"Failed to update job {job_id} with error status: {update_error}",
+                exc_info=True
+            )
