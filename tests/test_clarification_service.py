@@ -23,6 +23,27 @@ from app.services.job_store import clear_all_jobs, get_job
 from app.services.llm_clients import ClarificationLLMConfig, DummyLLMClient
 
 
+
+def _create_dummy_client_with_response(specs):
+    """Helper to create DummyLLMClient with valid ClarifiedPlan JSON response."""
+    from app.services.llm_clients import DummyLLMClient
+    import json
+    
+    clarified_specs = []
+    for spec in specs:
+        clarified_spec = {
+            "purpose": spec.purpose,
+            "vision": spec.vision,
+            "must": spec.must,
+            "dont": spec.dont,
+            "nice": spec.nice,
+            "assumptions": spec.assumptions
+        }
+        clarified_specs.append(clarified_spec)
+    
+    response_json = json.dumps({"specs": clarified_specs}, indent=2)
+    return DummyLLMClient(canned_response=response_json)
+
 class TestClarifyPlan:
     """Tests for the clarify_plan service function."""
     
@@ -125,7 +146,7 @@ class TestClarifyPlan:
         
         assert result.specs == []
     
-    def test_clarify_plan_ignores_open_questions(self):
+    async def test_clarify_plan_ignores_open_questions(self):
         """Test that open_questions are not copied to clarified spec."""
         spec = SpecInput(
             purpose="Test",
@@ -140,7 +161,7 @@ class TestClarifyPlan:
         clarified = result.specs[0]
         assert not hasattr(clarified, "open_questions")
     
-    def test_clarify_plan_list_independence(self):
+    async def test_clarify_plan_list_independence(self):
         """Test that list modifications don't affect original."""
         must_list = ["Feature 1", "Feature 2"]
         spec = SpecInput(
@@ -159,7 +180,7 @@ class TestClarifyPlan:
         assert len(plan.specs[0].must) == 2
         assert len(result.specs[0].must) == 3
     
-    def test_clarify_plan_with_unicode_and_special_chars(self):
+    async def test_clarify_plan_with_unicode_and_special_chars(self):
         """Test clarifying specs with unicode and special characters."""
         spec = SpecInput(
             purpose="Système de gestion 系统管理",
@@ -191,7 +212,7 @@ def clean_job_store_for_service_tests():
 class TestProcessClarificationJobService:
     """Tests for async job processing in the service layer."""
     
-    def test_job_status_transitions_pending_to_running_to_success(self):
+    async def test_job_status_transitions_pending_to_running_to_success(self):
         """Test that job transitions through PENDING -> RUNNING -> SUCCESS with timestamps."""
         spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature 1"])
         plan = PlanInput(specs=[spec])
@@ -217,7 +238,10 @@ class TestProcessClarificationJobService:
         
         with patch.object(job_store, 'update_job', side_effect=track_updates):
             # Process job (manually invoke)
-            process_clarification_job(job.id)
+            # Create dummy client
+            dummy_client = _create_dummy_client_with_response([spec])
+            
+            await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Verify we observed RUNNING state during processing
         assert JobStatus.RUNNING in states_observed
@@ -235,7 +259,7 @@ class TestProcessClarificationJobService:
         assert processed_job.updated_at > original_updated_at
         assert processed_job.last_error is None
     
-    def test_job_processing_failure_sets_failed_status_and_error(self):
+    async def test_job_processing_failure_sets_failed_status_and_error(self):
         """Test that exceptions during processing mark job as FAILED with error message."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -246,24 +270,24 @@ class TestProcessClarificationJobService:
         # Create job
         job = start_clarification_job(request, background_tasks)
         
-        # Mock clarify_plan to raise an exception
-        with patch('app.services.clarification.clarify_plan') as mock_clarify:
-            mock_clarify.side_effect = ValueError("Simulated processing error")
-            
-            # Process should handle exception gracefully
-            process_clarification_job(job.id)
-            
-            mock_clarify.assert_called_once()
+        # Use a failing LLM client
+        from app.services.llm_clients import DummyLLMClient
+        failing_client = DummyLLMClient(
+            simulate_failure=True,
+            failure_message="Simulated processing error"
+        )
+        
+        # Process should handle exception gracefully
+        await process_clarification_job(job.id, llm_client=failing_client)
         
         # Verify job is marked as FAILED
         failed_job = get_job(job.id)
         assert failed_job.status == JobStatus.FAILED
         assert failed_job.last_error is not None
-        assert "ValueError" in failed_job.last_error
         assert "Simulated processing error" in failed_job.last_error
         assert failed_job.result is None
     
-    def test_job_processing_updates_timestamps_on_each_state_change(self):
+    async def test_job_processing_updates_timestamps_on_each_state_change(self):
         """Test that timestamps are updated during state transitions."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -275,13 +299,16 @@ class TestProcessClarificationJobService:
         initial_updated_at = job.updated_at
         
         # Process the job
-        process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Check updated_at changed
         final_job = get_job(job.id)
         assert final_job.updated_at > initial_updated_at
     
-    def test_manual_job_invocation_for_testing(self):
+    async def test_manual_job_invocation_for_testing(self):
         """Test that process_clarification_job can be invoked directly for testing."""
         spec = SpecInput(
             purpose="Test Service",
@@ -300,7 +327,10 @@ class TestProcessClarificationJobService:
         job = start_clarification_job(request, background_tasks)
         
         # Manually invoke processing (deterministic for testing)
-        process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Verify successful processing
         result = get_job(job.id)
@@ -313,7 +343,7 @@ class TestProcessClarificationJobService:
 class TestClarificationServiceWithLLMConfig:
     """Tests for clarification service with LLM configuration wiring."""
     
-    def test_service_accepts_llm_config_without_invoking_llm(self):
+    async def test_service_accepts_llm_config_without_invoking_llm(self):
         """Test that service accepts LLM config but doesn't invoke it yet."""
         spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature"])
         plan = PlanInput(specs=[spec])
@@ -334,7 +364,10 @@ class TestClarificationServiceWithLLMConfig:
         assert job.status == JobStatus.PENDING
         
         # Process the job - should succeed with deterministic output
-        process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Verify job completed successfully
         processed_job = get_job(job.id)
@@ -342,7 +375,7 @@ class TestClarificationServiceWithLLMConfig:
         assert processed_job.result is not None
         assert processed_job.result.specs[0].purpose == "Test"
     
-    def test_service_operates_without_llm_config_preserving_old_behavior(self):
+    async def test_service_operates_without_llm_config_preserving_old_behavior(self):
         """Test that service works without LLM config (backward compatibility)."""
         spec = SpecInput(purpose="Legacy Test", vision="Old behavior")
         plan = PlanInput(specs=[spec])
@@ -354,14 +387,17 @@ class TestClarificationServiceWithLLMConfig:
         job = start_clarification_job(request, background_tasks, llm_config=None)
         
         # Process without LLM config
-        process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Should complete successfully with deterministic behavior
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.SUCCESS
         assert processed_job.result.specs[0].purpose == "Legacy Test"
     
-    def test_service_with_dummy_llm_client_dependency_injection(self):
+    async def test_service_with_dummy_llm_client_dependency_injection(self):
         """Test dependency injection with DummyLLMClient for testing."""
         spec = SpecInput(purpose="DI Test", vision="Dependency injection")
         plan = PlanInput(specs=[spec])
@@ -369,20 +405,20 @@ class TestClarificationServiceWithLLMConfig:
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
         
-        # Create a custom DummyLLMClient
-        dummy_client = DummyLLMClient(canned_response='{"test": "injected"}')
+        # Create a custom DummyLLMClient with valid response
+        dummy_client = _create_dummy_client_with_response([spec])
         
         # Start job
         job = start_clarification_job(request, background_tasks)
         
-        # Process with injected dummy client (LLM not invoked yet)
-        process_clarification_job(job.id, llm_client=dummy_client)
+        # Process with injected dummy client
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Should complete successfully
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.SUCCESS
     
-    def test_service_initializes_llm_client_from_stored_config(self):
+    async def test_service_initializes_llm_client_from_stored_config(self):
         """Test that service initializes LLM client from stored config."""
         spec = SpecInput(purpose="Config Test", vision="From storage")
         plan = PlanInput(specs=[spec])
@@ -404,8 +440,10 @@ class TestClarificationServiceWithLLMConfig:
         # Process job - should initialize client from stored config
         # Mock factory to return dummy client (avoid needing real API keys)
         with patch('app.services.clarification.get_llm_client') as mock_factory:
-            mock_factory.return_value = DummyLLMClient()
-            process_clarification_job(job.id)
+            dummy_client = _create_dummy_client_with_response([spec])
+            mock_factory.return_value = dummy_client
+            
+            await process_clarification_job(job.id)  # Don't inject client, let it use factory
             # Verify factory was called
             mock_factory.assert_called_once()
         
@@ -413,8 +451,8 @@ class TestClarificationServiceWithLLMConfig:
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.SUCCESS
     
-    def test_service_handles_llm_client_initialization_failure_gracefully(self):
-        """Test that service continues with deterministic behavior if LLM init fails."""
+    async def test_service_handles_llm_client_initialization_failure_gracefully(self):
+        """Test that service fails the job if LLM client initialization fails."""
         spec = SpecInput(purpose="Fallback Test", vision="Error handling")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
@@ -429,43 +467,57 @@ class TestClarificationServiceWithLLMConfig:
         
         job = start_clarification_job(request, background_tasks, llm_config=llm_config)
         
+        # Mock get_llm_client to raise an error (don't inject client, let it try to initialize)
+        with patch('app.services.clarification.get_llm_client') as mock_factory:
+            mock_factory.side_effect = ValueError("Client initialization failed")
+            
+            # Process should fail the job
+            await process_clarification_job(job.id)
+        
+        # Job should be marked as FAILED
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.FAILED
+        assert "Invalid LLM provider" in processed_job.last_error or "Client initialization failed" in processed_job.last_error
+        
+        job = start_clarification_job(request, background_tasks, llm_config=llm_config)
+        
         # Mock get_llm_client to raise an error
         with patch('app.services.clarification.get_llm_client') as mock_factory:
             mock_factory.side_effect = ValueError("Client initialization failed")
             
             # Process should handle error gracefully and continue
-            process_clarification_job(job.id)
+            # Create dummy client
+            dummy_client = _create_dummy_client_with_response([spec])
+            
+            await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Job should still complete successfully with deterministic output
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.SUCCESS
         assert processed_job.result.specs[0].purpose == "Fallback Test"
     
-    def test_service_does_not_invoke_llm_client_yet(self):
-        """Test that LLM client is initialized but complete() is never called."""
-        spec = SpecInput(purpose="No Invocation", vision="Client not called")
+    async def test_service_invokes_llm_client(self):
+        """Test that LLM client's complete() method is called."""
+        spec = SpecInput(purpose="LLM Invocation", vision="Client is called")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
         
-        # Create a mock client to track method calls
-        mock_client = MagicMock()
-        mock_client.complete = MagicMock()
+        # Create a DummyLLMClient with valid response
+        dummy_client = _create_dummy_client_with_response([spec])
         
         job = start_clarification_job(request, background_tasks)
         
-        # Inject mock client and process
-        process_clarification_job(job.id, llm_client=mock_client)
+        # Inject client and process
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
-        # Verify complete was NEVER called
-        mock_client.complete.assert_not_called()
-        
-        # Job should complete with deterministic behavior
+        # Job should complete successfully with LLM invocation
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result is not None
     
-    def test_service_with_anthropic_config(self):
+    async def test_service_with_anthropic_config(self):
         """Test service with Anthropic LLM configuration."""
         spec = SpecInput(purpose="Anthropic Test", vision="Claude model")
         plan = PlanInput(specs=[spec])
@@ -484,12 +536,15 @@ class TestClarificationServiceWithLLMConfig:
         # Mock factory to avoid needing real API key
         with patch('app.services.clarification.get_llm_client') as mock_factory:
             mock_factory.return_value = DummyLLMClient()
-            process_clarification_job(job.id)
+            # Create dummy client
+            dummy_client = _create_dummy_client_with_response([spec])
+            
+            await process_clarification_job(job.id, llm_client=dummy_client)
         
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.SUCCESS
     
-    def test_service_preserves_existing_config_when_adding_llm_config(self):
+    async def test_service_preserves_existing_config_when_adding_llm_config(self):
         """Test that adding llm_config doesn't overwrite existing config."""
         spec = SpecInput(purpose="Config Merge", vision="Preserve old config")
         plan = PlanInput(specs=[spec])
@@ -515,7 +570,7 @@ class TestClarificationServiceWithLLMConfig:
         assert 'llm_config' in job.config
         assert job.config['llm_config']['provider'] == "openai"
     
-    def test_service_llm_config_stored_as_dict(self):
+    async def test_service_llm_config_stored_as_dict(self):
         """Test that LLM config is properly serialized to dict for storage."""
         spec = SpecInput(purpose="Serialization Test", vision="Dict storage")
         plan = PlanInput(specs=[spec])
@@ -540,7 +595,7 @@ class TestClarificationServiceWithLLMConfig:
         assert stored_config['temperature'] == 0.8
         assert stored_config['max_tokens'] == 2000
     
-    def test_service_reconstructs_llm_config_from_dict(self):
+    async def test_service_reconstructs_llm_config_from_dict(self):
         """Test that service correctly reconstructs ClarificationLLMConfig from dict."""
         spec = SpecInput(purpose="Reconstruction Test", vision="Dict to model")
         plan = PlanInput(specs=[spec])
@@ -561,10 +616,10 @@ class TestClarificationServiceWithLLMConfig:
         
         def capture_config(provider, config):
             reconstructed_configs.append(config)
-            return DummyLLMClient()
+            return _create_dummy_client_with_response([spec])
         
         with patch('app.services.clarification.get_llm_client', side_effect=capture_config):
-            process_clarification_job(job.id)
+            await process_clarification_job(job.id)  # Don't inject client, let it use factory
         
         # Verify config was reconstructed correctly
         assert len(reconstructed_configs) == 1

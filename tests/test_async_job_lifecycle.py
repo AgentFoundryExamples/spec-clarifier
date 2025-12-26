@@ -31,6 +31,28 @@ def clean_job_store():
     clear_all_jobs()
 
 
+
+
+def _create_dummy_client_with_response(specs):
+    """Helper to create DummyLLMClient with valid ClarifiedPlan JSON response."""
+    from app.services.llm_clients import DummyLLMClient
+    import json
+    
+    clarified_specs = []
+    for spec in specs:
+        clarified_spec = {
+            "purpose": spec.purpose,
+            "vision": spec.vision,
+            "must": spec.must,
+            "dont": spec.dont,
+            "nice": spec.nice,
+            "assumptions": spec.assumptions
+        }
+        clarified_specs.append(clarified_spec)
+    
+    response_json = json.dumps({"specs": clarified_specs}, indent=2)
+    return DummyLLMClient(canned_response=response_json)
+
 class TestStartClarificationJob:
     """Tests for start_clarification_job function."""
     
@@ -107,7 +129,7 @@ class TestStartClarificationJob:
 class TestProcessClarificationJob:
     """Tests for process_clarification_job function."""
     
-    def test_process_job_success(self):
+    async def test_process_job_success(self):
         """Test successful job processing."""
         spec = SpecInput(
             purpose="Test",
@@ -122,8 +144,26 @@ class TestProcessClarificationJob:
         # Start the job
         job = start_clarification_job(request, background_tasks)
         
-        # Process it directly
-        process_clarification_job(job.id)
+        # Create a DummyLLMClient that returns valid ClarifiedPlan JSON
+        from app.services.llm_clients import DummyLLMClient
+        valid_response = '''
+{
+  "specs": [
+    {
+      "purpose": "Test",
+      "vision": "Test vision",
+      "must": ["Feature 1"],
+      "dont": [],
+      "nice": [],
+      "assumptions": []
+    }
+  ]
+}
+        '''
+        dummy_client = DummyLLMClient(canned_response=valid_response.strip())
+        
+        # Process it directly with dummy client
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Check the job status
         processed_job = get_job(job.id)
@@ -134,7 +174,7 @@ class TestProcessClarificationJob:
         assert processed_job.result.specs[0].must == ["Feature 1"]
         assert processed_job.last_error is None
     
-    def test_process_job_transitions_through_running(self):
+    async def test_process_job_transitions_through_running(self):
         """Test that job transitions through RUNNING status."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -143,11 +183,14 @@ class TestProcessClarificationJob:
         
         job = start_clarification_job(request, background_tasks)
         
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
         # Mock update_job to capture status changes
         import app.services.job_store as job_store_module
         with patch.object(job_store_module, 'update_job', 
                          wraps=job_store_module.update_job) as mock_update:
-            process_clarification_job(job.id)
+            await process_clarification_job(job.id, llm_client=dummy_client)
             
             # Should have been called at least twice (RUNNING, then SUCCESS)
             assert mock_update.call_count >= 2
@@ -160,7 +203,7 @@ class TestProcessClarificationJob:
             last_call = mock_update.call_args_list[-1]
             assert last_call[1]['status'] == JobStatus.SUCCESS
     
-    def test_process_job_updates_timestamps(self):
+    async def test_process_job_updates_timestamps(self):
         """Test that updated_at is refreshed during processing."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -170,25 +213,28 @@ class TestProcessClarificationJob:
         job = start_clarification_job(request, background_tasks)
         original_updated_at = job.updated_at
         
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
         # Process the job
-        process_clarification_job(job.id)
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Check that updated_at changed
         processed_job = get_job(job.id)
         assert processed_job.updated_at > original_updated_at
     
-    def test_process_job_with_unknown_job_id(self):
+    async def test_process_job_with_unknown_job_id(self):
         """Test processing with an unknown job ID returns cleanly."""
         fake_id = uuid4()
         
         # Should not raise an exception
-        process_clarification_job(fake_id)
+        await process_clarification_job(fake_id)
         
         # No job should exist
         with pytest.raises(JobNotFoundError):
             get_job(fake_id)
     
-    def test_process_job_exception_handling(self):
+    async def test_process_job_exception_handling(self):
         """Test that exceptions during processing mark job as FAILED."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -197,22 +243,21 @@ class TestProcessClarificationJob:
         
         job = start_clarification_job(request, background_tasks)
         
-        # Mock clarify_plan to raise an exception
-        with patch('app.services.clarification.clarify_plan') as mock_clarify:
-            mock_clarify.side_effect = ValueError("Test error")
-            
-            # Process should not raise
-            process_clarification_job(job.id)
+        # Mock the LLM client to raise an exception
+        from app.services.llm_clients import DummyLLMClient, LLMCallError
+        failing_client = DummyLLMClient(simulate_failure=True, failure_message="Test error")
+        
+        # Process should not raise
+        await process_clarification_job(job.id, llm_client=failing_client)
         
         # Job should be FAILED
         failed_job = get_job(job.id)
         assert failed_job.status == JobStatus.FAILED
         assert failed_job.last_error is not None
-        assert "ValueError" in failed_job.last_error
         assert "Test error" in failed_job.last_error
         assert failed_job.result is None
     
-    def test_process_job_clears_result_on_failure(self):
+    async def test_process_job_clears_result_on_failure(self):
         """Test that result is cleared when job fails."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -221,18 +266,18 @@ class TestProcessClarificationJob:
         
         job = start_clarification_job(request, background_tasks)
         
-        # Mock clarify_plan to raise exception
-        with patch('app.services.clarification.clarify_plan') as mock_clarify:
-            mock_clarify.side_effect = RuntimeError("Processing failed")
-            
-            process_clarification_job(job.id)
+        # Mock LLM client to raise exception
+        from app.services.llm_clients import DummyLLMClient
+        failing_client = DummyLLMClient(simulate_failure=True, failure_message="Processing failed")
+        
+        await process_clarification_job(job.id, llm_client=failing_client)
         
         # Result should be None (cleared)
         failed_job = get_job(job.id)
         assert failed_job.result is None
         assert failed_job.last_error is not None
     
-    def test_process_job_multiple_specs(self):
+    async def test_process_job_multiple_specs(self):
         """Test processing a plan with multiple specs."""
         spec1 = SpecInput(purpose="Frontend", vision="UI")
         spec2 = SpecInput(purpose="Backend", vision="API")
@@ -242,7 +287,10 @@ class TestProcessClarificationJob:
         background_tasks = MagicMock()
         
         job = start_clarification_job(request, background_tasks)
-        process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec1, spec2, spec3])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.SUCCESS
@@ -251,7 +299,7 @@ class TestProcessClarificationJob:
         assert processed_job.result.specs[1].purpose == "Backend"
         assert processed_job.result.specs[2].purpose == "DevOps"
     
-    def test_process_job_preserves_spec_fields(self):
+    async def test_process_job_preserves_spec_fields(self):
         """Test that all spec fields are preserved during processing."""
         spec = SpecInput(
             purpose="Test Service",
@@ -267,7 +315,10 @@ class TestProcessClarificationJob:
         background_tasks = MagicMock()
         
         job = start_clarification_job(request, background_tasks)
-        process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         processed_job = get_job(job.id)
         result_spec = processed_job.result.specs[0]
@@ -281,7 +332,7 @@ class TestProcessClarificationJob:
         # open_questions should not exist in ClarifiedSpec
         assert not hasattr(result_spec, "open_questions")
     
-    def test_process_job_can_be_called_directly(self):
+    async def test_process_job_can_be_called_directly(self):
         """Test that process_clarification_job can be invoked directly for testing."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -294,7 +345,10 @@ class TestProcessClarificationJob:
         background_tasks.reset_mock()
         
         # Call process directly (not via background tasks)
-        process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Should have processed successfully
         processed_job = get_job(job.id)
@@ -303,7 +357,7 @@ class TestProcessClarificationJob:
         # Background tasks should not have been called during direct invocation
         background_tasks.add_task.assert_not_called()
     
-    def test_process_job_exception_in_error_handling(self):
+    async def test_process_job_exception_in_error_handling(self):
         """Test that exceptions during error handling don't crash the worker."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -314,11 +368,11 @@ class TestProcessClarificationJob:
         
         # Mock to cause exception, then another exception when trying to update
         import app.services.job_store as job_store_module
-        with patch('app.services.clarification.clarify_plan') as mock_clarify, \
-             patch.object(job_store_module, 'update_job') as mock_update:
-            
-            mock_clarify.side_effect = ValueError("First error")
-            
+        from app.services.llm_clients import DummyLLMClient
+        
+        failing_client = DummyLLMClient(simulate_failure=True, failure_message="First error")
+        
+        with patch.object(job_store_module, 'update_job') as mock_update:
             # Make update_job fail when marking as FAILED (but succeed for RUNNING)
             def update_side_effect(job_id, **kwargs):
                 if kwargs.get('status') == JobStatus.FAILED:
@@ -329,13 +383,13 @@ class TestProcessClarificationJob:
             mock_update.side_effect = update_side_effect
             
             # Should not raise an exception
-            process_clarification_job(job.id)
+            await process_clarification_job(job.id, llm_client=failing_client)
 
 
 class TestAsyncJobLifecycleEdgeCases:
     """Tests for edge cases in async job lifecycle."""
     
-    def test_job_deleted_during_processing(self):
+    async def test_job_deleted_during_processing(self):
         """Test handling of job deletion during processing."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -346,21 +400,20 @@ class TestAsyncJobLifecycleEdgeCases:
         
         # Delete the job before processing completes
         from app.services.job_store import delete_job
+        from app.services.llm_clients import DummyLLMClient
         
-        # Mock clarify_plan to delete job mid-processing
-        with patch('app.services.clarification.clarify_plan') as mock_clarify:
-            def delete_during_processing(plan):
+        # Create a mock client that deletes the job during processing
+        class DeleteJobClient:
+            async def complete(self, system_prompt, user_prompt, model, **kwargs):
                 delete_job(job.id)
                 raise ValueError("Job was deleted")
-            
-            mock_clarify.side_effect = delete_during_processing
-            
-            # Should handle gracefully without crashing
-            process_clarification_job(job.id)
-            
-            # Job should not exist
-            with pytest.raises(JobNotFoundError):
-                get_job(job.id)
+        
+        # Should handle gracefully without crashing
+        await process_clarification_job(job.id, llm_client=DeleteJobClient())
+        
+        # Job should not exist
+        with pytest.raises(JobNotFoundError):
+            get_job(job.id)
     
     def test_concurrent_job_creation(self):
         """Test creating multiple jobs concurrently."""
@@ -383,7 +436,7 @@ class TestAsyncJobLifecycleEdgeCases:
         # All should be scheduled for background processing
         assert background_tasks.add_task.call_count == 5
     
-    def test_process_same_job_multiple_times(self):
+    async def test_process_same_job_multiple_times(self):
         """Test that processing the same job multiple times doesn't cause issues."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -392,17 +445,20 @@ class TestAsyncJobLifecycleEdgeCases:
         
         job = start_clarification_job(request, background_tasks)
         
+        # Create dummy client once before processing multiple times
+        dummy_client = _create_dummy_client_with_response([spec])
+        
         # Process the same job multiple times
-        process_clarification_job(job.id)
-        process_clarification_job(job.id)
-        process_clarification_job(job.id)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Should end in SUCCESS state (second and third calls should skip)
         final_job = get_job(job.id)
         assert final_job.status == JobStatus.SUCCESS
         assert final_job.result is not None
     
-    def test_process_job_skips_non_pending_status(self):
+    async def test_process_job_skips_non_pending_status(self):
         """Test that process_clarification_job skips jobs not in PENDING state."""
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
@@ -416,7 +472,10 @@ class TestAsyncJobLifecycleEdgeCases:
         update_job(job.id, status=JobStatus.RUNNING)
         
         # Try to process - should skip
-        process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Job should still be in RUNNING state (not processed)
         final_job = get_job(job.id)
