@@ -20,6 +20,9 @@ from typing import Dict, List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Import ClarificationConfig from config_models to avoid circular dependency
+from app.models.config_models import ClarificationConfig
+
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
@@ -152,10 +155,8 @@ class GlobalDefaults:
         }
         
         # Optionally seed from environment variables (deployment flexibility)
+        # This is safe during __init__ as the instance is not yet shared
         self._seed_allowed_models_from_env()
-        
-        # Import here to avoid circular dependency
-        from app.models.specs import ClarificationConfig
         
         # Built-in default configuration
         self._default_config = ClarificationConfig(
@@ -212,9 +213,6 @@ class GlobalDefaults:
             ClarificationConfig: Copy of the default configuration
         """
         with self._lock:
-            # Import here to avoid circular dependency
-            from app.models.specs import ClarificationConfig
-            
             # Return a copy via model_copy() to prevent external mutations
             return self._default_config.model_copy()
     
@@ -233,30 +231,32 @@ class GlobalDefaults:
             ConfigValidationError: If model is not in provider's allowed list
             TypeError: If config is not a ClarificationConfig instance
         """
-        # Import here to avoid circular dependency
-        from app.models.specs import ClarificationConfig
-        
         if not isinstance(config, ClarificationConfig):
             raise TypeError(
                 f"config must be a ClarificationConfig instance, got {type(config).__name__}"
             )
         
         with self._lock:
-            # Validate provider exists in allowed_models
-            if config.provider not in self._allowed_models:
+            # Delegate validation to the shared validation function
+            # Note: We need to access allowed_models within the lock for consistency
+            allowed = dict(self._allowed_models)
+            
+            # Check provider exists
+            if config.provider not in allowed:
                 raise ConfigValidationError(
                     f"Provider '{config.provider}' is not in allowed_models. "
-                    f"Available providers: {', '.join(sorted(self._allowed_models.keys()))}"
+                    f"Available providers: {', '.join(sorted(allowed.keys()))}"
                 )
             
-            # Validate model is in provider's allowed list
-            allowed_for_provider = self._allowed_models[config.provider]
+            # Check provider has at least one allowed model
+            allowed_for_provider = allowed[config.provider]
             if not allowed_for_provider:
                 raise ConfigValidationError(
                     f"No allowed models configured for provider '{config.provider}'. "
                     "Cannot set default config with empty allowed model list."
                 )
             
+            # Check model is in provider's allowed list
             if config.model not in allowed_for_provider:
                 raise ConfigValidationError(
                     f"Model '{config.model}' is not allowed for provider '{config.provider}'. "

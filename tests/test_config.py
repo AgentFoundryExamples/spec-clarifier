@@ -367,35 +367,27 @@ class TestGlobalDefaults:
         assert retrieved.system_prompt_id == "advanced"
         assert retrieved.temperature == 0.5
     
-    def test_global_defaults_set_default_config_invalid_provider(self):
+    def test_global_defaults_set_default_config_invalid_provider(self, monkeypatch):
         """Test that setting config with provider not in allowed_models fails."""
         from app.config import GlobalDefaults, ConfigValidationError
         from app.models.specs import ClarificationConfig
         
         defaults = GlobalDefaults()
         
-        # Manipulate allowed_models to remove a provider temporarily
-        # Save original for restoration
-        original_allowed = defaults._allowed_models.copy()
+        # Patch the internal _allowed_models dict using monkeypatch
+        monkeypatch.setattr(defaults, "_allowed_models", {"openai": ["gpt-5.1"]})
         
-        try:
-            # Remove anthropic from allowed_models
-            del defaults._allowed_models["anthropic"]
-            
-            # Now try to set a config with anthropic provider
-            config = ClarificationConfig(
-                provider="anthropic",
-                model="claude-sonnet-4.5",
-                system_prompt_id="default"
-            )
-            
-            with pytest.raises(ConfigValidationError) as exc_info:
-                defaults.set_default_config(config)
-            
-            assert "not in allowed_models" in str(exc_info.value)
-        finally:
-            # Restore original allowed_models
-            defaults._allowed_models = original_allowed
+        # Now try to set a config with anthropic provider
+        config = ClarificationConfig(
+            provider="anthropic",
+            model="claude-sonnet-4.5",
+            system_prompt_id="default"
+        )
+        
+        with pytest.raises(ConfigValidationError) as exc_info:
+            defaults.set_default_config(config)
+        
+        assert "not in allowed_models" in str(exc_info.value)
     
     def test_global_defaults_set_default_config_invalid_model(self):
         """Test that setting config with invalid model fails."""
@@ -509,17 +501,15 @@ class TestConfigHelperFunctions:
 class TestConfigValidationEdgeCases:
     """Tests for edge cases in config validation."""
     
-    def test_validate_provider_model_empty_allowed_list(self):
+    def test_validate_provider_model_empty_allowed_list(self, monkeypatch):
         """Test validation when provider has empty allowed model list."""
-        from app.config import GlobalDefaults, ConfigValidationError
+        from app.config import GlobalDefaults, ConfigValidationError, set_default_config
+        from app.models.specs import ClarificationConfig
         
-        # Create a GlobalDefaults with manipulated allowed_models
         defaults = GlobalDefaults()
         
-        # Directly modify internal state to simulate empty list
-        defaults._allowed_models["openai"] = []
-        
-        from app.models.specs import ClarificationConfig
+        # Patch the internal _allowed_models dict using monkeypatch
+        monkeypatch.setattr(defaults, "_allowed_models", {"openai": [], "anthropic": ["claude-opus-4"]})
         
         config = ClarificationConfig(
             provider="openai",
@@ -528,6 +518,7 @@ class TestConfigValidationEdgeCases:
         )
         
         with pytest.raises(ConfigValidationError) as exc_info:
+            # Test on the instance directly
             defaults.set_default_config(config)
         
         assert "No allowed models configured" in str(exc_info.value)
