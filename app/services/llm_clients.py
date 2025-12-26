@@ -46,6 +46,7 @@ Each provider implementation should:
 4. Sanitize error messages to prevent credential leakage
 """
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Protocol
@@ -383,3 +384,277 @@ class DummyLLMClient:
         
         # Fallback (should never reach here due to __init__ logic)
         return '{"clarified": true}'
+
+
+class OpenAIResponsesClient:
+    """OpenAI implementation of LLMClient using the Responses API.
+    
+    This client wraps the OpenAI Python SDK (v2.x) and implements the LLMClient
+    protocol using the modern Responses API (not the deprecated Completions API).
+    
+    The client:
+    1. Initializes lazily for testability (client created on first use)
+    2. Uses AsyncOpenAI for non-blocking I/O
+    3. Formats messages according to Responses API schema
+    4. Extracts text from response.output_text or response.content
+    5. Maps OpenAI errors to LLMCallError hierarchy
+    6. Logs provider/model/duration but not prompts/responses
+    
+    Configuration:
+        - Requires OPENAI_API_KEY environment variable
+        - Supports model specification per request
+        - Passes through kwargs like temperature, max_tokens
+    
+    Example usage:
+        client = OpenAIResponsesClient()
+        response = await client.complete(
+            system_prompt="You are a helpful assistant",
+            user_prompt="Explain quantum computing",
+            model="gpt-5.1",
+            temperature=0.7,
+            max_tokens=500
+        )
+    """
+    
+    def __init__(self, api_key: Optional[str] = None):
+        """Initialize OpenAIResponsesClient with optional API key.
+        
+        Args:
+            api_key: OpenAI API key. If not provided, will use OPENAI_API_KEY
+                    environment variable. Lazy initialization defers client
+                    creation until first API call.
+        """
+        self._api_key = api_key
+        self._client: Optional[Any] = None
+        self._logger = logging.getLogger(__name__)
+    
+    def _get_client(self) -> Any:
+        """Get or create AsyncOpenAI client instance (lazy initialization).
+        
+        Returns:
+            AsyncOpenAI client instance
+            
+        Raises:
+            LLMCallError: If OPENAI_API_KEY is not available
+        """
+        if self._client is None:
+            # Import here to avoid import errors if openai is not installed
+            try:
+                from openai import AsyncOpenAI
+            except ImportError as e:
+                raise LLMCallError(
+                    "OpenAI SDK not installed. Install with: pip install openai",
+                    original_error=e,
+                    provider=PROVIDER_OPENAI
+                )
+            
+            # Get API key from instance or environment
+            import os
+            api_key = self._api_key or os.environ.get("OPENAI_API_KEY")
+            
+            if not api_key:
+                raise LLMCallError(
+                    "OPENAI_API_KEY environment variable is not set. "
+                    "Please set it with a valid OpenAI API key.",
+                    provider=PROVIDER_OPENAI
+                )
+            
+            self._client = AsyncOpenAI(api_key=api_key)
+            self._logger.debug("Initialized AsyncOpenAI client")
+        
+        return self._client
+    
+    async def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        **kwargs: Any
+    ) -> str:
+        """Generate a completion from OpenAI using the Responses API.
+        
+        This method sends a request to OpenAI's Responses API with system and
+        user prompts, waits for the response, and extracts the text content.
+        
+        The Responses API uses:
+        - `instructions` parameter for system-level instructions
+        - `input` parameter for the user's actual query
+        - `model` parameter for model selection
+        
+        Additional parameters (temperature, max_tokens, etc.) are passed through
+        via kwargs and renamed to match OpenAI's parameter names.
+        
+        Args:
+            system_prompt: System-level instructions for the LLM
+            user_prompt: User's actual request/query
+            model: Model identifier (e.g., "gpt-5.1", "gpt-4o")
+            **kwargs: Additional parameters:
+                - temperature: Sampling temperature (0.0-2.0)
+                - max_tokens: Maximum tokens to generate (renamed to max_output_tokens)
+                - Other OpenAI-specific parameters
+        
+        Returns:
+            Raw text string response from OpenAI
+            
+        Raises:
+            ValueError: When prompts are empty or invalid
+            LLMAuthenticationError: When API key is invalid
+            LLMRateLimitError: When rate limits are exceeded
+            LLMValidationError: When request validation fails
+            LLMNetworkError: When network/connectivity issues occur
+            LLMCallError: For other API errors
+        """
+        # Validate inputs
+        if not system_prompt or not system_prompt.strip():
+            raise ValueError("system_prompt must not be empty or blank")
+        if not user_prompt or not user_prompt.strip():
+            raise ValueError("user_prompt must not be empty or blank")
+        if not model or not model.strip():
+            raise ValueError("model must not be empty or blank")
+        
+        # Get or create client
+        client = self._get_client()
+        
+        # Prepare API parameters - map our kwargs to OpenAI's parameter names
+        api_params = {
+            "model": model,
+            "instructions": system_prompt,
+            "input": user_prompt,
+        }
+        
+        # Map max_tokens to max_output_tokens for Responses API
+        if "max_tokens" in kwargs:
+            api_params["max_output_tokens"] = kwargs.pop("max_tokens")
+        
+        # Pass through other parameters
+        api_params.update(kwargs)
+        
+        # Track timing for logging
+        import time
+        start_time = time.time()
+        
+        try:
+            # Call OpenAI Responses API
+            response = await client.responses.create(**api_params)
+            
+            # Extract text from response
+            # The Responses API returns response.output_text as the primary text field
+            text_content = response.output_text
+            
+            # If output_text is empty, try to extract from content array
+            if not text_content and hasattr(response, "content"):
+                text_parts = []
+                for part in response.content:
+                    # Handle different content types
+                    if hasattr(part, "type") and part.type == "text":
+                        if hasattr(part, "text"):
+                            text_parts.append(part.text)
+                text_content = "".join(text_parts)
+            
+            # Log success (provider, model, duration only)
+            elapsed_time = time.time() - start_time
+            self._logger.info(
+                f"OpenAI completion successful: provider={PROVIDER_OPENAI}, "
+                f"model={model}, elapsed_time={elapsed_time:.2f}s"
+            )
+            
+            return text_content
+            
+        except Exception as e:
+            # Calculate elapsed time for error logging
+            elapsed_time = time.time() - start_time
+            
+            # Import OpenAI error types
+            try:
+                from openai import (
+                    APIError,
+                    AuthenticationError,
+                    RateLimitError,
+                    APIConnectionError,
+                    BadRequestError,
+                    APITimeoutError,
+                )
+            except ImportError:
+                # If we can't import error types, wrap as generic error
+                self._logger.error(
+                    f"OpenAI API call failed: provider={PROVIDER_OPENAI}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                    f"error={type(e).__name__}"
+                )
+                raise LLMCallError(
+                    f"OpenAI API call failed: {str(e)}",
+                    original_error=e,
+                    provider=PROVIDER_OPENAI
+                )
+            
+            # Map OpenAI errors to our error hierarchy
+            if isinstance(e, AuthenticationError):
+                self._logger.error(
+                    f"OpenAI authentication failed: provider={PROVIDER_OPENAI}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s"
+                )
+                raise LLMAuthenticationError(
+                    f"OpenAI authentication failed. Please check your API key.",
+                    original_error=e,
+                    provider=PROVIDER_OPENAI
+                )
+            
+            elif isinstance(e, RateLimitError):
+                self._logger.warning(
+                    f"OpenAI rate limit exceeded: provider={PROVIDER_OPENAI}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s"
+                )
+                raise LLMRateLimitError(
+                    f"OpenAI rate limit exceeded. Please retry after a delay.",
+                    original_error=e,
+                    provider=PROVIDER_OPENAI
+                )
+            
+            elif isinstance(e, BadRequestError):
+                self._logger.error(
+                    f"OpenAI request validation failed: provider={PROVIDER_OPENAI}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                    f"error={str(e)}"
+                )
+                raise LLMValidationError(
+                    f"OpenAI request validation failed: {str(e)}",
+                    original_error=e,
+                    provider=PROVIDER_OPENAI
+                )
+            
+            elif isinstance(e, (APIConnectionError, APITimeoutError)):
+                self._logger.error(
+                    f"OpenAI network error: provider={PROVIDER_OPENAI}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                    f"error={type(e).__name__}"
+                )
+                raise LLMNetworkError(
+                    f"OpenAI network error: {type(e).__name__}",
+                    original_error=e,
+                    provider=PROVIDER_OPENAI
+                )
+            
+            elif isinstance(e, APIError):
+                self._logger.error(
+                    f"OpenAI API error: provider={PROVIDER_OPENAI}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                    f"error={str(e)}"
+                )
+                raise LLMCallError(
+                    f"OpenAI API error: {str(e)}",
+                    original_error=e,
+                    provider=PROVIDER_OPENAI
+                )
+            
+            else:
+                # Unknown error type
+                self._logger.error(
+                    f"Unexpected error in OpenAI call: provider={PROVIDER_OPENAI}, "
+                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                    f"error={type(e).__name__}: {str(e)}"
+                )
+                raise LLMCallError(
+                    f"Unexpected error in OpenAI call: {type(e).__name__}",
+                    original_error=e,
+                    provider=PROVIDER_OPENAI
+                )
