@@ -6,6 +6,7 @@ A FastAPI service for clarifying specifications.
 
 - RESTful API built with FastAPI
 - Health check endpoint
+- Admin configuration endpoints for runtime config management
 - OpenAPI documentation (Swagger UI)
 - Configuration via environment variables
 - In-memory job store for async clarification workflows
@@ -110,6 +111,14 @@ The application can be configured via environment variables with the `APP_` pref
   - **Use Case**: Enable in development to inspect job configuration, timestamps, and metadata
   - **Important**: This is a security-sensitive feature. Only enable in trusted environments.
 
+- `APP_ENABLE_CONFIG_ADMIN_ENDPOINTS`: Enable admin config endpoints GET/PUT /v1/config/defaults (default: True)
+  - **Enabled (True)**: Admin endpoints allow runtime inspection and modification of global defaults
+  - **Disabled (False)**: Admin endpoints return 403 Forbidden
+  - **Security**: These endpoints have no built-in authentication and should only be accessible in trusted environments
+  - **Use Case**: Enable to allow operators to view and update configuration without redeploying
+  - **Important**: Changes are NOT persisted across restarts. Use network-level access controls to protect these endpoints.
+  - **See**: Admin Configuration Endpoints section for detailed usage and examples
+
 #### LLM Configuration
 
 The service uses LLM providers for specification clarification. Configure the default provider and model:
@@ -123,6 +132,14 @@ The service uses LLM providers for specification clarification. Configure the de
   - For Anthropic: "claude-sonnet-4.5", "claude-opus-4" (uses Messages API)
   - For Google: "gemini-3.0-pro" (uses Gemini API)
   - See LLMs.md for detailed provider information
+
+- `APP_ALLOWED_MODELS_OPENAI`: Comma-separated list of allowed OpenAI models (default: "gpt-5,gpt-5.1,gpt-4o")
+  - Restricts which OpenAI models can be used in clarification requests and set as defaults
+  - Only models in this list will be accepted by the validation layer
+
+- `APP_ALLOWED_MODELS_ANTHROPIC`: Comma-separated list of allowed Anthropic models (default: "claude-sonnet-4.5,claude-opus-4")
+  - Restricts which Anthropic models can be used in clarification requests and set as defaults
+  - Only models in this list will be accepted by the validation layer
 
 **Note**: The LLM pipeline intentionally redacts prompts, answers, and raw responses from logs to protect sensitive data. Only metadata (provider, model, elapsed time, error messages) is logged.
 
@@ -141,8 +158,11 @@ export APP_APP_NAME="My Spec Clarifier"
 export APP_DEBUG=true
 export APP_SHOW_JOB_RESULT=true  # Enable for development/debugging
 export APP_ENABLE_DEBUG_ENDPOINT=true  # Enable debug endpoint for development
+export APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true  # Enable admin config endpoints (default: true)
 export APP_LLM_DEFAULT_PROVIDER="openai"  # or "anthropic", "google"
 export APP_LLM_DEFAULT_MODEL="gpt-5"  # or "gpt-5.1", "claude-sonnet-4.5", etc.
+export APP_ALLOWED_MODELS_OPENAI="gpt-5,gpt-5.1,gpt-4o"  # Customize allowed OpenAI models
+export APP_ALLOWED_MODELS_ANTHROPIC="claude-sonnet-4.5,claude-opus-4"  # Customize allowed Anthropic models
 export APP_CORS_ORIGINS="http://localhost:3000,http://localhost:8080,https://myapp.com"
 uvicorn app.main:app --reload
 ```
@@ -703,6 +723,158 @@ curl -s "http://localhost:8000/v1/clarifications/00000000-0000-0000-0000-0000000
 # Invalid UUID (422)
 curl -s "http://localhost:8000/v1/clarifications/invalid-uuid"
 # Response: {"detail": [{"type": "uuid_parsing", "loc": ["path", "job_id"], ...}]}
+```
+
+### Admin Configuration Endpoints
+
+⚠️ **ADMIN-ONLY ENDPOINTS - USE ONLY IN TRUSTED ENVIRONMENTS**
+
+These endpoints allow runtime inspection and modification of global default configuration without redeploying the service. They should only be accessible in trusted environments with proper network-level access controls (e.g., firewall rules, VPCs, authentication gateways).
+
+**Security Considerations:**
+- Changes are NOT persisted across service restarts - defaults reset to initial values (from environment or built-ins)
+- No built-in authentication - these endpoints assume a trusted environment
+- Use network-level access controls to restrict access
+- Can be disabled by setting `APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=false` (responds with 403 Forbidden)
+- All operations are logged with warnings for audit trails
+
+#### GET /v1/config/defaults
+
+Get the current global default configuration and allowed models.
+
+**Request:**
+```bash
+curl -s "http://localhost:8000/v1/config/defaults" | jq
+```
+
+**Response (200 OK):**
+```json
+{
+  "default_config": {
+    "provider": "openai",
+    "model": "gpt-5.1",
+    "system_prompt_id": "default",
+    "temperature": 0.1,
+    "max_tokens": null
+  },
+  "allowed_models": {
+    "openai": ["gpt-5", "gpt-5.1", "gpt-4o"],
+    "anthropic": ["claude-sonnet-4.5", "claude-opus-4"]
+  }
+}
+```
+
+**Response Fields:**
+- `default_config`: Current default `ClarificationConfig` used when clarification requests don't provide explicit config
+  - `provider`: LLM provider (must be 'openai' or 'anthropic')
+  - `model`: Model identifier specific to the provider
+  - `system_prompt_id`: System prompt template identifier (see LLMs.md for available templates)
+  - `temperature`: Sampling temperature (0.0-2.0), defaults to 0.1
+  - `max_tokens`: Optional maximum tokens to generate
+- `allowed_models`: Dictionary mapping provider names to lists of allowed model names
+  - Only provider/model combinations in this dictionary can be set as defaults
+
+**Status Codes:**
+- `200`: Success
+- `403`: Endpoint disabled (set `APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true` to enable)
+
+#### PUT /v1/config/defaults
+
+Update the global default configuration. Changes affect all subsequent clarification requests that don't provide explicit configuration overrides.
+
+**Request:**
+```bash
+curl -X PUT "http://localhost:8000/v1/config/defaults" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "anthropic",
+    "model": "claude-sonnet-4.5",
+    "system_prompt_id": "strict_json",
+    "temperature": 0.2,
+    "max_tokens": 3000
+  }'
+```
+
+**Request Body Requirements:**
+- All fields are required in the request body
+- `provider`: Must be 'openai' or 'anthropic'
+- `model`: Must be in the provider's allowed model list
+- `system_prompt_id`: System prompt template identifier (unknown IDs fall back to 'default' at runtime)
+- `temperature`: Must be 0.0-2.0
+- `max_tokens`: Positive integer or null
+
+**Response (200 OK):**
+```json
+{
+  "default_config": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4.5",
+    "system_prompt_id": "strict_json",
+    "temperature": 0.2,
+    "max_tokens": 3000
+  },
+  "allowed_models": {
+    "openai": ["gpt-5", "gpt-5.1", "gpt-4o"],
+    "anthropic": ["claude-sonnet-4.5", "claude-opus-4"]
+  }
+}
+```
+
+**Status Codes:**
+- `200`: Success - returns updated defaults
+- `400`: Validation error - invalid provider/model combination or missing required fields
+- `403`: Endpoint disabled (set `APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true` to enable)
+- `422`: Pydantic validation error - malformed request (wrong types, invalid temperature, etc.)
+
+**Validation Examples:**
+
+Invalid provider:
+```bash
+# Request with unsupported provider
+curl -X PUT "http://localhost:8000/v1/config/defaults" \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "google", "model": "gemini-pro", "system_prompt_id": "default", "temperature": 0.1, "max_tokens": null}'
+
+# Response (422): {"detail": [{"type": "literal_error", ...}]}
+```
+
+Invalid model for provider:
+```bash
+# Request with model not in allowed list
+curl -X PUT "http://localhost:8000/v1/config/defaults" \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "openai", "model": "gpt-3.5-turbo", "system_prompt_id": "default", "temperature": 0.1, "max_tokens": null}'
+
+# Response (400): {"detail": "Model 'gpt-3.5-turbo' is not allowed for provider 'openai'. Allowed models: gpt-5, gpt-5.1, gpt-4o"}
+```
+
+**Thread Safety:**
+Updates are atomic and protected by a lock to handle concurrent PUT requests safely. If multiple PUT requests arrive simultaneously, they are serialized - the last write wins.
+
+**System Prompt IDs:**
+See LLMs.md for details on available system prompt templates:
+- `default`: Standard clarification instructions
+- `strict_json`: Emphasizes JSON format compliance
+- `verbose_explanation`: Provides detailed task explanation
+
+Unknown system_prompt_id values are accepted but fall back to 'default' at runtime with a logged warning.
+
+**Allowed Models Configuration:**
+The allowed_models dictionary can be configured at startup via environment variables:
+- `APP_ALLOWED_MODELS_OPENAI`: Comma-separated list of OpenAI models (e.g., "gpt-5,gpt-5.1,gpt-4o")
+- `APP_ALLOWED_MODELS_ANTHROPIC`: Comma-separated list of Anthropic models (e.g., "claude-sonnet-4.5,claude-opus-4")
+
+If not specified, the service uses built-in safe defaults.
+
+**Disabling Admin Endpoints:**
+```bash
+export APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=false
+uvicorn app.main:app --reload
+```
+
+When disabled, both GET and PUT return 403 Forbidden:
+```json
+{"detail": "Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable."}
 ```
 
 ### Job Lifecycle

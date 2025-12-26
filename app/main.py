@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.api import routes_health, routes_clarifications
+from app.api import routes_health, routes_clarifications, routes_config
 
 # Configure logging
 logging.basicConfig(
@@ -68,6 +68,7 @@ def create_app() -> FastAPI:
     # Register routers
     app.include_router(routes_health.router)
     app.include_router(routes_clarifications.router)
+    app.include_router(routes_config.router)
     
     return app
 
