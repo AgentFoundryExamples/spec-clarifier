@@ -13,14 +13,16 @@
 # limitations under the License.
 """Service for clarifying specifications."""
 
+import copy
 import logging
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import BackgroundTasks
 
 from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan, ClarifiedSpec, JobStatus, PlanInput
 from app.services import job_store
+from app.services.llm_clients import ClarificationLLMConfig, get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,8 @@ def clarify_plan(plan_input: PlanInput) -> ClarifiedPlan:
 def start_clarification_job(
     request: ClarificationRequest,
     background_tasks: BackgroundTasks,
-    config: Optional[dict] = None
+    config: Optional[dict] = None,
+    llm_config: Optional[ClarificationLLMConfig] = None
 ) -> ClarificationJob:
     """Start a clarification job asynchronously.
     
@@ -69,12 +72,23 @@ def start_clarification_job(
         request: The clarification request to process
         background_tasks: FastAPI BackgroundTasks instance for scheduling
         config: Optional configuration dictionary for job processing
+        llm_config: Optional LLM configuration for future AI-powered clarification.
+                   If provided, an LLM client will be initialized during processing
+                   but not invoked in this iteration. Defaults to None to preserve
+                   existing deterministic behavior.
         
     Returns:
         ClarificationJob: The newly created job with PENDING status
     """
-    # Create job in PENDING state
-    job = job_store.create_job(request, config=config)
+    # Create job in PENDING state, storing llm_config in the config dict if provided
+    if llm_config is not None:
+        # Merge llm_config into config dict for storage
+        # Use deepcopy to avoid mutating nested structures in the original config
+        job_config = copy.deepcopy(config) if config else {}
+        job_config['llm_config'] = llm_config.model_dump()
+        job = job_store.create_job(request, config=job_config)
+    else:
+        job = job_store.create_job(request, config=config)
     
     # Schedule background processing
     background_tasks.add_task(process_clarification_job, job.id)
@@ -83,7 +97,7 @@ def start_clarification_job(
     return job
 
 
-def process_clarification_job(job_id: UUID) -> None:
+def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = None) -> None:
     """Process a clarification job asynchronously.
     
     Loads the job from the store, marks it RUNNING, invokes the synchronous
@@ -96,6 +110,9 @@ def process_clarification_job(job_id: UUID) -> None:
     
     Args:
         job_id: The UUID of the job to process
+        llm_client: Optional pre-configured LLM client for dependency injection.
+                   If not provided and job has llm_config, a client will be created.
+                   Used primarily for testing with DummyLLMClient.
     """
     try:
         # Load the job
@@ -114,7 +131,66 @@ def process_clarification_job(job_id: UUID) -> None:
         # Mark as RUNNING
         job_store.update_job(job_id, status=JobStatus.RUNNING)
         
-        # Perform the clarification using existing synchronous logic
+        # ====================================================================
+        # LLM CLIENT INITIALIZATION (not yet invoked)
+        # ====================================================================
+        # Check if LLM configuration is provided in the job config
+        client = llm_client  # Use injected client if provided (for testing)
+        
+        if client is None and job.config and 'llm_config' in job.config:
+            # Reconstruct ClarificationLLMConfig from stored dict
+            llm_config_dict = job.config['llm_config']
+            llm_config = ClarificationLLMConfig(**llm_config_dict)
+            
+            # Initialize LLM client using factory (but don't invoke it yet)
+            try:
+                client = get_llm_client(llm_config.provider, llm_config)
+                logger.info(
+                    f"Initialized {llm_config.provider} LLM client for job {job_id} "
+                    f"with model {llm_config.model}"
+                )
+            except ValueError as e:
+                # Log client initialization failure but continue with deterministic processing
+                # ValueError: Invalid/unsupported provider or factory-level errors
+                logger.warning(
+                    f"Failed to initialize LLM client for job {job_id}: {e}. "
+                    "Continuing with deterministic clarification."
+                )
+                client = None
+        
+        # ====================================================================
+        # PLACEHOLDER: FUTURE LLM INVOCATION POINT
+        # ====================================================================
+        # TODO: In a future iteration, invoke the LLM client here to perform
+        # AI-powered specification clarification. The invocation should:
+        #
+        # 1. Format the plan into appropriate prompts (system + user)
+        # 2. Call client.complete(system_prompt, user_prompt, model, **kwargs)
+        # 3. Parse the LLM response and transform it into ClarifiedPlan
+        # 4. Handle LLMCallError exceptions appropriately
+        # 5. Fall back to deterministic clarification on errors
+        #
+        # Example pseudocode:
+        #     if client is not None:
+        #         try:
+        #             system_prompt = "You are a specification clarifier..."
+        #             user_prompt = format_plan_as_prompt(job.request.plan)
+        #             response = await client.complete(
+        #                 system_prompt=system_prompt,
+        #                 user_prompt=user_prompt,
+        #                 model=llm_config.model,
+        #                 temperature=llm_config.temperature,
+        #                 max_tokens=llm_config.max_tokens
+        #             )
+        #             result = parse_llm_response_to_plan(response)
+        #         except LLMCallError as e:
+        #             logger.error(f"LLM invocation failed: {e}")
+        #             result = clarify_plan(job.request.plan)  # Fallback
+        #     else:
+        #         result = clarify_plan(job.request.plan)  # No LLM configured
+        # ====================================================================
+        
+        # For now, use existing deterministic logic (LLM not invoked)
         result = clarify_plan(job.request.plan)
         
         # Mark as SUCCESS with result

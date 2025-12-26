@@ -20,6 +20,7 @@ import pytest
 from app.models.specs import JobStatus, PlanInput, SpecInput
 from app.services.clarification import clarify_plan, process_clarification_job, start_clarification_job
 from app.services.job_store import clear_all_jobs, get_job
+from app.services.llm_clients import ClarificationLLMConfig, DummyLLMClient
 
 
 class TestClarifyPlan:
@@ -307,3 +308,268 @@ class TestProcessClarificationJobService:
         assert result.result is not None
         assert result.result.specs[0].purpose == "Test Service"
         assert result.result.specs[0].must == ["Fast", "Reliable"]
+
+
+class TestClarificationServiceWithLLMConfig:
+    """Tests for clarification service with LLM configuration wiring."""
+    
+    def test_service_accepts_llm_config_without_invoking_llm(self):
+        """Test that service accepts LLM config but doesn't invoke it yet."""
+        spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature"])
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create LLM config for OpenAI
+        llm_config = ClarificationLLMConfig(
+            provider="openai",
+            model="gpt-5.1",
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        # Start job with LLM config
+        job = start_clarification_job(request, background_tasks, llm_config=llm_config)
+        assert job.status == JobStatus.PENDING
+        
+        # Process the job - should succeed with deterministic output
+        process_clarification_job(job.id)
+        
+        # Verify job completed successfully
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result is not None
+        assert processed_job.result.specs[0].purpose == "Test"
+    
+    def test_service_operates_without_llm_config_preserving_old_behavior(self):
+        """Test that service works without LLM config (backward compatibility)."""
+        spec = SpecInput(purpose="Legacy Test", vision="Old behavior")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Start job without LLM config (None is default)
+        job = start_clarification_job(request, background_tasks, llm_config=None)
+        
+        # Process without LLM config
+        process_clarification_job(job.id)
+        
+        # Should complete successfully with deterministic behavior
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result.specs[0].purpose == "Legacy Test"
+    
+    def test_service_with_dummy_llm_client_dependency_injection(self):
+        """Test dependency injection with DummyLLMClient for testing."""
+        spec = SpecInput(purpose="DI Test", vision="Dependency injection")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create a custom DummyLLMClient
+        dummy_client = DummyLLMClient(canned_response='{"test": "injected"}')
+        
+        # Start job
+        job = start_clarification_job(request, background_tasks)
+        
+        # Process with injected dummy client (LLM not invoked yet)
+        process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Should complete successfully
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+    
+    def test_service_initializes_llm_client_from_stored_config(self):
+        """Test that service initializes LLM client from stored config."""
+        spec = SpecInput(purpose="Config Test", vision="From storage")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create config with valid provider
+        llm_config = ClarificationLLMConfig(
+            provider="openai",
+            model="gpt-5.1"
+        )
+        
+        job = start_clarification_job(request, background_tasks, llm_config=llm_config)
+        
+        # Verify config was stored
+        assert 'llm_config' in job.config
+        
+        # Process job - should initialize client from stored config
+        # Mock factory to return dummy client (avoid needing real API keys)
+        with patch('app.services.clarification.get_llm_client') as mock_factory:
+            mock_factory.return_value = DummyLLMClient()
+            process_clarification_job(job.id)
+            # Verify factory was called
+            mock_factory.assert_called_once()
+        
+        # Job should complete successfully
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+    
+    def test_service_handles_llm_client_initialization_failure_gracefully(self):
+        """Test that service continues with deterministic behavior if LLM init fails."""
+        spec = SpecInput(purpose="Fallback Test", vision="Error handling")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create config with valid provider
+        llm_config = ClarificationLLMConfig(
+            provider="openai",
+            model="gpt-5.1"
+        )
+        
+        job = start_clarification_job(request, background_tasks, llm_config=llm_config)
+        
+        # Mock get_llm_client to raise an error
+        with patch('app.services.clarification.get_llm_client') as mock_factory:
+            mock_factory.side_effect = ValueError("Client initialization failed")
+            
+            # Process should handle error gracefully and continue
+            process_clarification_job(job.id)
+        
+        # Job should still complete successfully with deterministic output
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result.specs[0].purpose == "Fallback Test"
+    
+    def test_service_does_not_invoke_llm_client_yet(self):
+        """Test that LLM client is initialized but complete() is never called."""
+        spec = SpecInput(purpose="No Invocation", vision="Client not called")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create a mock client to track method calls
+        mock_client = MagicMock()
+        mock_client.complete = MagicMock()
+        
+        job = start_clarification_job(request, background_tasks)
+        
+        # Inject mock client and process
+        process_clarification_job(job.id, llm_client=mock_client)
+        
+        # Verify complete was NEVER called
+        mock_client.complete.assert_not_called()
+        
+        # Job should complete with deterministic behavior
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+    
+    def test_service_with_anthropic_config(self):
+        """Test service with Anthropic LLM configuration."""
+        spec = SpecInput(purpose="Anthropic Test", vision="Claude model")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        llm_config = ClarificationLLMConfig(
+            provider="anthropic",
+            model="claude-sonnet-4.5",
+            temperature=0.2
+        )
+        
+        job = start_clarification_job(request, background_tasks, llm_config=llm_config)
+        
+        # Mock factory to avoid needing real API key
+        with patch('app.services.clarification.get_llm_client') as mock_factory:
+            mock_factory.return_value = DummyLLMClient()
+            process_clarification_job(job.id)
+        
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+    
+    def test_service_preserves_existing_config_when_adding_llm_config(self):
+        """Test that adding llm_config doesn't overwrite existing config."""
+        spec = SpecInput(purpose="Config Merge", vision="Preserve old config")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Existing config
+        existing_config = {"custom_field": "preserved", "another_key": 123}
+        
+        llm_config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
+        
+        job = start_clarification_job(
+            request, 
+            background_tasks, 
+            config=existing_config,
+            llm_config=llm_config
+        )
+        
+        # Verify both configs are present
+        assert 'custom_field' in job.config
+        assert job.config['custom_field'] == "preserved"
+        assert 'llm_config' in job.config
+        assert job.config['llm_config']['provider'] == "openai"
+    
+    def test_service_llm_config_stored_as_dict(self):
+        """Test that LLM config is properly serialized to dict for storage."""
+        spec = SpecInput(purpose="Serialization Test", vision="Dict storage")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        llm_config = ClarificationLLMConfig(
+            provider="openai",
+            model="gpt-5.1",
+            temperature=0.8,
+            max_tokens=2000
+        )
+        
+        job = start_clarification_job(request, background_tasks, llm_config=llm_config)
+        
+        # Verify stored as dict, not Pydantic model
+        stored_config = job.config['llm_config']
+        assert isinstance(stored_config, dict)
+        assert stored_config['provider'] == "openai"
+        assert stored_config['model'] == "gpt-5.1"
+        assert stored_config['temperature'] == 0.8
+        assert stored_config['max_tokens'] == 2000
+    
+    def test_service_reconstructs_llm_config_from_dict(self):
+        """Test that service correctly reconstructs ClarificationLLMConfig from dict."""
+        spec = SpecInput(purpose="Reconstruction Test", vision="Dict to model")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        llm_config = ClarificationLLMConfig(
+            provider="openai",
+            model="gpt-5.1",
+            temperature=0.5
+        )
+        
+        job = start_clarification_job(request, background_tasks, llm_config=llm_config)
+        
+        # Track config reconstruction
+        reconstructed_configs = []
+        
+        def capture_config(provider, config):
+            reconstructed_configs.append(config)
+            return DummyLLMClient()
+        
+        with patch('app.services.clarification.get_llm_client', side_effect=capture_config):
+            process_clarification_job(job.id)
+        
+        # Verify config was reconstructed correctly
+        assert len(reconstructed_configs) == 1
+        reconstructed = reconstructed_configs[0]
+        assert isinstance(reconstructed, ClarificationLLMConfig)
+        assert reconstructed.provider == "openai"
+        assert reconstructed.model == "gpt-5.1"
+        assert reconstructed.temperature == 0.5
