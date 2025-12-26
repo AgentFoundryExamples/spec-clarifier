@@ -13,7 +13,12 @@
 # limitations under the License.
 """Services package for spec clarifier."""
 
-from app.services.clarification import clarify_plan
+from app.services.clarification import (
+    JSONCleanupError,
+    build_clarification_prompts,
+    clarify_plan,
+    cleanup_and_parse_json,
+)
 from app.services.job_store import (
     JobNotFoundError,
     cleanup_expired_jobs,
@@ -26,12 +31,15 @@ from app.services.job_store import (
 )
 
 __all__ = [
+    "build_clarification_prompts",
     "clarify_plan",
+    "cleanup_and_parse_json",
     "cleanup_expired_jobs",
     "clear_all_jobs",
     "create_job",
     "delete_job",
     "get_job",
+    "JSONCleanupError",
     "JobNotFoundError",
     "list_jobs",
     "update_job",
