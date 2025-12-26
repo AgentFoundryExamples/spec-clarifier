@@ -662,7 +662,7 @@ class TestClarificationConfig:
     """Tests for ClarificationConfig model."""
     
     def test_clarification_config_with_all_required_fields(self):
-        """Test creating ClarificationConfig with all required fields."""
+        """Test creating ClarificationConfig with all fields specified."""
         config = ClarificationConfig(
             provider="openai",
             model="gpt-5.1",
@@ -672,8 +672,8 @@ class TestClarificationConfig:
         assert config.provider == "openai"
         assert config.model == "gpt-5.1"
         assert config.system_prompt_id == "default"
-        assert config.temperature == 0.1  # default value
-        assert config.max_tokens is None  # default value
+        assert config.temperature is None  # Not specified, so None
+        assert config.max_tokens is None  # Not specified, so None
     
     def test_clarification_config_with_all_fields(self):
         """Test creating ClarificationConfig with all fields including optional ones."""
@@ -749,15 +749,15 @@ class TestClarificationConfig:
         errors = exc_info.value.errors()
         assert any(error["loc"] == ("system_prompt_id",) for error in errors)
     
-    def test_clarification_config_temperature_defaults_to_0_1(self):
-        """Test that temperature defaults to 0.1."""
+    def test_clarification_config_temperature_defaults_to_none(self):
+        """Test that temperature defaults to None when not specified."""
         config = ClarificationConfig(
             provider="openai",
             model="gpt-5.1",
             system_prompt_id="default"
         )
         
-        assert config.temperature == 0.1
+        assert config.temperature is None
     
     def test_clarification_config_temperature_range_valid(self):
         """Test that valid temperature values are accepted."""
@@ -875,17 +875,16 @@ class TestClarificationConfig:
         errors = exc_info.value.errors()
         assert any(error["type"] == "extra_forbidden" for error in errors)
     
-    def test_clarification_config_missing_required_field(self):
-        """Test that missing required fields raise validation error."""
-        with pytest.raises(ValidationError) as exc_info:
-            ClarificationConfig(
-                provider="openai",
-                model="gpt-5.1"
-                # Missing system_prompt_id
-            )
+    def test_clarification_config_all_fields_optional(self):
+        """Test that all fields are optional and can be omitted."""
+        # All fields are optional now to support partial configs
+        config = ClarificationConfig()
         
-        errors = exc_info.value.errors()
-        assert any(error["loc"] == ("system_prompt_id",) for error in errors)
+        assert config.provider is None
+        assert config.model is None
+        assert config.system_prompt_id is None
+        assert config.temperature is None
+        assert config.max_tokens is None
     
     def test_clarification_config_serialization(self):
         """Test that ClarificationConfig can be serialized to dict."""

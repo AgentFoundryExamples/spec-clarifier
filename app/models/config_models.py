@@ -35,6 +35,10 @@ class ClarificationConfig(BaseModel):
     - Reusable across API and service layers
     - Compatible with global defaults and runtime overrides
     
+    All fields are optional to support partial config overrides. When used
+    in a request, missing fields will be filled from the default config
+    during validation/merging.
+    
     Attributes:
         provider: LLM provider identifier (must be 'openai' or 'anthropic')
         model: Model identifier specific to the provider (e.g., 'gpt-5.1', 'claude-sonnet-4.5')
@@ -43,6 +47,7 @@ class ClarificationConfig(BaseModel):
         max_tokens: Optional maximum tokens to generate in response
     
     Example:
+        >>> # Full config
         >>> config = ClarificationConfig(
         ...     provider="openai",
         ...     model="gpt-5.1",
@@ -50,26 +55,29 @@ class ClarificationConfig(BaseModel):
         ...     temperature=0.1,
         ...     max_tokens=2000
         ... )
+        >>> 
+        >>> # Partial config (only override model)
+        >>> config = ClarificationConfig(model="gpt-4o")
     """
     
     model_config = ConfigDict(extra="forbid")
     
-    provider: Literal["openai", "anthropic"] = Field(
-        ...,
+    provider: Optional[Literal["openai", "anthropic"]] = Field(
+        default=None,
         description="LLM provider identifier (must be 'openai' or 'anthropic')"
     )
-    model: str = Field(
-        ...,
+    model: Optional[str] = Field(
+        default=None,
         min_length=1,
         description="Model identifier specific to the provider"
     )
-    system_prompt_id: str = Field(
-        ...,
+    system_prompt_id: Optional[str] = Field(
+        default=None,
         min_length=1,
         description="Identifier for the system prompt template to use"
     )
-    temperature: float = Field(
-        default=0.1,
+    temperature: Optional[float] = Field(
+        default=None,
         ge=0.0,
         le=2.0,
         description="Sampling temperature for response generation"

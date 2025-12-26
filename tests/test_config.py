@@ -788,3 +788,42 @@ class TestValidateAndMergeConfig:
         assert result.provider == "anthropic"
         assert result.model == "claude-sonnet-4.5"
         assert result.temperature == 0.8
+    
+    def test_partial_config_merges_with_defaults(self):
+        """Test that partial config (only some fields) merges with defaults."""
+        from app.config import validate_and_merge_config, get_default_config
+        from app.models.config_models import ClarificationConfig
+        
+        default = get_default_config()
+        
+        # Only override model, leave other fields as None
+        request = ClarificationConfig(model="gpt-4o")
+        
+        result = validate_and_merge_config(request)
+        
+        # Should inherit provider and system_prompt_id from default
+        assert result.provider == default.provider
+        assert result.system_prompt_id == default.system_prompt_id
+        assert result.temperature == default.temperature
+        
+        # Should use overridden model
+        assert result.model == "gpt-4o"
+    
+    def test_partial_config_with_temperature_only(self):
+        """Test partial config overriding only temperature."""
+        from app.config import validate_and_merge_config, get_default_config
+        from app.models.config_models import ClarificationConfig
+        
+        default = get_default_config()
+        
+        request = ClarificationConfig(temperature=0.5)
+        
+        result = validate_and_merge_config(request)
+        
+        # Should inherit all other fields from default
+        assert result.provider == default.provider
+        assert result.model == default.model
+        assert result.system_prompt_id == default.system_prompt_id
+        
+        # Should use overridden temperature
+        assert result.temperature == 0.5

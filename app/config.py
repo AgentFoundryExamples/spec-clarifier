@@ -407,7 +407,7 @@ def validate_and_merge_config(
         >>> config = validate_and_merge_config(None)
         >>> 
         >>> # Partial override - model only
-        >>> request = ClarificationConfig(provider="openai", model="gpt-4o", system_prompt_id="default")
+        >>> request = ClarificationConfig(model="gpt-4o")
         >>> config = validate_and_merge_config(request)
         >>> 
         >>> # Full override
@@ -434,10 +434,19 @@ def validate_and_merge_config(
     # Get default config (this returns a copy, so it's safe)
     default = get_default_config()
     
-    # Merge: request fields override defaults
-    # Create a new config with request values, using model_copy with update
-    # This creates a defensive copy and prevents mutation of defaults
-    merged = request_config.model_copy()
+    # Merge: request fields override defaults, None fields inherit from default
+    # Build a dict with merged values
+    merged_values = {}
+    
+    # Merge each field: use request value if not None, otherwise use default
+    merged_values['provider'] = request_config.provider if request_config.provider is not None else default.provider
+    merged_values['model'] = request_config.model if request_config.model is not None else default.model
+    merged_values['system_prompt_id'] = request_config.system_prompt_id if request_config.system_prompt_id is not None else default.system_prompt_id
+    merged_values['temperature'] = request_config.temperature if request_config.temperature is not None else default.temperature
+    merged_values['max_tokens'] = request_config.max_tokens if request_config.max_tokens is not None else default.max_tokens
+    
+    # Create merged config
+    merged = ClarificationConfig(**merged_values)
     
     # Validate the merged config's provider/model combination
     validate_provider_model(merged.provider, merged.model)
