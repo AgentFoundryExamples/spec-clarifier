@@ -445,18 +445,12 @@ class TestAsyncJobLifecycleEdgeCases:
         
         job = start_clarification_job(request, background_tasks)
         
+        # Create dummy client once before processing multiple times
+        dummy_client = _create_dummy_client_with_response([spec])
+        
         # Process the same job multiple times
-        # Create dummy client
-        dummy_client = _create_dummy_client_with_response([spec])
-        
         await process_clarification_job(job.id, llm_client=dummy_client)
-        # Create dummy client
-        dummy_client = _create_dummy_client_with_response([spec])
-        
         await process_clarification_job(job.id, llm_client=dummy_client)
-        # Create dummy client
-        dummy_client = _create_dummy_client_with_response([spec])
-        
         await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Should end in SUCCESS state (second and third calls should skip)
