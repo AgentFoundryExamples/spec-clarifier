@@ -424,22 +424,15 @@ def validate_and_merge_config(
     if request_config is None:
         return get_default_config()
     
-    # Validate type
-    if not isinstance(request_config, ClarificationConfig):
-        raise TypeError(
-            f"request_config must be a ClarificationConfig instance or None, "
-            f"got {type(request_config).__name__}"
-        )
-    
     # Get default config (this returns a copy, so it's safe)
     default = get_default_config()
     
     # Merge: request fields override defaults, None fields inherit from default
     # Build a dict with merged values using dict comprehension
-    field_names = ['provider', 'model', 'system_prompt_id', 'temperature', 'max_tokens']
+    # Dynamically get fields from the model to avoid hardcoding field names
     merged_values = {
         field: getattr(request_config, field) if getattr(request_config, field) is not None else getattr(default, field)
-        for field in field_names
+        for field in ClarificationConfig.model_fields.keys()
     }
     
     # Create merged config

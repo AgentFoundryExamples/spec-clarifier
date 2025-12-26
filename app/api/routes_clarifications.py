@@ -123,20 +123,12 @@ def create_clarification_job(
     except ConfigValidationError as e:
         logger.warning(f"Config validation failed: {e}")
         raise HTTPException(status_code=400, detail=str(e))
-    except TypeError as e:
-        logger.warning(f"Config type error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
     
     # Log if non-default config is used
     if request.config is not None:
-        logger.info(
-            f"Creating job with overridden config: "
-            f"provider={merged_config.provider}, "
-            f"model={merged_config.model}, "
-            f"system_prompt_id={merged_config.system_prompt_id}, "
-            f"temperature={merged_config.temperature}, "
-            f"max_tokens={merged_config.max_tokens}"
-        )
+        # Log only the fields that were actually provided in the request
+        overridden_fields = {k: v for k, v in request.config.model_dump().items() if v is not None}
+        logger.info(f"Creating job with overridden config fields: {overridden_fields}")
     
     # Convert to ClarificationRequest for service layer
     clarification_request = ClarificationRequest(

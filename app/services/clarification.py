@@ -543,17 +543,25 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         # Resolve LLM configuration: use stored config or apply defaults
         llm_config = None
         if job.config and 'clarification_config' in job.config:
-            # Reconstruct ClarificationConfig from stored dict
-            clarification_config_dict = job.config['clarification_config']
-            clarification_config = ClarificationConfig(**clarification_config_dict)
-            
-            # Convert to ClarificationLLMConfig (without system_prompt_id)
-            llm_config = ClarificationLLMConfig(
-                provider=clarification_config.provider,
-                model=clarification_config.model,
-                temperature=clarification_config.temperature,
-                max_tokens=clarification_config.max_tokens
-            )
+            # Reconstruct ClarificationConfig from stored dict with error handling
+            try:
+                clarification_config_dict = job.config['clarification_config']
+                clarification_config = ClarificationConfig(**clarification_config_dict)
+                
+                # Convert to ClarificationLLMConfig (without system_prompt_id)
+                llm_config = ClarificationLLMConfig(
+                    provider=clarification_config.provider,
+                    model=clarification_config.model,
+                    temperature=clarification_config.temperature,
+                    max_tokens=clarification_config.max_tokens
+                )
+            except Exception as e:
+                # If config reconstruction fails, log error and fall through to defaults
+                logger.warning(
+                    f"Failed to reconstruct clarification_config for job {job_id}: {e}. "
+                    "Falling back to default configuration."
+                )
+                llm_config = None
         elif job.config and 'llm_config' in job.config:
             # Legacy support: Reconstruct ClarificationLLMConfig from stored dict
             llm_config_dict = job.config['llm_config']

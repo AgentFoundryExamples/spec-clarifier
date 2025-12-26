@@ -2098,6 +2098,10 @@ class TestPerRequestConfig:
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
+        # Check that the error message is specific and helpful
+        error_detail = str(data["detail"])
+        assert "'invalid-provider'" in error_detail or "invalid-provider" in error_detail
+        assert "openai" in error_detail.lower() or "anthropic" in error_detail.lower()
     
     def test_config_persisted_in_job(self, client, enabled_debug_client):
         """Test that config is persisted in the job."""
