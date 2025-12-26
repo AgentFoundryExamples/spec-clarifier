@@ -94,6 +94,15 @@ The application can be configured via environment variables with the `APP_` pref
 - `APP_APP_DESCRIPTION`: Application description (default: "A service for clarifying specifications")
 - `APP_DEBUG`: Enable debug mode (default: False)
 
+#### Development Flags
+
+- `APP_SHOW_JOB_RESULT`: Include result payload in GET /v1/clarifications/{job_id} responses (default: False)
+  - **Production Mode (False)**: Result field is always `null`, keeping responses lightweight
+  - **Development Mode (True)**: Result field contains the ClarifiedPlan when job status is SUCCESS
+  - **Important**: POST responses always return lightweight summaries regardless of this flag
+  - **Use Case**: Enable in development/debugging to inspect results directly in the API response
+  - **Note**: Settings are cached at application startup. To change this flag at runtime, restart the service or use environment variables before starting the application.
+
 #### CORS Configuration
 
 CORS (Cross-Origin Resource Sharing) is configured to allow requests from localhost by default:
@@ -107,6 +116,7 @@ Example:
 ```bash
 export APP_APP_NAME="My Spec Clarifier"
 export APP_DEBUG=true
+export APP_SHOW_JOB_RESULT=true  # Enable for development/debugging
 export APP_CORS_ORIGINS="http://localhost:3000,http://localhost:8080,https://myapp.com"
 uvicorn app.main:app --reload
 ```
@@ -130,13 +140,17 @@ Returns the health status of the service:
 
 ### Clarifications
 
-#### Preview Clarifications
+#### Preview Clarifications (Synchronous, Developer-Only)
 
 ```bash
 POST /v1/clarifications/preview
 ```
 
-Accepts a ClarificationRequest containing specifications with open questions and returns a ClarifiedPlan with the questions removed. This endpoint provides a synchronous preview of the clarification process without processing answers or triggering async/LLM operations.
+⚠️ **DEVELOPER-ONLY ENDPOINT - NOT FOR PRODUCTION USE**
+
+This endpoint provides a synchronous preview of the clarification process for development and debugging purposes only. It returns immediately with the clarified specifications without async processing or LLM operations.
+
+**For production use cases**, use POST /v1/clarifications to create an async job and poll GET /v1/clarifications/{job_id} for results.
 
 **Request Body:**
 
@@ -224,7 +238,7 @@ Returned when the request payload is malformed or missing required fields:
 POST /v1/clarifications
 ```
 
-Creates an asynchronous clarification job and returns immediately with job details. The job will be processed in the background, transitioning through PENDING → RUNNING → SUCCESS/FAILED states. Use the returned job ID to poll for status and retrieve results.
+Creates an asynchronous clarification job and returns immediately with lightweight job details. The job will be processed in the background, transitioning through PENDING → RUNNING → SUCCESS/FAILED states. Use the returned job ID to poll for status and retrieve results.
 
 **Request Body:**
 
@@ -251,7 +265,7 @@ Same format as the preview endpoint:
 
 **Response (202 Accepted):**
 
-Returns immediately with job details in PENDING status:
+Returns immediately with lightweight job summary in PENDING status. **Note**: The response does NOT include the full request or result payload to keep responses lightweight.
 
 ```json
 {
@@ -259,25 +273,7 @@ Returns immediately with job details in PENDING status:
   "status": "PENDING",
   "created_at": "2025-12-26T05:40:11.545362Z",
   "updated_at": "2025-12-26T05:40:11.545362Z",
-  "last_error": null,
-  "request": {
-    "plan": {
-      "specs": [
-        {
-          "purpose": "Build a web application",
-          "vision": "A modern, scalable web app",
-          "must": ["User authentication", "Database integration"],
-          "dont": ["Complex UI frameworks"],
-          "nice": ["Dark mode", "Mobile responsive"],
-          "open_questions": ["Which database should we use?", "What auth provider?"],
-          "assumptions": ["Users have modern browsers"]
-        }
-      ]
-    },
-    "answers": []
-  },
-  "result": null,
-  "config": null
+  "last_error": null
 }
 ```
 
@@ -315,11 +311,13 @@ GET /v1/clarifications/{job_id}
 
 Retrieves the current status and details of a clarification job. Use this endpoint to poll for job completion after creating an async job.
 
+**Important**: By default (production mode), the `result` field is always `null` to keep responses lightweight. To view results in API responses during development, set `APP_SHOW_JOB_RESULT=true`.
+
 **Path Parameters:**
 
 - `job_id` (UUID): The unique identifier of the job
 
-**Response (200 OK) - Job in Progress:**
+**Response (200 OK) - Job in Progress (Production Mode):**
 
 ```json
 {
@@ -328,18 +326,11 @@ Retrieves the current status and details of a clarification job. Use this endpoi
   "created_at": "2025-12-26T05:40:11.545362Z",
   "updated_at": "2025-12-26T05:40:11.546315Z",
   "last_error": null,
-  "request": {
-    "plan": {
-      "specs": [...]
-    },
-    "answers": []
-  },
-  "result": null,
-  "config": null
+  "result": null
 }
 ```
 
-**Response (200 OK) - Job Completed Successfully:**
+**Response (200 OK) - Job Completed Successfully (Production Mode):**
 
 ```json
 {
@@ -348,12 +339,19 @@ Retrieves the current status and details of a clarification job. Use this endpoi
   "created_at": "2025-12-26T05:40:11.545362Z",
   "updated_at": "2025-12-26T05:40:11.890234Z",
   "last_error": null,
-  "request": {
-    "plan": {
-      "specs": [...]
-    },
-    "answers": []
-  },
+  "result": null
+}
+```
+
+**Response (200 OK) - Job Completed Successfully (Development Mode with APP_SHOW_JOB_RESULT=true):**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "SUCCESS",
+  "created_at": "2025-12-26T05:40:11.545362Z",
+  "updated_at": "2025-12-26T05:40:11.890234Z",
+  "last_error": null,
   "result": {
     "specs": [
       {
@@ -365,8 +363,7 @@ Retrieves the current status and details of a clarification job. Use this endpoi
         "assumptions": []
       }
     ]
-  },
-  "config": null
+  }
 }
 ```
 
@@ -379,14 +376,7 @@ Retrieves the current status and details of a clarification job. Use this endpoi
   "created_at": "2025-12-26T05:40:11.545362Z",
   "updated_at": "2025-12-26T05:40:11.789012Z",
   "last_error": "ValueError: Invalid specification format",
-  "request": {
-    "plan": {
-      "specs": [...]
-    },
-    "answers": []
-  },
-  "result": null,
-  "config": null
+  "result": null
 }
 ```
 
@@ -417,6 +407,146 @@ while true; do
   
   sleep 0.5
 done
+```
+
+### Complete Async Workflow Example
+
+This section demonstrates a complete manual workflow for creating, polling, and handling both success and failure scenarios using curl.
+
+#### Step 1: Create a Clarification Job
+
+```bash
+# Create a job with specifications
+curl -X POST "http://localhost:8000/v1/clarifications" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "plan": {
+      "specs": [
+        {
+          "purpose": "Build a web application",
+          "vision": "A modern, scalable web app",
+          "must": ["User authentication", "Database integration"],
+          "dont": ["Complex UI frameworks"],
+          "nice": ["Dark mode", "Mobile responsive"],
+          "open_questions": ["Which database should we use?"],
+          "assumptions": ["Users have modern browsers"]
+        }
+      ]
+    },
+    "answers": []
+  }'
+
+# Response (HTTP 202):
+# {
+#   "id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "PENDING",
+#   "created_at": "2025-12-26T06:00:00.000000Z",
+#   "updated_at": "2025-12-26T06:00:00.000000Z",
+#   "last_error": null
+# }
+
+# Save the job ID for polling
+export JOB_ID="550e8400-e29b-41d4-a716-446655440000"
+```
+
+#### Step 2: Poll for Job Completion
+
+```bash
+# Poll until job completes (SUCCESS or FAILED)
+while true; do
+  RESPONSE=$(curl -s "http://localhost:8000/v1/clarifications/$JOB_ID")
+  STATUS=$(echo "$RESPONSE" | jq -r '.status')
+  echo "Job status: $STATUS"
+  
+  if [ "$STATUS" = "SUCCESS" ] || [ "$STATUS" = "FAILED" ]; then
+    echo "Job completed!"
+    echo "$RESPONSE" | jq .
+    break
+  fi
+  
+  sleep 0.5
+done
+```
+
+#### Step 3: Inspect Success Response (Production Mode)
+
+In production mode (default, `APP_SHOW_JOB_RESULT=false`), the result field is always null:
+
+```bash
+curl -s "http://localhost:8000/v1/clarifications/$JOB_ID" | jq .
+
+# Response:
+# {
+#   "id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "SUCCESS",
+#   "created_at": "2025-12-26T06:00:00.000000Z",
+#   "updated_at": "2025-12-26T06:00:01.500000Z",
+#   "last_error": null,
+#   "result": null    # Always null in production mode
+# }
+```
+
+#### Step 4: Inspect Success Response (Development Mode)
+
+To view results during development, set `APP_SHOW_JOB_RESULT=true`:
+
+```bash
+# Start server with flag enabled
+export APP_SHOW_JOB_RESULT=true
+uvicorn app.main:app --reload
+
+# Create and poll job (same as above)
+# GET response includes result:
+# {
+#   "id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "SUCCESS",
+#   "created_at": "2025-12-26T06:00:00.000000Z",
+#   "updated_at": "2025-12-26T06:00:01.500000Z",
+#   "last_error": null,
+#   "result": {
+#     "specs": [
+#       {
+#         "purpose": "Build a web application",
+#         "vision": "A modern, scalable web app",
+#         "must": ["User authentication", "Database integration"],
+#         "dont": ["Complex UI frameworks"],
+#         "nice": ["Dark mode", "Mobile responsive"],
+#         "assumptions": ["Users have modern browsers"]
+#         # Note: open_questions is removed from clarified specs
+#       }
+#     ]
+#   }
+# }
+```
+
+#### Step 5: Inspect Failure Response
+
+When a job fails, the `last_error` field contains the error message:
+
+```bash
+curl -s "http://localhost:8000/v1/clarifications/$JOB_ID" | jq .
+
+# Response:
+# {
+#   "id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "FAILED",
+#   "created_at": "2025-12-26T06:00:00.000000Z",
+#   "updated_at": "2025-12-26T06:00:01.200000Z",
+#   "last_error": "ValueError: Invalid specification format",
+#   "result": null
+# }
+```
+
+#### Step 6: Handle Edge Cases
+
+```bash
+# Non-existent job (404)
+curl -s "http://localhost:8000/v1/clarifications/00000000-0000-0000-0000-000000000000"
+# Response: {"detail": "Job 00000000-0000-0000-0000-000000000000 not found"}
+
+# Invalid UUID (422)
+curl -s "http://localhost:8000/v1/clarifications/invalid-uuid"
+# Response: {"detail": [{"type": "uuid_parsing", "loc": ["path", "job_id"], ...}]}
 ```
 
 ### Job Lifecycle

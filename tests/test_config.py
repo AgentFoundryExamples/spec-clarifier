@@ -35,6 +35,7 @@ def test_settings_defaults():
     assert settings.app_version == "0.1.0"
     assert settings.app_description == "A service for clarifying specifications"
     assert settings.debug is False
+    assert settings.show_job_result is False
     assert settings.cors_origins == "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
     assert settings.cors_allow_credentials is True
     assert settings.cors_allow_methods == "*"
@@ -176,3 +177,29 @@ def test_get_cors_headers_list_explicit(monkeypatch):
     assert "Content-Type" in headers
     assert "Authorization" in headers
     assert "X-Custom" in headers
+
+
+def test_show_job_result_default():
+    """Test that show_job_result defaults to False."""
+    settings = get_settings()
+    assert settings.show_job_result is False
+
+
+def test_show_job_result_from_environment(monkeypatch):
+    """Test that show_job_result can be enabled via environment variable."""
+    monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
+    
+    get_settings.cache_clear()
+    settings = get_settings()
+    
+    assert settings.show_job_result is True
+
+
+def test_show_job_result_false_from_environment(monkeypatch):
+    """Test that show_job_result can be explicitly disabled via environment variable."""
+    monkeypatch.setenv("APP_SHOW_JOB_RESULT", "false")
+    
+    get_settings.cache_clear()
+    settings = get_settings()
+    
+    assert settings.show_job_result is False

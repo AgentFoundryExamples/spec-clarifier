@@ -166,3 +166,59 @@ class ClarificationJob(BaseModel):
     request: ClarificationRequest = Field(..., description="The original clarification request")
     result: Optional[ClarifiedPlan] = Field(None, description="Optional clarified plan result when job succeeds")
     config: Optional[dict] = Field(None, description="Optional configuration dictionary for job processing")
+
+
+class JobSummaryResponse(BaseModel):
+    """Lightweight job summary for POST responses.
+    
+    Returns minimal job metadata without the full request or result payloads.
+    This keeps POST responses lightweight as required by the API specification.
+    
+    Attributes:
+        id: Unique identifier for the job
+        status: Current status of the job
+        created_at: UTC timestamp when job was created
+        updated_at: UTC timestamp when job was last updated
+        last_error: Optional error message if job failed
+    """
+    
+    model_config = ConfigDict(extra="forbid")
+    
+    id: UUID = Field(..., description="Unique identifier for the job")
+    status: JobStatus = Field(..., description="Current status of the job")
+    created_at: datetime = Field(..., description="UTC timestamp when job was created")
+    updated_at: datetime = Field(..., description="UTC timestamp when job was last updated")
+    last_error: Optional[str] = Field(None, description="Optional error message if job failed")
+
+
+class JobStatusResponse(BaseModel):
+    """Job status response with conditional result field.
+    
+    Returns job status and details. The result field is always present in the response
+    schema but is conditionally populated based on the APP_SHOW_JOB_RESULT flag and
+    job status. In production mode (flag=False), the result is always set to null to
+    keep responses lightweight and prevent clients from depending on embedded results.
+    
+    The result field behavior:
+    - Production mode (APP_SHOW_JOB_RESULT=false): result is always null
+    - Development mode (APP_SHOW_JOB_RESULT=true): result contains ClarifiedPlan when
+      job status is SUCCESS, otherwise null
+    
+    Attributes:
+        id: Unique identifier for the job
+        status: Current status of the job
+        created_at: UTC timestamp when job was created
+        updated_at: UTC timestamp when job was last updated
+        last_error: Optional error message if job failed
+        result: Optional clarified plan result (null in production, populated in
+                development mode only when status is SUCCESS)
+    """
+    
+    model_config = ConfigDict(extra="forbid")
+    
+    id: UUID = Field(..., description="Unique identifier for the job")
+    status: JobStatus = Field(..., description="Current status of the job")
+    created_at: datetime = Field(..., description="UTC timestamp when job was created")
+    updated_at: datetime = Field(..., description="UTC timestamp when job was last updated")
+    last_error: Optional[str] = Field(None, description="Optional error message if job failed")
+    result: Optional[ClarifiedPlan] = Field(None, description="Optional clarified plan result when job succeeds (development mode only)")
