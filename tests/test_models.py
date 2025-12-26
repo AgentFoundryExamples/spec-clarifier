@@ -14,12 +14,16 @@
 """Tests for specification models."""
 
 import pytest
+from datetime import datetime, timezone
+from uuid import uuid4
 from pydantic import ValidationError
 
 from app.models.specs import (
+    ClarificationJob,
     ClarificationRequest,
     ClarifiedPlan,
     ClarifiedSpec,
+    JobStatus,
     PlanInput,
     QuestionAnswer,
     SpecInput,
@@ -282,3 +286,253 @@ class TestClarificationRequest:
         assert data["plan"]["specs"][0]["purpose"] == "Build a web app"
         assert data["plan"]["specs"][0]["must"] == ["Auth"]
         assert data["answers"] == []
+
+
+class TestJobStatus:
+    """Tests for JobStatus enum."""
+    
+    def test_job_status_values(self):
+        """Test JobStatus enum has correct values."""
+        assert JobStatus.PENDING == "PENDING"
+        assert JobStatus.RUNNING == "RUNNING"
+        assert JobStatus.SUCCESS == "SUCCESS"
+        assert JobStatus.FAILED == "FAILED"
+    
+    def test_job_status_all_members(self):
+        """Test all expected enum members exist."""
+        expected_members = {"PENDING", "RUNNING", "SUCCESS", "FAILED"}
+        actual_members = {member.value for member in JobStatus}
+        
+        assert actual_members == expected_members
+    
+    def test_job_status_string_comparison(self):
+        """Test JobStatus can be compared with strings."""
+        assert JobStatus.PENDING == "PENDING"
+        assert JobStatus.RUNNING == "RUNNING"
+    
+    def test_job_status_in_pydantic_model(self):
+        """Test JobStatus works in pydantic model validation."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        now = datetime.now(timezone.utc)
+        
+        job = ClarificationJob(
+            id=uuid4(),
+            status=JobStatus.PENDING,
+            created_at=now,
+            updated_at=now,
+            request=request,
+        )
+        
+        assert job.status == JobStatus.PENDING
+
+
+class TestClarificationJob:
+    """Tests for ClarificationJob model."""
+    
+    def test_clarification_job_with_required_fields(self):
+        """Test creating ClarificationJob with only required fields."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        now = datetime.now(timezone.utc)
+        job_id = uuid4()
+        
+        job = ClarificationJob(
+            id=job_id,
+            status=JobStatus.PENDING,
+            created_at=now,
+            updated_at=now,
+            request=request,
+        )
+        
+        assert job.id == job_id
+        assert job.status == JobStatus.PENDING
+        assert job.created_at == now
+        assert job.updated_at == now
+        assert job.request == request
+        assert job.result is None
+        assert job.last_error is None
+        assert job.config is None
+    
+    def test_clarification_job_with_all_fields(self):
+        """Test creating ClarificationJob with all fields."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        clarified_spec = ClarifiedSpec(purpose="Test", vision="Test vision")
+        result = ClarifiedPlan(specs=[clarified_spec])
+        
+        now = datetime.now(timezone.utc)
+        job_id = uuid4()
+        config = {"model": "gpt-4", "temperature": 0.7}
+        
+        job = ClarificationJob(
+            id=job_id,
+            status=JobStatus.SUCCESS,
+            created_at=now,
+            updated_at=now,
+            last_error=None,
+            request=request,
+            result=result,
+            config=config,
+        )
+        
+        assert job.id == job_id
+        assert job.status == JobStatus.SUCCESS
+        assert job.created_at == now
+        assert job.updated_at == now
+        assert job.request == request
+        assert job.result == result
+        assert job.last_error is None
+        assert job.config == config
+    
+    def test_clarification_job_with_error(self):
+        """Test creating ClarificationJob with error."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        now = datetime.now(timezone.utc)
+        
+        job = ClarificationJob(
+            id=uuid4(),
+            status=JobStatus.FAILED,
+            created_at=now,
+            updated_at=now,
+            last_error="Processing failed",
+            request=request,
+        )
+        
+        assert job.status == JobStatus.FAILED
+        assert job.last_error == "Processing failed"
+    
+    def test_clarification_job_missing_required_field(self):
+        """Test that missing required fields raise validation error."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        now = datetime.now(timezone.utc)
+        
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationJob(
+                id=uuid4(),
+                created_at=now,
+                updated_at=now,
+                request=request,
+                # Missing status
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("status",) for error in errors)
+    
+    def test_clarification_job_rejects_extra_fields(self):
+        """Test that extra fields are rejected."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        now = datetime.now(timezone.utc)
+        
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationJob(
+                id=uuid4(),
+                status=JobStatus.PENDING,
+                created_at=now,
+                updated_at=now,
+                request=request,
+                extra_field="should not be allowed",
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["type"] == "extra_forbidden" for error in errors)
+    
+    def test_clarification_job_serialization(self):
+        """Test that ClarificationJob can be serialized to dict."""
+        spec = SpecInput(purpose="Test", vision="Test vision", must=["Auth"])
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        now = datetime.now(timezone.utc)
+        job_id = uuid4()
+        
+        job = ClarificationJob(
+            id=job_id,
+            status=JobStatus.PENDING,
+            created_at=now,
+            updated_at=now,
+            request=request,
+        )
+        
+        data = job.model_dump()
+        
+        assert data["id"] == job_id
+        assert data["status"] == "PENDING"
+        assert data["request"]["plan"]["specs"][0]["purpose"] == "Test"
+        assert data["result"] is None
+    
+    def test_clarification_job_with_config_dict(self):
+        """Test ClarificationJob accepts arbitrary config dict."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        now = datetime.now(timezone.utc)
+        
+        complex_config = {
+            "model": "gpt-4",
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "nested": {
+                "param1": "value1",
+                "param2": 42,
+            },
+            "list_param": [1, 2, 3],
+        }
+        
+        job = ClarificationJob(
+            id=uuid4(),
+            status=JobStatus.PENDING,
+            created_at=now,
+            updated_at=now,
+            request=request,
+            config=complex_config,
+        )
+        
+        assert job.config == complex_config
+        assert job.config["nested"]["param1"] == "value1"
+    
+    def test_clarification_job_utc_aware_timestamps(self):
+        """Test that timestamps are UTC-aware."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        now = datetime.now(timezone.utc)
+        
+        job = ClarificationJob(
+            id=uuid4(),
+            status=JobStatus.PENDING,
+            created_at=now,
+            updated_at=now,
+            request=request,
+        )
+        
+        assert job.created_at.tzinfo is not None
+        assert job.updated_at.tzinfo is not None
+    
+    def test_clarification_job_status_enum_validation(self):
+        """Test that invalid status values are rejected."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        now = datetime.now(timezone.utc)
+        
+        with pytest.raises(ValidationError) as exc_info:
+            ClarificationJob(
+                id=uuid4(),
+                status="INVALID_STATUS",
+                created_at=now,
+                updated_at=now,
+                request=request,
+            )
+        
+        errors = exc_info.value.errors()
+        assert any(error["loc"] == ("status",) for error in errors)
