@@ -1106,7 +1106,7 @@ class TestJSONCleanupEdgeCases:
         """Test JSON with escaped characters is handled correctly."""
         from app.services.clarification import cleanup_and_parse_json
         
-        escaped = r'```{"specs": [{"purpose": "Test \"quoted\"", "vision": "Line\nbreak", "must": [], "dont": [], "nice": [], "assumptions": []}]}```'
+        escaped = '''```{"specs": [{"purpose": "Test \\"quoted\\"", "vision": "Line\\nbreak", "must": [], "dont": [], "nice": [], "assumptions": []}]}```'''
         result = cleanup_and_parse_json(escaped)
         assert 'Test "quoted"' in result["specs"][0]["purpose"]
     
@@ -1114,7 +1114,18 @@ class TestJSONCleanupEdgeCases:
         """Test that unicode characters are preserved."""
         from app.services.clarification import cleanup_and_parse_json
         
-        unicode_json = '```{"specs": [{"purpose": "系统管理", "vision": "🚀", "must": [], "dont": [], "nice": [], "assumptions": []}]}```'
+        unicode_json = '''```
+{
+  "specs": [{
+    "purpose": "系统管理",
+    "vision": "🚀",
+    "must": [],
+    "dont": [],
+    "nice": [],
+    "assumptions": []
+  }]
+}
+```'''
         result = cleanup_and_parse_json(unicode_json)
         assert result["specs"][0]["purpose"] == "系统管理"
         assert result["specs"][0]["vision"] == "🚀"
