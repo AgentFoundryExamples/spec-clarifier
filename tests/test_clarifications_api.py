@@ -1425,9 +1425,9 @@ class TestDebugEndpoint:
         
         # Should have config field
         assert "config" in debug_data
-        # Config should contain llm_config since that's set by default
+        # Config should contain clarification_config since that's set by default now
         if debug_data["config"]:
-            assert "llm_config" in debug_data["config"]
+            assert "clarification_config" in debug_data["config"]
     
     def test_debug_endpoint_sanitizes_config(self, enabled_debug_client):
         """Test that debug endpoint sanitizes sensitive fields from config."""
@@ -1937,3 +1937,278 @@ class TestAPIWithVariousDummyClientResponses:
         # Result should not include open_questions
         preview_data = preview_response.json()
         assert "open_questions" not in preview_data["specs"][0]
+
+
+# ============================================================================
+# TESTS FOR PER-REQUEST CONFIG
+# ============================================================================
+
+
+class TestPerRequestConfig:
+    """Tests for per-request config on POST /v1/clarifications."""
+    
+    def test_request_without_config_uses_defaults(self, client):
+        """Test that requests without config field work (backward compatibility)."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": [],
+                        "assumptions": [],
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        assert response.status_code == 202
+        data = response.json()
+        assert "id" in data
+        assert data["status"] == "PENDING"
+    
+    def test_request_with_valid_config_succeeds(self, client):
+        """Test that request with valid config is accepted."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": [],
+                        "assumptions": [],
+                    }
+                ]
+            },
+            "answers": [],
+            "config": {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "system_prompt_id": "custom",
+                "temperature": 0.2,
+                "max_tokens": 2000
+            }
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        assert response.status_code == 202
+        data = response.json()
+        assert "id" in data
+        assert data["status"] == "PENDING"
+    
+    def test_request_with_anthropic_config(self, client):
+        """Test that Anthropic provider config is accepted."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": [],
+                        "assumptions": [],
+                    }
+                ]
+            },
+            "answers": [],
+            "config": {
+                "provider": "anthropic",
+                "model": "claude-sonnet-4.5",
+                "system_prompt_id": "default"
+            }
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        assert response.status_code == 202
+        data = response.json()
+        assert "id" in data
+    
+    def test_request_with_invalid_model_returns_400(self, client):
+        """Test that invalid model for provider returns 400."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": [],
+                        "assumptions": [],
+                    }
+                ]
+            },
+            "answers": [],
+            "config": {
+                "provider": "openai",
+                "model": "invalid-model-xyz",
+                "system_prompt_id": "default"
+            }
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        assert response.status_code == 400
+        data = response.json()
+        assert "detail" in data
+        assert "invalid-model-xyz" in data["detail"]
+        assert "not allowed" in data["detail"]
+    
+    def test_request_with_invalid_provider_returns_422(self, client):
+        """Test that invalid provider returns 422 (Pydantic validation)."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": [],
+                        "assumptions": [],
+                    }
+                ]
+            },
+            "answers": [],
+            "config": {
+                "provider": "invalid-provider",
+                "model": "some-model",
+                "system_prompt_id": "default"
+            }
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        # Pydantic validation fails before our validation
+        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data
+        # Check that the error message is specific and helpful
+        error_detail = str(data["detail"])
+        assert "'invalid-provider'" in error_detail or "invalid-provider" in error_detail
+        assert "openai" in error_detail.lower() or "anthropic" in error_detail.lower()
+    
+    def test_config_persisted_in_job(self, client, enabled_debug_client):
+        """Test that config is persisted in the job."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": [],
+                        "assumptions": [],
+                    }
+                ]
+            },
+            "answers": [],
+            "config": {
+                "provider": "anthropic",
+                "model": "claude-opus-4",
+                "system_prompt_id": "custom-prompt",
+                "temperature": 0.3,
+                "max_tokens": 1500
+            }
+        }
+        
+        response = enabled_debug_client.post("/v1/clarifications", json=request_data)
+        assert response.status_code == 202
+        job_id = response.json()["id"]
+        
+        # Wait a bit for background task to start
+        import time
+        time.sleep(0.5)
+        
+        # Check debug endpoint for config
+        debug_response = enabled_debug_client.get(f"/v1/clarifications/{job_id}/debug")
+        assert debug_response.status_code == 200
+        debug_data = debug_response.json()
+        
+        assert "config" in debug_data
+        assert "clarification_config" in debug_data["config"]
+        
+        config = debug_data["config"]["clarification_config"]
+        assert config["provider"] == "anthropic"
+        assert config["model"] == "claude-opus-4"
+        assert config["system_prompt_id"] == "custom-prompt"
+        assert config["temperature"] == 0.3
+        assert config["max_tokens"] == 1500
+    
+    def test_partial_config_merges_with_defaults(self, client):
+        """Test that partial config (only some fields) works."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": [],
+                        "assumptions": [],
+                    }
+                ]
+            },
+            "answers": [],
+            "config": {
+                "provider": "openai",
+                "model": "gpt-5",
+                "system_prompt_id": "default",
+                "temperature": 0.5  # Only override temperature
+            }
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        assert response.status_code == 202
+        data = response.json()
+        assert "id" in data
+    
+    def test_config_validation_with_extra_fields_forbidden(self, client):
+        """Test that extra fields in config are rejected."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": [],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": [],
+                        "assumptions": [],
+                    }
+                ]
+            },
+            "answers": [],
+            "config": {
+                "provider": "openai",
+                "model": "gpt-5",
+                "system_prompt_id": "default",
+                "extra_field": "not allowed"
+            }
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        # Pydantic validation should reject extra fields
+        assert response.status_code == 422

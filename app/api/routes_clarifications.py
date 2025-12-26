@@ -13,19 +13,23 @@
 # limitations under the License.
 """Clarification endpoints."""
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-from app.config import get_settings
+from app.config import get_settings, validate_and_merge_config, ConfigValidationError
 from app.models.specs import (
     ClarificationRequest,
+    ClarificationRequestWithConfig,
     ClarifiedPlan,
     JobStatusResponse,
     JobSummaryResponse,
 )
 from app.services.clarification import clarify_plan, start_clarification_job
 from app.services.job_store import JobNotFoundError, get_job
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/clarifications", tags=["Clarifications"])
 
@@ -77,6 +81,10 @@ def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
         "Creates an asynchronous clarification job and returns immediately with "
         "lightweight job details (id, status, timestamps). The job is initially in "
         "PENDING status and will be processed in the background.\n\n"
+        "Accepts an optional 'config' field to override default LLM configuration "
+        "(provider, model, system_prompt_id, temperature, max_tokens). Config is "
+        "validated and merged with defaults before processing. Invalid provider/model "
+        "combinations return 400 Bad Request.\n\n"
         "Returns HTTP 202 Accepted with minimal job metadata. The response does NOT "
         "include the full request payload or result to keep responses lightweight.\n\n"
         "Use GET /v1/clarifications/{job_id} to poll for job status and retrieve "
@@ -84,7 +92,7 @@ def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
     ),
 )
 def create_clarification_job(
-    request: ClarificationRequest,
+    request: ClarificationRequestWithConfig,
     background_tasks: BackgroundTasks
 ) -> JobSummaryResponse:
     """Create and start an asynchronous clarification job.
@@ -95,14 +103,45 @@ def create_clarification_job(
     
     The job will transition through RUNNING to either SUCCESS or FAILED status.
     
+    Accepts optional per-request config to override defaults. Config is validated
+    and merged with global defaults (request fields override, missing fields inherit).
+    Invalid provider/model combinations return 400 Bad Request.
+    
     Args:
-        request: The clarification request containing the plan and optional answers
+        request: The clarification request with plan, answers, and optional config
         background_tasks: FastAPI BackgroundTasks for async processing
         
     Returns:
         JobSummaryResponse: Lightweight job summary with id, status, and timestamps
+        
+    Raises:
+        HTTPException: 400 if config validation fails (invalid provider/model)
     """
-    job = start_clarification_job(request, background_tasks)
+    # Validate and merge config with defaults
+    try:
+        merged_config = validate_and_merge_config(request.config)
+    except ConfigValidationError as e:
+        logger.warning(f"Config validation failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Log if non-default config is used
+    if request.config is not None:
+        # Log only the fields that were actually provided in the request
+        overridden_fields = {k: v for k, v in request.config.model_dump().items() if v is not None}
+        logger.info(f"Creating job with overridden config fields: {overridden_fields}")
+    
+    # Convert to ClarificationRequest for service layer
+    clarification_request = ClarificationRequest(
+        plan=request.plan,
+        answers=request.answers
+    )
+    
+    # Start job with merged config
+    job = start_clarification_job(
+        clarification_request,
+        background_tasks,
+        config={"clarification_config": merged_config.model_dump()}
+    )
     
     # Return lightweight summary without request/result payloads
     return JobSummaryResponse(
@@ -214,8 +253,19 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
             sanitized_config = {}
             for key, value in job.config.items():
                 # Only include safe config keys, exclude anything that might contain credentials
-                if key == "llm_config" and isinstance(value, dict):
-                    # For llm_config, only expose non-sensitive fields
+                if key == "clarification_config" and isinstance(value, dict):
+                    # For clarification_config, only expose non-sensitive fields
+                    clarification_config_safe = {
+                        "provider": value.get("provider"),
+                        "model": value.get("model"),
+                        "system_prompt_id": value.get("system_prompt_id"),
+                        "temperature": value.get("temperature"),
+                        "max_tokens": value.get("max_tokens"),
+                    }
+                    # Filter out None values for cleaner output
+                    sanitized_config["clarification_config"] = {k: v for k, v in clarification_config_safe.items() if v is not None}
+                elif key == "llm_config" and isinstance(value, dict):
+                    # For llm_config (legacy), only expose non-sensitive fields
                     llm_config_safe = {
                         "provider": value.get("provider"),
                         "model": value.get("model"),
