@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # Debug endpoint flag (off by default for security)
     enable_debug_endpoint: bool = False
     
+    # Config admin endpoints flag (on by default, can be disabled for security)
+    enable_config_admin_endpoints: bool = True
+    
     # LLM configuration defaults
     llm_default_provider: str = "openai"
     llm_default_model: str = "gpt-5"
