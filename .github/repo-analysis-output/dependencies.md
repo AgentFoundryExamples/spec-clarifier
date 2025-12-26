@@ -11,7 +11,7 @@ Includes classification of external dependencies as stdlib vs third-party.
 - **Total files**: 22
 - **Intra-repo dependencies**: 31
 - **External stdlib dependencies**: 23
-- **External third-party dependencies**: 26
+- **External third-party dependencies**: 35
 
 ## External Dependencies
 
@@ -43,8 +43,17 @@ Total: 23 unique modules
 
 ### Third-Party Packages
 
-Total: 26 unique packages
+Total: 35 unique packages
 
+- `anthropic.`
+- `anthropic.APIConnectionError`
+- `anthropic.APIError`
+- `anthropic.APITimeoutError`
+- `anthropic.AsyncAnthropic`
+- `anthropic.AuthenticationError`
+- `anthropic.BadRequestError`
+- `anthropic.RateLimitError`
+- `anthropic.UnprocessableEntityError`
 - `fastapi.APIRouter`
 - `fastapi.BackgroundTasks`
 - `fastapi.FastAPI`
@@ -56,16 +65,7 @@ Total: 26 unique packages
 - `httpx`
 - `openai.`
 - `openai.APIConnectionError`
-- `openai.APIError`
-- `openai.APITimeoutError`
-- `openai.AsyncOpenAI`
-- `openai.AuthenticationError`
-- `openai.BadRequestError`
-- `openai.RateLimitError`
-- `pydantic.BaseModel`
-- `pydantic.ConfigDict`
-- `pydantic.Field`
-- ... and 6 more (see JSON for full list)
+- ... and 15 more (see JSON for full list)
 
 ## Most Depended Upon Files (Intra-Repo)
 

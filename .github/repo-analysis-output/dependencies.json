@@ -162,6 +162,15 @@
           "typing.Protocol"
         ],
         "third-party": [
+          "anthropic.",
+          "anthropic.APIConnectionError",
+          "anthropic.APIError",
+          "anthropic.APITimeoutError",
+          "anthropic.AsyncAnthropic",
+          "anthropic.AuthenticationError",
+          "anthropic.BadRequestError",
+          "anthropic.RateLimitError",
+          "anthropic.UnprocessableEntityError",
           "openai.",
           "openai.APIConnectionError",
           "openai.APIError",
@@ -283,6 +292,13 @@
           "inspect"
         ],
         "third-party": [
+          "anthropic.APIConnectionError",
+          "anthropic.APIError",
+          "anthropic.APITimeoutError",
+          "anthropic.AuthenticationError",
+          "anthropic.BadRequestError",
+          "anthropic.RateLimitError",
+          "anthropic.UnprocessableEntityError",
           "httpx",
           "openai.APIConnectionError",
           "openai.APIError",
@@ -481,6 +497,15 @@
       "uuid.uuid4"
     ],
     "third-party": [
+      "anthropic.",
+      "anthropic.APIConnectionError",
+      "anthropic.APIError",
+      "anthropic.APITimeoutError",
+      "anthropic.AsyncAnthropic",
+      "anthropic.AuthenticationError",
+      "anthropic.BadRequestError",
+      "anthropic.RateLimitError",
+      "anthropic.UnprocessableEntityError",
       "fastapi.APIRouter",
       "fastapi.BackgroundTasks",
       "fastapi.FastAPI",
@@ -509,6 +534,6 @@
       "starlette.middleware.cors.CORSMiddleware"
     ],
     "stdlib_count": 23,
-    "third-party_count": 26
+    "third-party_count": 35
   }
 }
