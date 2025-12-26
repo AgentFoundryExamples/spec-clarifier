@@ -147,8 +147,10 @@ def get_clarification_job(job_id: UUID) -> JobStatusResponse:
         job = get_job(job_id)
         settings = get_settings()
         
-        # Conditionally include result based on development flag
-        result = job.result if settings.show_job_result else None
+        # Conditionally include result based on development flag and job status
+        # Only expose result when flag is enabled AND job completed successfully
+        from app.models.specs import JobStatus
+        result = job.result if (settings.show_job_result and job.status == JobStatus.SUCCESS) else None
         
         return JobStatusResponse(
             id=job.id,

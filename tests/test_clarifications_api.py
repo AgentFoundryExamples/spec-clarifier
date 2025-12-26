@@ -787,13 +787,16 @@ class TestShowJobResultFlag:
         
         assert False, "Job did not complete within timeout"
     
-    def test_get_job_includes_result_when_flag_enabled(self, client, monkeypatch):
+    def test_get_job_includes_result_when_flag_enabled(self, monkeypatch):
         """Test that result is included when flag is True."""
         # Enable the flag
         monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
-        # Force settings reload
+        # Force settings reload and create a new client with the updated settings
         from app.config import get_settings
         get_settings.cache_clear()
+        from app.main import create_app
+        from fastapi.testclient import TestClient
+        client = TestClient(create_app())
         
         request_data = {
             "plan": {
@@ -839,12 +842,15 @@ class TestShowJobResultFlag:
         
         assert False, "Job did not complete within timeout"
     
-    def test_post_job_never_includes_result(self, client, monkeypatch):
+    def test_post_job_never_includes_result(self, monkeypatch):
         """Test that POST response never includes result, regardless of flag."""
         # Enable flag to verify POST ignores it
         monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
         from app.config import get_settings
         get_settings.cache_clear()
+        from app.main import create_app
+        from fastapi.testclient import TestClient
+        client = TestClient(create_app())
         
         request_data = {
             "plan": {
@@ -875,11 +881,14 @@ class TestShowJobResultFlag:
         assert "updated_at" in data
         assert "last_error" in data
     
-    def test_flag_only_affects_get_endpoint(self, client, monkeypatch):
+    def test_flag_only_affects_get_endpoint(self, monkeypatch):
         """Test that flag only controls GET, not POST responses."""
         monkeypatch.setenv("APP_SHOW_JOB_RESULT", "false")
         from app.config import get_settings
         get_settings.cache_clear()
+        from app.main import create_app
+        from fastapi.testclient import TestClient
+        client = TestClient(create_app())
         
         request_data = {
             "plan": {

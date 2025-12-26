@@ -194,10 +194,15 @@ class JobSummaryResponse(BaseModel):
 class JobStatusResponse(BaseModel):
     """Job status response with conditional result field.
     
-    Returns job status and details, with the result field conditionally included
-    based on the APP_SHOW_JOB_RESULT development flag. In production mode (flag=False),
-    the result is omitted to keep responses lightweight and prevent clients from
-    depending on embedded results.
+    Returns job status and details. The result field is always present in the response
+    schema but is conditionally populated based on the APP_SHOW_JOB_RESULT flag and
+    job status. In production mode (flag=False), the result is always set to null to
+    keep responses lightweight and prevent clients from depending on embedded results.
+    
+    The result field behavior:
+    - Production mode (APP_SHOW_JOB_RESULT=false): result is always null
+    - Development mode (APP_SHOW_JOB_RESULT=true): result contains ClarifiedPlan when
+      job status is SUCCESS, otherwise null
     
     Attributes:
         id: Unique identifier for the job
@@ -205,7 +210,8 @@ class JobStatusResponse(BaseModel):
         created_at: UTC timestamp when job was created
         updated_at: UTC timestamp when job was last updated
         last_error: Optional error message if job failed
-        result: Optional clarified plan result (only when development flag enabled)
+        result: Optional clarified plan result (null in production, populated in
+                development mode only when status is SUCCESS)
     """
     
     model_config = ConfigDict(extra="forbid")

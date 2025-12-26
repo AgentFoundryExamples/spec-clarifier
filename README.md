@@ -101,6 +101,7 @@ The application can be configured via environment variables with the `APP_` pref
   - **Development Mode (True)**: Result field contains the ClarifiedPlan when job status is SUCCESS
   - **Important**: POST responses always return lightweight summaries regardless of this flag
   - **Use Case**: Enable in development/debugging to inspect results directly in the API response
+  - **Note**: Settings are cached at application startup. To change this flag at runtime, restart the service or use environment variables before starting the application.
 
 #### CORS Configuration
 
@@ -406,6 +407,146 @@ while true; do
   
   sleep 0.5
 done
+```
+
+### Complete Async Workflow Example
+
+This section demonstrates a complete manual workflow for creating, polling, and handling both success and failure scenarios using curl.
+
+#### Step 1: Create a Clarification Job
+
+```bash
+# Create a job with specifications
+curl -X POST "http://localhost:8000/v1/clarifications" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "plan": {
+      "specs": [
+        {
+          "purpose": "Build a web application",
+          "vision": "A modern, scalable web app",
+          "must": ["User authentication", "Database integration"],
+          "dont": ["Complex UI frameworks"],
+          "nice": ["Dark mode", "Mobile responsive"],
+          "open_questions": ["Which database should we use?"],
+          "assumptions": ["Users have modern browsers"]
+        }
+      ]
+    },
+    "answers": []
+  }'
+
+# Response (HTTP 202):
+# {
+#   "id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "PENDING",
+#   "created_at": "2025-12-26T06:00:00.000000Z",
+#   "updated_at": "2025-12-26T06:00:00.000000Z",
+#   "last_error": null
+# }
+
+# Save the job ID for polling
+export JOB_ID="550e8400-e29b-41d4-a716-446655440000"
+```
+
+#### Step 2: Poll for Job Completion
+
+```bash
+# Poll until job completes (SUCCESS or FAILED)
+while true; do
+  RESPONSE=$(curl -s "http://localhost:8000/v1/clarifications/$JOB_ID")
+  STATUS=$(echo "$RESPONSE" | jq -r '.status')
+  echo "Job status: $STATUS"
+  
+  if [ "$STATUS" = "SUCCESS" ] || [ "$STATUS" = "FAILED" ]; then
+    echo "Job completed!"
+    echo "$RESPONSE" | jq .
+    break
+  fi
+  
+  sleep 0.5
+done
+```
+
+#### Step 3: Inspect Success Response (Production Mode)
+
+In production mode (default, `APP_SHOW_JOB_RESULT=false`), the result field is always null:
+
+```bash
+curl -s "http://localhost:8000/v1/clarifications/$JOB_ID" | jq .
+
+# Response:
+# {
+#   "id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "SUCCESS",
+#   "created_at": "2025-12-26T06:00:00.000000Z",
+#   "updated_at": "2025-12-26T06:00:01.500000Z",
+#   "last_error": null,
+#   "result": null    # Always null in production mode
+# }
+```
+
+#### Step 4: Inspect Success Response (Development Mode)
+
+To view results during development, set `APP_SHOW_JOB_RESULT=true`:
+
+```bash
+# Start server with flag enabled
+export APP_SHOW_JOB_RESULT=true
+uvicorn app.main:app --reload
+
+# Create and poll job (same as above)
+# GET response includes result:
+# {
+#   "id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "SUCCESS",
+#   "created_at": "2025-12-26T06:00:00.000000Z",
+#   "updated_at": "2025-12-26T06:00:01.500000Z",
+#   "last_error": null,
+#   "result": {
+#     "specs": [
+#       {
+#         "purpose": "Build a web application",
+#         "vision": "A modern, scalable web app",
+#         "must": ["User authentication", "Database integration"],
+#         "dont": ["Complex UI frameworks"],
+#         "nice": ["Dark mode", "Mobile responsive"],
+#         "assumptions": ["Users have modern browsers"]
+#         # Note: open_questions is removed from clarified specs
+#       }
+#     ]
+#   }
+# }
+```
+
+#### Step 5: Inspect Failure Response
+
+When a job fails, the `last_error` field contains the error message:
+
+```bash
+curl -s "http://localhost:8000/v1/clarifications/$JOB_ID" | jq .
+
+# Response:
+# {
+#   "id": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "FAILED",
+#   "created_at": "2025-12-26T06:00:00.000000Z",
+#   "updated_at": "2025-12-26T06:00:01.200000Z",
+#   "last_error": "ValueError: Invalid specification format",
+#   "result": null
+# }
+```
+
+#### Step 6: Handle Edge Cases
+
+```bash
+# Non-existent job (404)
+curl -s "http://localhost:8000/v1/clarifications/00000000-0000-0000-0000-000000000000"
+# Response: {"detail": "Job 00000000-0000-0000-0000-000000000000 not found"}
+
+# Invalid UUID (422)
+curl -s "http://localhost:8000/v1/clarifications/invalid-uuid"
+# Response: {"detail": [{"type": "uuid_parsing", "loc": ["path", "job_id"], ...}]}
 ```
 
 ### Job Lifecycle
