@@ -132,16 +132,14 @@ class TestLLMCallError:
     def test_llm_call_error_sanitizes_generic_json_secrets(self):
         """Test sanitization of generic secret patterns in JSON."""
         test_cases = [
-            '{"secret":"my-secret-value"}',
-            '{"password":"pass123"}',
-            '{"apikey":"key-abc"}',
+            ('{"secret":"my-secret-value"}', "my-secret-value"),
+            ('{"password":"pass123"}', "pass123"),
+            ('{"apikey":"key-abc"}', "key-abc"),
         ]
-        for message in test_cases:
+        for message, secret_value in test_cases:
             error = LLMCallError(message)
             sanitized = str(error)
-            assert "my-secret-value" not in sanitized
-            assert "pass123" not in sanitized
-            assert "key-abc" not in sanitized
+            assert secret_value not in sanitized
             assert "[REDACTED]" in sanitized
     
     def test_llm_call_error_message_sanitized_in_exception(self):

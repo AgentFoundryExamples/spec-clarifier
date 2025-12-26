@@ -94,7 +94,7 @@ class LLMCallError(Exception):
         """
         # Remove API keys (various formats including JSON and URL-encoded)
         message = re.sub(r'(api[_-]?key["\s:=]+)[^\s\'"]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-        message = re.sub(r'(["\']api[_-]?key["\']\s*:\s*["\'])[^"\']+(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
+        message = re.sub(r'(["\']api[_-]?key["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
         message = re.sub(r'(api[_-]?key%3D)[^&\s]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
         
         # Remove bearer tokens
@@ -102,7 +102,7 @@ class LLMCallError(Exception):
         
         # Remove tokens (various formats including JSON and URL-encoded)
         message = re.sub(r'(token["\s:=]+)[^\s\'"]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-        message = re.sub(r'(["\']token["\']\s*:\s*["\'])[^"\']+(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
+        message = re.sub(r'(["\']token["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
         message = re.sub(r'(token%3D)[^&\s]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
         
         # Remove authorization headers
@@ -112,7 +112,7 @@ class LLMCallError(Exception):
         message = re.sub(r'(x-api-key["\s:]+)[^\r\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
         
         # Remove secrets in JSON format (generic patterns)
-        message = re.sub(r'(["\'](?:secret|key|password|apikey)["\']\s*:\s*["\'])[^"\']+(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
+        message = re.sub(r'(["\'](?:secret|key|password|apikey)["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
         
         return message
     
