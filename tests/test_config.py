@@ -503,7 +503,7 @@ class TestConfigValidationEdgeCases:
     
     def test_validate_provider_model_empty_allowed_list(self, monkeypatch):
         """Test validation when provider has empty allowed model list."""
-        from app.config import GlobalDefaults, ConfigValidationError, set_default_config
+        from app.config import GlobalDefaults, ConfigValidationError
         from app.models.specs import ClarificationConfig
         
         defaults = GlobalDefaults()
