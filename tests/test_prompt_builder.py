@@ -585,3 +585,45 @@ Let me know if you need any changes!"""
         assert result["specs"][0]["purpose"] == "Build authentication"
         assert len(result["specs"][0]["must"]) == 2
         assert result["specs"][1]["purpose"] == "Build API"
+    
+    def test_nested_braces_in_json(self):
+        """Test extraction of JSON with nested braces."""
+        json_str = 'Some text {"outer": {"inner": {"deep": "value"}}} trailing text'
+        result = cleanup_and_parse_json(json_str)
+        
+        assert result["outer"]["inner"]["deep"] == "value"
+    
+    def test_braces_in_json_strings(self):
+        """Test that braces inside JSON strings are handled correctly."""
+        json_str = '{"text": "This {has} braces {in} it", "nested": {"key": "value"}}'
+        result = cleanup_and_parse_json(json_str)
+        
+        assert result["text"] == "This {has} braces {in} it"
+        assert result["nested"]["key"] == "value"
+    
+    def test_trailing_prose_removal(self):
+        """Test removal of trailing prose after JSON."""
+        test_cases = [
+            ('{"key": "value"} Let me know if you need anything else!', {"key": "value"}),
+            ('{"key": "value"} Hope this helps!', {"key": "value"}),
+            ('{"key": "value"}, let me know if you need changes.', {"key": "value"}),
+        ]
+        
+        for json_str, expected in test_cases:
+            result = cleanup_and_parse_json(json_str)
+            assert result == expected, f"Failed for: {json_str}"
+    
+    def test_multiple_json_objects_extracts_first(self):
+        """Test that only the first JSON object is extracted when multiple exist."""
+        json_str = '{"first": "object"} {"second": "object"}'
+        result = cleanup_and_parse_json(json_str)
+        
+        # Should extract only the first complete object
+        assert result == {"first": "object"}
+    
+    def test_escaped_quotes_in_json(self):
+        """Test JSON with escaped quotes inside strings."""
+        json_str = r'{"text": "She said \"hello\" to me"}'
+        result = cleanup_and_parse_json(json_str)
+        
+        assert result["text"] == 'She said "hello" to me'

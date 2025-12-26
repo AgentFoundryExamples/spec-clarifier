@@ -348,7 +348,10 @@ def _remove_markdown_fences(text: str) -> str:
 
 
 def _extract_json_object(text: str) -> Optional[str]:
-    """Extract JSON object between first { and last }.
+    """Extract the first valid JSON object from the text.
+    
+    This function finds the first opening brace '{' and scans forward to find
+    its matching closing brace '}', respecting nested structures.
     
     Args:
         text: Input text potentially containing JSON surrounded by prose
@@ -356,13 +359,43 @@ def _extract_json_object(text: str) -> Optional[str]:
     Returns:
         Extracted JSON string or None if not found
     """
-    first_brace = text.find('{')
-    last_brace = text.rfind('}')
+    try:
+        first_brace_index = text.index('{')
+    except ValueError:
+        return None  # No opening brace found
     
-    if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
-        return text[first_brace:last_brace + 1]
+    balance = 0
+    in_string = False
+    escape_next = False
     
-    return None
+    for i in range(first_brace_index, len(text)):
+        char = text[i]
+        
+        # Handle string content to avoid counting braces inside strings
+        if escape_next:
+            escape_next = False
+            continue
+        
+        if char == '\\':
+            escape_next = True
+            continue
+        
+        if char == '"':
+            in_string = not in_string
+            continue
+        
+        # Only count braces outside of strings
+        if not in_string:
+            if char == '{':
+                balance += 1
+            elif char == '}':
+                balance -= 1
+            
+            if balance == 0:
+                # Found the matching closing brace
+                return text[first_brace_index : i + 1]
+    
+    return None  # No matching closing brace found
 
 
 def _remove_prose_patterns(text: str) -> str:
@@ -376,15 +409,23 @@ def _remove_prose_patterns(text: str) -> str:
     """
     # Common phrases LLMs use before JSON
     # Use word boundaries and more precise patterns to avoid false matches
-    prose_patterns = [
+    leading_prose_patterns = [
         r'^\s*(?:here\s+is|here\'s|the\s+result\s+is|the\s+answer\s+is|the\s+clarified\s+plan\s+is)\s*[:\s]*',
         r'^\s*(?:sure|okay|certainly)[,\s]*',
         # Match "I can/let me/I'll help..." followed by anything up to newline or colon
         r'^\s*(?:i\s+can\s+help|let\s+me\s+help|i\'ll\s+help)(?:[^\n:]*?[:]\s*)?',
     ]
     
-    for pattern in prose_patterns:
+    # Common phrases LLMs use after JSON
+    trailing_prose_patterns = [
+        r'[\s,.]*(?:let\s+me\s+know|hope\s+this\s+helps|if\s+you\s+need\s+anything\s+else).*$',
+    ]
+    
+    for pattern in leading_prose_patterns:
         text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.MULTILINE)
+    
+    for pattern in trailing_prose_patterns:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
     
     return text
 
