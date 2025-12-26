@@ -208,16 +208,42 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
     try:
         job = get_job(job_id)
         
+        # Sanitize config to remove sensitive data (API keys, tokens, etc.)
+        sanitized_config = None
+        if job.config:
+            sanitized_config = {}
+            for key, value in job.config.items():
+                # Only include safe config keys, exclude anything that might contain credentials
+                if key == "llm_config" and isinstance(value, dict):
+                    # For llm_config, only expose non-sensitive fields
+                    sanitized_config["llm_config"] = {
+                        "provider": value.get("provider"),
+                        "model": value.get("model"),
+                        "temperature": value.get("temperature"),
+                        "max_tokens": value.get("max_tokens"),
+                    }
+                elif key not in ["api_key", "token", "secret", "password", "credential", "auth"]:
+                    # For other keys, only include if they don't contain sensitive keywords
+                    if not any(sensitive in key.lower() for sensitive in ["key", "token", "secret", "password", "credential", "auth"]):
+                        sanitized_config[key] = value
+        
+        # Sanitize error message to remove potential sensitive information
+        sanitized_error = None
+        if job.last_error:
+            # Use the same sanitization as LLMCallError for consistency
+            from app.services.llm_clients import LLMCallError
+            sanitized_error = LLMCallError._sanitize_message(job.last_error)
+        
         # Build sanitized debug response
         debug_info = {
             "job_id": str(job.id),
             "status": job.status.value,
             "created_at": job.created_at.isoformat(),
             "updated_at": job.updated_at.isoformat(),
-            "last_error": job.last_error,
+            "last_error": sanitized_error,
             "has_request": job.request is not None,
             "has_result": job.result is not None,
-            "config": job.config if job.config else None,
+            "config": sanitized_config,
         }
         
         # Add request metadata (not full content)
@@ -250,6 +276,7 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
                         "num_must": len(spec.must),
                         "num_dont": len(spec.dont),
                         "num_nice": len(spec.nice),
+                        "num_open_questions": 0,  # ClarifiedSpec never has open_questions
                         "num_assumptions": len(spec.assumptions),
                     }
                     for spec in job.result.specs

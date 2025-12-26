@@ -66,6 +66,17 @@ def mock_llm_client():
         yield
 
 
+@pytest.fixture
+def enabled_debug_client(monkeypatch):
+    """Return a TestClient with the debug endpoint enabled."""
+    monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
+    from app.config import get_settings
+    get_settings.cache_clear()
+    from app.main import create_app
+    from fastapi.testclient import TestClient
+    return TestClient(create_app())
+
+
 class TestPreviewClarificationsEndpoint:
     """Tests for POST /v1/clarifications/preview endpoint."""
     
@@ -1247,15 +1258,9 @@ class TestDebugEndpoint:
         assert "detail" in debug_response.json()
         assert "disabled" in debug_response.json()["detail"].lower()
     
-    def test_debug_endpoint_enabled_returns_metadata(self, monkeypatch):
+    def test_debug_endpoint_enabled_returns_metadata(self, enabled_debug_client):
         """Test that debug endpoint returns sanitized metadata when enabled."""
-        # Enable debug endpoint
-        monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
-        from app.config import get_settings
-        get_settings.cache_clear()
-        from app.main import create_app
-        from fastapi.testclient import TestClient
-        client = TestClient(create_app())
+        client = enabled_debug_client
         
         request_data = {
             "plan": {
@@ -1336,15 +1341,9 @@ class TestDebugEndpoint:
             assert result_meta["num_specs"] == 1
             assert len(result_meta["spec_summaries"]) == 1
     
-    def test_debug_endpoint_excludes_sensitive_content(self, monkeypatch):
+    def test_debug_endpoint_excludes_sensitive_content(self, enabled_debug_client):
         """Test that debug endpoint does not expose prompts or raw content."""
-        # Enable debug endpoint
-        monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
-        from app.config import get_settings
-        get_settings.cache_clear()
-        from app.main import create_app
-        from fastapi.testclient import TestClient
-        client = TestClient(create_app())
+        client = enabled_debug_client
         
         request_data = {
             "plan": {
@@ -1380,15 +1379,9 @@ class TestDebugEndpoint:
         assert "vision_length" in str(debug_data)
         assert "num_must" in str(debug_data)
     
-    def test_debug_endpoint_returns_404_for_nonexistent_job(self, monkeypatch):
+    def test_debug_endpoint_returns_404_for_nonexistent_job(self, enabled_debug_client):
         """Test that debug endpoint returns 404 for nonexistent jobs."""
-        # Enable debug endpoint
-        monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
-        from app.config import get_settings
-        get_settings.cache_clear()
-        from app.main import create_app
-        from fastapi.testclient import TestClient
-        client = TestClient(create_app())
+        client = enabled_debug_client
         
         from uuid import uuid4
         fake_id = uuid4()
@@ -1398,29 +1391,17 @@ class TestDebugEndpoint:
         assert debug_response.status_code == 404
         assert "not found" in debug_response.json()["detail"].lower()
     
-    def test_debug_endpoint_invalid_uuid_returns_422(self, monkeypatch):
+    def test_debug_endpoint_invalid_uuid_returns_422(self, enabled_debug_client):
         """Test that debug endpoint returns 422 for invalid UUIDs."""
-        # Enable debug endpoint
-        monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
-        from app.config import get_settings
-        get_settings.cache_clear()
-        from app.main import create_app
-        from fastapi.testclient import TestClient
-        client = TestClient(create_app())
+        client = enabled_debug_client
         
         debug_response = client.get("/v1/clarifications/invalid-uuid/debug")
         
         assert debug_response.status_code == 422
     
-    def test_debug_endpoint_shows_config_when_present(self, monkeypatch):
+    def test_debug_endpoint_shows_config_when_present(self, enabled_debug_client):
         """Test that debug endpoint shows job config when available."""
-        # Enable debug endpoint
-        monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
-        from app.config import get_settings
-        get_settings.cache_clear()
-        from app.main import create_app
-        from fastapi.testclient import TestClient
-        client = TestClient(create_app())
+        client = enabled_debug_client
         
         request_data = {
             "plan": {
@@ -1447,6 +1428,130 @@ class TestDebugEndpoint:
         # Config should contain llm_config since that's set by default
         if debug_data["config"]:
             assert "llm_config" in debug_data["config"]
+    
+    def test_debug_endpoint_sanitizes_config(self, enabled_debug_client):
+        """Test that debug endpoint sanitizes sensitive fields from config."""
+        from app.services.job_store import create_job
+        from app.models.specs import ClarificationRequest, PlanInput, SpecInput
+        
+        client = enabled_debug_client
+        
+        # Create a job with potentially sensitive config
+        plan = PlanInput(specs=[SpecInput(purpose="Test", vision="Test vision")])
+        request = ClarificationRequest(plan=plan, answers=[])
+        
+        # Manually create a job with sensitive config data
+        from app.services import job_store
+        job = job_store.create_job(request, config={
+            "llm_config": {
+                "provider": "openai",
+                "model": "gpt-5",
+                "api_key": "sk-secret-key-12345",  # This should be filtered
+                "temperature": 0.5
+            },
+            "api_key": "should-be-filtered",  # This should be filtered
+            "token": "should-be-filtered",  # This should be filtered
+            "safe_field": "should-be-included"  # This should be included
+        })
+        
+        # Access debug endpoint
+        debug_response = client.get(f"/v1/clarifications/{job.id}/debug")
+        debug_data = debug_response.json()
+        
+        # Verify config is sanitized
+        assert "config" in debug_data
+        config = debug_data["config"]
+        
+        # llm_config should only have safe fields
+        assert "llm_config" in config
+        assert config["llm_config"]["provider"] == "openai"
+        assert config["llm_config"]["model"] == "gpt-5"
+        assert config["llm_config"]["temperature"] == 0.5
+        assert "api_key" not in config["llm_config"]  # Should be filtered out
+        
+        # Top-level sensitive fields should be filtered
+        assert "api_key" not in config
+        assert "token" not in config
+        
+        # Safe fields should be preserved
+        assert config["safe_field"] == "should-be-included"
+    
+    def test_debug_endpoint_sanitizes_error_messages(self, enabled_debug_client):
+        """Test that debug endpoint sanitizes error messages containing sensitive data."""
+        from app.services.job_store import create_job, update_job
+        from app.models.specs import ClarificationRequest, PlanInput, SpecInput, JobStatus
+        
+        client = enabled_debug_client
+        
+        # Create a job
+        plan = PlanInput(specs=[SpecInput(purpose="Test", vision="Test vision")])
+        request = ClarificationRequest(plan=plan, answers=[])
+        
+        from app.services import job_store
+        job = job_store.create_job(request)
+        
+        # Update job with error message containing sensitive data
+        error_message = "Authentication failed with api_key=sk-secret-12345 and token=bearer-token-xyz"
+        job_store.update_job(job.id, status=JobStatus.FAILED, last_error=error_message)
+        
+        # Access debug endpoint
+        debug_response = client.get(f"/v1/clarifications/{job.id}/debug")
+        debug_data = debug_response.json()
+        
+        # Verify error message is sanitized
+        assert "last_error" in debug_data
+        sanitized_error = debug_data["last_error"]
+        
+        # Sensitive data should be redacted
+        assert "sk-secret-12345" not in sanitized_error
+        assert "bearer-token-xyz" not in sanitized_error
+        assert "[REDACTED]" in sanitized_error
+    
+    def test_debug_endpoint_includes_num_open_questions_in_result(self, enabled_debug_client):
+        """Test that result metadata includes num_open_questions field for consistency."""
+        client = enabled_debug_client
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": ["Feature 1"],
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # Create job
+        post_response = client.post("/v1/clarifications", json=request_data)
+        job_id = post_response.json()["id"]
+        
+        # Wait for completion
+        max_wait = 5.0
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            get_response = client.get(f"/v1/clarifications/{job_id}")
+            job_data = get_response.json()
+            
+            if job_data["status"] in ["SUCCESS", "FAILED"]:
+                break
+            
+            time.sleep(0.1)
+        
+        # Access debug endpoint
+        debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
+        debug_data = debug_response.json()
+        
+        # Verify result metadata includes num_open_questions
+        if debug_data["status"] == "SUCCESS" and "result_metadata" in debug_data:
+            result_meta = debug_data["result_metadata"]
+            assert "spec_summaries" in result_meta
+            for spec_summary in result_meta["spec_summaries"]:
+                assert "num_open_questions" in spec_summary
+                assert spec_summary["num_open_questions"] == 0  # ClarifiedSpec never has open_questions
 
 
 class TestDebugEndpointOpenAPI:
