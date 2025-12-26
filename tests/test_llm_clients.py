@@ -113,6 +113,44 @@ class TestLLMCallError:
         error = LLMCallError(message)
         assert "Rate limit exceeded" in str(error)
         assert "gpt-5.1" in str(error)
+    
+    def test_llm_call_error_sanitizes_json_format_secrets(self):
+        """Test sanitization of secrets in JSON format."""
+        message = '{"api_key":"sk-test123","status":"error"}'
+        error = LLMCallError(message)
+        assert "sk-test123" not in str(error)
+        assert "[REDACTED]" in str(error)
+        assert "status" in str(error)
+    
+    def test_llm_call_error_sanitizes_url_encoded_secrets(self):
+        """Test sanitization of URL-encoded API keys."""
+        message = "Request failed: api_key%3Dsk-secret123&model=gpt-5"
+        error = LLMCallError(message)
+        assert "sk-secret123" not in str(error)
+        assert "[REDACTED]" in str(error)
+    
+    def test_llm_call_error_sanitizes_generic_json_secrets(self):
+        """Test sanitization of generic secret patterns in JSON."""
+        test_cases = [
+            '{"secret":"my-secret-value"}',
+            '{"password":"pass123"}',
+            '{"apikey":"key-abc"}',
+        ]
+        for message in test_cases:
+            error = LLMCallError(message)
+            sanitized = str(error)
+            assert "my-secret-value" not in sanitized
+            assert "pass123" not in sanitized
+            assert "key-abc" not in sanitized
+            assert "[REDACTED]" in sanitized
+    
+    def test_llm_call_error_message_sanitized_in_exception(self):
+        """Test that exception message itself is sanitized."""
+        message_with_secret = "Error with api_key=sk-secret123"
+        error = LLMCallError(message_with_secret)
+        # The exception message passed to super().__init__() should be sanitized
+        assert str(error) == error.message
+        assert "sk-secret123" not in str(error)
 
 
 class TestLLMErrorHierarchy:
@@ -528,6 +566,42 @@ class TestDummyLLMClient:
         
         assert response1 == "Response 1"
         assert response2 == "Response 2"
+    
+    def test_dummy_client_validates_failure_type(self):
+        """Test that DummyLLMClient validates failure_type is subclass of LLMCallError."""
+        # Should raise TypeError for non-LLMCallError types
+        with pytest.raises(TypeError) as exc_info:
+            DummyLLMClient(
+                simulate_failure=True,
+                failure_type=ValueError  # Not an LLMCallError subclass
+            )
+        assert "failure_type must be a subclass of LLMCallError" in str(exc_info.value)
+    
+    def test_dummy_client_accepts_valid_failure_types(self):
+        """Test that DummyLLMClient accepts valid LLMCallError subclasses."""
+        # Should not raise for LLMCallError and its subclasses
+        valid_types = [
+            LLMCallError,
+            LLMNetworkError,
+            LLMAuthenticationError,
+            LLMRateLimitError,
+            LLMValidationError,
+        ]
+        for failure_type in valid_types:
+            client = DummyLLMClient(
+                simulate_failure=True,
+                failure_type=failure_type
+            )
+            assert client.failure_type == failure_type
+    
+    def test_dummy_client_no_validation_when_not_simulating_failure(self):
+        """Test that failure_type is not validated when simulate_failure=False."""
+        # Should not raise even with invalid type when not simulating failure
+        client = DummyLLMClient(
+            simulate_failure=False,
+            failure_type=ValueError  # Invalid but ignored
+        )
+        assert client.simulate_failure is False
 
 
 class TestLLMClientProtocol:

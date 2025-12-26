@@ -73,8 +73,9 @@ class LLMCallError(Exception):
             original_error: Original exception that was wrapped
             provider: LLM provider identifier (e.g., 'openai', 'anthropic')
         """
-        super().__init__(message)
-        self.message = self._sanitize_message(message)
+        sanitized_message = self._sanitize_message(message)
+        super().__init__(sanitized_message)
+        self.message = sanitized_message
         self.original_error = original_error
         self.provider = provider
     
@@ -91,16 +92,27 @@ class LLMCallError(Exception):
         Returns:
             Sanitized error message with secrets replaced
         """
-        # Remove API keys (various formats)
+        # Remove API keys (various formats including JSON and URL-encoded)
         message = re.sub(r'(api[_-]?key["\s:=]+)[^\s\'"]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+        message = re.sub(r'(["\']api[_-]?key["\']\s*:\s*["\'])[^"\']+(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
+        message = re.sub(r'(api[_-]?key%3D)[^&\s]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+        
+        # Remove bearer tokens
         message = re.sub(r'(bearer\s+)[^\s]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+        
+        # Remove tokens (various formats including JSON and URL-encoded)
         message = re.sub(r'(token["\s:=]+)[^\s\'"]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+        message = re.sub(r'(["\']token["\']\s*:\s*["\'])[^"\']+(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
+        message = re.sub(r'(token%3D)[^&\s]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
         
         # Remove authorization headers
         message = re.sub(r'(authorization["\s:]+)[^\r\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
         
         # Remove x-api-key headers
         message = re.sub(r'(x-api-key["\s:]+)[^\r\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+        
+        # Remove secrets in JSON format (generic patterns)
+        message = re.sub(r'(["\'](?:secret|key|password|apikey)["\']\s*:\s*["\'])[^"\']+(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
         
         return message
     
@@ -298,6 +310,9 @@ class DummyLLMClient:
             failure_message: Error message to use when simulating failures
             failure_type: Type of LLMCallError to raise (default: LLMCallError)
         """
+        if simulate_failure and not issubclass(failure_type, LLMCallError):
+            raise TypeError("failure_type must be a subclass of LLMCallError")
+        
         self.canned_response = canned_response
         self.echo_prompts = echo_prompts
         self.simulate_failure = simulate_failure
