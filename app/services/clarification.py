@@ -22,7 +22,7 @@ from fastapi import BackgroundTasks
 
 from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan, ClarifiedSpec, JobStatus, PlanInput
 from app.services import job_store
-from app.services.llm_clients import ClarificationLLMConfig, get_llm_client, LLMCallError
+from app.services.llm_clients import ClarificationLLMConfig, get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -149,10 +149,9 @@ def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = None) ->
                     f"Initialized {llm_config.provider} LLM client for job {job_id} "
                     f"with model {llm_config.model}"
                 )
-            except (ValueError, LLMCallError) as e:
+            except ValueError as e:
                 # Log client initialization failure but continue with deterministic processing
-                # ValueError: Invalid/unsupported provider
-                # LLMCallError: SDK missing or other client-specific initialization errors
+                # ValueError: Invalid/unsupported provider or factory-level errors
                 logger.warning(
                     f"Failed to initialize LLM client for job {job_id}: {e}. "
                     "Continuing with deterministic clarification."

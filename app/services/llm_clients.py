@@ -684,6 +684,7 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
         >>> # Client is ready but not invoked yet
         
         >>> # For testing with deterministic responses
+        >>> # Note: Use a valid provider in config, but request 'dummy' from factory
         >>> test_config = ClarificationLLMConfig(provider="openai", model="test-model")
         >>> test_client = get_llm_client("dummy", test_config)
     
