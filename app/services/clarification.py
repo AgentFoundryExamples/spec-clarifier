@@ -541,8 +541,21 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         # ====================================================================
         # Resolve LLM configuration: use stored config or apply defaults
         llm_config = None
-        if job.config and 'llm_config' in job.config:
-            # Reconstruct ClarificationLLMConfig from stored dict
+        if job.config and 'clarification_config' in job.config:
+            # Reconstruct ClarificationConfig from stored dict
+            from app.models.config_models import ClarificationConfig
+            clarification_config_dict = job.config['clarification_config']
+            clarification_config = ClarificationConfig(**clarification_config_dict)
+            
+            # Convert to ClarificationLLMConfig (without system_prompt_id)
+            llm_config = ClarificationLLMConfig(
+                provider=clarification_config.provider,
+                model=clarification_config.model,
+                temperature=clarification_config.temperature,
+                max_tokens=clarification_config.max_tokens
+            )
+        elif job.config and 'llm_config' in job.config:
+            # Legacy support: Reconstruct ClarificationLLMConfig from stored dict
             llm_config_dict = job.config['llm_config']
             llm_config = ClarificationLLMConfig(**llm_config_dict)
         else:

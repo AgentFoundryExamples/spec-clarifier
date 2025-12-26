@@ -378,3 +378,69 @@ def validate_provider_model(provider: str, model: str) -> None:
             f"Allowed models: {', '.join(allowed_for_provider)}"
         )
 
+
+def validate_and_merge_config(
+    request_config: Optional[ClarificationConfig],
+) -> ClarificationConfig:
+    """Validate and merge request config with defaults.
+    
+    Takes an optional per-request ClarificationConfig and merges it with the
+    global default config. Request-provided fields override defaults, while
+    missing fields inherit from the default. The merged config is validated
+    to ensure provider/model membership constraints are satisfied.
+    
+    This function implements defensive copying to prevent mutation of the
+    process-wide default config.
+    
+    Args:
+        request_config: Optional config from request. If None, returns default config.
+    
+    Returns:
+        ClarificationConfig: Validated merged config with request overrides applied
+    
+    Raises:
+        ConfigValidationError: If provider/model combination is invalid
+        TypeError: If request_config is not a ClarificationConfig or None
+    
+    Example:
+        >>> # No override - returns default
+        >>> config = validate_and_merge_config(None)
+        >>> 
+        >>> # Partial override - model only
+        >>> request = ClarificationConfig(provider="openai", model="gpt-4o", system_prompt_id="default")
+        >>> config = validate_and_merge_config(request)
+        >>> 
+        >>> # Full override
+        >>> request = ClarificationConfig(
+        ...     provider="anthropic",
+        ...     model="claude-sonnet-4.5",
+        ...     system_prompt_id="custom",
+        ...     temperature=0.2,
+        ...     max_tokens=3000
+        ... )
+        >>> config = validate_and_merge_config(request)
+    """
+    # If no request config, return a copy of the default
+    if request_config is None:
+        return get_default_config()
+    
+    # Validate type
+    if not isinstance(request_config, ClarificationConfig):
+        raise TypeError(
+            f"request_config must be a ClarificationConfig instance or None, "
+            f"got {type(request_config).__name__}"
+        )
+    
+    # Get default config (this returns a copy, so it's safe)
+    default = get_default_config()
+    
+    # Merge: request fields override defaults
+    # Create a new config with request values, using model_copy with update
+    # This creates a defensive copy and prevents mutation of defaults
+    merged = request_config.model_copy()
+    
+    # Validate the merged config's provider/model combination
+    validate_provider_model(merged.provider, merged.model)
+    
+    return merged
+

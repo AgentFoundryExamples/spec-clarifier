@@ -142,6 +142,26 @@ class ClarificationRequest(BaseModel):
     answers: List[QuestionAnswer] = Field(default_factory=list, description="List of answers to open questions")
 
 
+class ClarificationRequestWithConfig(BaseModel):
+    """Request to clarify specifications with optional answers and config.
+    
+    This schema extends the basic ClarificationRequest by allowing clients to
+    optionally supply a ClarificationConfig that overrides process defaults.
+    The config is validated and merged with defaults before job processing.
+    
+    Attributes:
+        plan: The plan input with specifications
+        answers: List of answers to open questions (optional, currently ignored)
+        config: Optional ClarificationConfig to override defaults for this request
+    """
+    
+    model_config = ConfigDict(extra="forbid")
+    
+    plan: PlanInput = Field(..., description="The plan input with specifications")
+    answers: List[QuestionAnswer] = Field(default_factory=list, description="List of answers to open questions")
+    config: Optional[ClarificationConfig] = Field(None, description="Optional config to override defaults")
+
+
 class ClarificationJob(BaseModel):
     """Clarification job tracking status and results.
     
