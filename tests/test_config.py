@@ -639,3 +639,152 @@ class TestThreadSafety:
         
         # Reset to default
         set_default_config(initial_config)
+
+
+# ============================================================================
+# TESTS FOR validate_and_merge_config
+# ============================================================================
+
+
+class TestValidateAndMergeConfig:
+    """Tests for validate_and_merge_config function."""
+    
+    def test_none_config_returns_default(self):
+        """Test that None config returns default config."""
+        from app.config import validate_and_merge_config, get_default_config
+        
+        result = validate_and_merge_config(None)
+        default = get_default_config()
+        
+        assert result.provider == default.provider
+        assert result.model == default.model
+        assert result.system_prompt_id == default.system_prompt_id
+        assert result.temperature == default.temperature
+        assert result.max_tokens == default.max_tokens
+    
+    def test_valid_config_is_returned(self):
+        """Test that valid config is validated and returned."""
+        from app.config import validate_and_merge_config
+        from app.models.config_models import ClarificationConfig
+        
+        config = ClarificationConfig(
+            provider="openai",
+            model="gpt-5",
+            system_prompt_id="custom",
+            temperature=0.2,
+            max_tokens=2000
+        )
+        
+        result = validate_and_merge_config(config)
+        
+        assert result.provider == "openai"
+        assert result.model == "gpt-5"
+        assert result.system_prompt_id == "custom"
+        assert result.temperature == 0.2
+        assert result.max_tokens == 2000
+    
+    def test_invalid_provider_raises_error(self):
+        """Test that invalid provider raises ValidationError from Pydantic."""
+        from app.models.config_models import ClarificationConfig
+        from pydantic import ValidationError
+        
+        # Pydantic validates provider as Literal["openai", "anthropic"]
+        # So creating an invalid config raises ValidationError before merge
+        with pytest.raises(ValidationError) as exc_info:
+            config = ClarificationConfig(
+                provider="invalid",
+                model="some-model",
+                system_prompt_id="default"
+            )
+        
+        assert "provider" in str(exc_info.value)
+        assert "literal_error" in str(exc_info.value)
+    
+    def test_invalid_model_raises_error(self):
+        """Test that invalid model for provider raises ConfigValidationError."""
+        from app.config import validate_and_merge_config, ConfigValidationError
+        from app.models.config_models import ClarificationConfig
+        
+        config = ClarificationConfig(
+            provider="openai",
+            model="invalid-model",
+            system_prompt_id="default"
+        )
+        
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_and_merge_config(config)
+        
+        assert "Model 'invalid-model' is not allowed for provider 'openai'" in str(exc_info.value)
+        assert "Allowed models:" in str(exc_info.value)
+    
+    def test_anthropic_valid_model(self):
+        """Test that Anthropic provider with valid model works."""
+        from app.config import validate_and_merge_config
+        from app.models.config_models import ClarificationConfig
+        
+        config = ClarificationConfig(
+            provider="anthropic",
+            model="claude-sonnet-4.5",
+            system_prompt_id="default"
+        )
+        
+        result = validate_and_merge_config(config)
+        
+        assert result.provider == "anthropic"
+        assert result.model == "claude-sonnet-4.5"
+    
+    def test_wrong_type_raises_error(self):
+        """Test that wrong type raises TypeError."""
+        from app.config import validate_and_merge_config
+        
+        with pytest.raises(TypeError) as exc_info:
+            validate_and_merge_config("not a config")
+        
+        assert "must be a ClarificationConfig instance or None" in str(exc_info.value)
+    
+    def test_config_is_copied_not_mutated(self):
+        """Test that original config is not mutated."""
+        from app.config import validate_and_merge_config
+        from app.models.config_models import ClarificationConfig
+        
+        original = ClarificationConfig(
+            provider="openai",
+            model="gpt-5",
+            system_prompt_id="default",
+            temperature=0.3
+        )
+        
+        result = validate_and_merge_config(original)
+        
+        # Modify result
+        result.temperature = 0.5
+        
+        # Original should be unchanged
+        assert original.temperature == 0.3
+    
+    def test_default_not_mutated(self):
+        """Test that default config is not mutated by merge."""
+        from app.config import validate_and_merge_config, get_default_config
+        from app.models.config_models import ClarificationConfig
+        
+        default_before = get_default_config()
+        
+        request = ClarificationConfig(
+            provider="anthropic",
+            model="claude-sonnet-4.5",
+            system_prompt_id="custom",
+            temperature=0.8
+        )
+        
+        result = validate_and_merge_config(request)
+        default_after = get_default_config()
+        
+        # Default should be unchanged
+        assert default_before.provider == default_after.provider
+        assert default_before.model == default_after.model
+        assert default_before.temperature == default_after.temperature
+        
+        # Result should have request values
+        assert result.provider == "anthropic"
+        assert result.model == "claude-sonnet-4.5"
+        assert result.temperature == 0.8
