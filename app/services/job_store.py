@@ -73,11 +73,14 @@ def create_job(
 def get_job(job_id: UUID) -> ClarificationJob:
     """Retrieve a job from the store by ID.
     
+    Returns a deep copy of the job to ensure thread-safety when the job
+    is accessed outside the lock.
+    
     Args:
         job_id: The UUID of the job to retrieve
         
     Returns:
-        ClarificationJob: The requested job
+        ClarificationJob: A deep copy of the requested job
         
     Raises:
         JobNotFoundError: If the job does not exist in the store
@@ -88,7 +91,7 @@ def get_job(job_id: UUID) -> ClarificationJob:
     if job is None:
         raise JobNotFoundError(f"Job with id {job_id} not found")
         
-    return job
+    return job.model_copy(deep=True)
 
 
 def update_job(
@@ -142,26 +145,30 @@ def list_jobs(
 ) -> List[ClarificationJob]:
     """List jobs from the store, optionally filtered by status.
     
+    Returns deep copies of jobs to ensure thread-safety when jobs
+    are accessed outside the lock.
+    
     Args:
         status: Optional status to filter jobs by
         limit: Optional maximum number of jobs to return
         
     Returns:
-        List[ClarificationJob]: List of jobs matching the criteria
+        List[ClarificationJob]: List of deep copies of jobs matching the criteria
     """
     with _store_lock:
-        jobs = list(_job_store.values())
+        job_refs = list(_job_store.values())
     
     if status is not None:
-        jobs = [job for job in jobs if job.status == status]
+        job_refs = [job for job in job_refs if job.status == status]
     
     # Sort by created_at descending (newest first)
-    jobs.sort(key=lambda j: j.created_at, reverse=True)
+    job_refs.sort(key=lambda j: j.created_at, reverse=True)
     
     if limit is not None:
-        jobs = jobs[:limit]
+        job_refs = job_refs[:limit]
     
-    return jobs
+    # Return deep copies to ensure thread-safety
+    return [job.model_copy(deep=True) for job in job_refs]
 
 
 def delete_job(job_id: UUID) -> None:
@@ -180,15 +187,24 @@ def delete_job(job_id: UUID) -> None:
         del _job_store[job_id]
 
 
-def cleanup_expired_jobs(ttl_seconds: int = DEFAULT_JOB_TTL_SECONDS) -> int:
+def cleanup_expired_jobs(
+    ttl_seconds: int = DEFAULT_JOB_TTL_SECONDS,
+    stale_pending_ttl_seconds: Optional[int] = None
+) -> int:
     """Clean up expired jobs from the store.
     
     Removes jobs that are completed (SUCCESS or FAILED status) and older than
     the specified TTL. Jobs with RUNNING status are never removed to prevent
     data loss during processing.
     
+    Optionally removes PENDING jobs that have been stale for longer than
+    stale_pending_ttl_seconds to prevent memory leaks from abandoned jobs.
+    
     Args:
         ttl_seconds: Time-to-live in seconds for completed jobs (default: 24 hours)
+        stale_pending_ttl_seconds: Optional TTL for stale PENDING jobs. If provided,
+            PENDING jobs older than this threshold will be removed. Useful for
+            cleaning up jobs that were never processed due to worker crashes.
         
     Returns:
         int: Number of jobs cleaned up
@@ -201,10 +217,14 @@ def cleanup_expired_jobs(ttl_seconds: int = DEFAULT_JOB_TTL_SECONDS) -> int:
         job_ids_to_remove = []
         
         for job_id, job in _job_store.items():
-            # Only clean up completed jobs (SUCCESS or FAILED)
+            # Clean up completed jobs (SUCCESS or FAILED)
             if job.status in (JobStatus.SUCCESS, JobStatus.FAILED):
-                # Check if job is older than TTL
                 if job.updated_at < cutoff_time:
+                    job_ids_to_remove.append(job_id)
+            # Optionally clean up stale PENDING jobs
+            elif job.status == JobStatus.PENDING and stale_pending_ttl_seconds is not None:
+                stale_cutoff = now - timedelta(seconds=stale_pending_ttl_seconds)
+                if job.created_at < stale_cutoff:
                     job_ids_to_remove.append(job_id)
         
         # Remove expired jobs

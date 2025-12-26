@@ -272,11 +272,17 @@ delete_job(job_id)
 
 # Clean up expired completed jobs (default TTL: 24 hours)
 cleanup_count = cleanup_expired_jobs(ttl_seconds=86400)
+
+# Clean up stale PENDING jobs (e.g., after 48 hours)
+cleanup_count = cleanup_expired_jobs(
+    ttl_seconds=86400,
+    stale_pending_ttl_seconds=172800
+)
 ```
 
 ### Thread Safety
 
-All job store operations are protected by a module-level lock, ensuring thread-safe access in multi-worker environments. The store is safe to use with:
+All job store operations are protected by a module-level lock, ensuring thread-safe access in multi-worker environments. Jobs returned by `get_job()` and `list_jobs()` are deep copies, preventing external mutations from affecting stored data. The store is safe to use with:
 
 - Development servers with multiple workers
 - Concurrent read/write operations
@@ -288,6 +294,7 @@ The job store includes a TTL (Time-To-Live) cleanup mechanism that automatically
 
 - **Default TTL**: 24 hours (86,400 seconds)
 - **Eligible for cleanup**: Jobs with SUCCESS or FAILED status
+- **Stale PENDING cleanup**: Optional parameter `stale_pending_ttl_seconds` removes PENDING jobs that were never processed (useful for handling worker crashes)
 - **Protected**: RUNNING and PENDING jobs are never cleaned up
 - **Configurable**: TTL can be adjusted via the `ttl_seconds` parameter
 

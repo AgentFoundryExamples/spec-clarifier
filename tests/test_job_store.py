@@ -511,6 +511,68 @@ class TestCleanupExpiredJobs:
         cleanup_count = cleanup_expired_jobs()
         
         assert cleanup_count == 0
+    
+    def test_cleanup_stale_pending_jobs(self):
+        """Test cleaning up stale PENDING jobs with optional parameter."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        # Create old PENDING job (48 hours old)
+        old_pending = create_job(request)
+        with job_store._store_lock:
+            old_time = datetime.now(timezone.utc) - timedelta(hours=48)
+            job_store._job_store[old_pending.id] = job_store._job_store[old_pending.id].model_copy(update={
+                "created_at": old_time,
+                "updated_at": old_time
+            })
+        
+        # Create recent PENDING job (1 hour old)
+        recent_pending = create_job(request)
+        with job_store._store_lock:
+            recent_time = datetime.now(timezone.utc) - timedelta(hours=1)
+            job_store._job_store[recent_pending.id] = job_store._job_store[recent_pending.id].model_copy(update={
+                "created_at": recent_time,
+                "updated_at": recent_time
+            })
+        
+        # Cleanup with stale_pending_ttl_seconds set to 24 hours
+        cleanup_count = cleanup_expired_jobs(
+            ttl_seconds=24 * 60 * 60,
+            stale_pending_ttl_seconds=24 * 60 * 60
+        )
+        
+        assert cleanup_count == 1
+        
+        # Old PENDING job should be gone
+        with pytest.raises(JobNotFoundError):
+            get_job(old_pending.id)
+        
+        # Recent PENDING job should remain
+        assert get_job(recent_pending.id) is not None
+    
+    def test_cleanup_without_stale_pending_parameter(self):
+        """Test that PENDING jobs are not cleaned up without stale_pending_ttl_seconds."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        # Create very old PENDING job
+        old_pending = create_job(request)
+        with job_store._store_lock:
+            old_time = datetime.now(timezone.utc) - timedelta(hours=100)
+            job_store._job_store[old_pending.id] = job_store._job_store[old_pending.id].model_copy(update={
+                "created_at": old_time,
+                "updated_at": old_time
+            })
+        
+        # Cleanup without stale_pending_ttl_seconds
+        cleanup_count = cleanup_expired_jobs(ttl_seconds=24 * 60 * 60)
+        
+        assert cleanup_count == 0
+        
+        # Old PENDING job should still exist
+        assert get_job(old_pending.id) is not None
 
 
 class TestThreadSafety:
@@ -620,6 +682,68 @@ class TestThreadSafety:
         # Job should still exist and be valid
         final_job = get_job(job.id)
         assert final_job.status == JobStatus.RUNNING
+
+
+class TestDeepCopy:
+    """Tests for deep copy behavior to ensure thread-safety."""
+    
+    def test_get_job_returns_deep_copy(self):
+        """Test that get_job returns a deep copy that can be mutated safely."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        job = create_job(request, config={"key": "value"})
+        
+        # Get the job
+        retrieved_job = get_job(job.id)
+        
+        # Mutate the retrieved job's config
+        if retrieved_job.config:
+            retrieved_job.config["key"] = "modified"
+        
+        # Get the job again - should have original config
+        job_again = get_job(job.id)
+        assert job_again.config == {"key": "value"}
+    
+    def test_list_jobs_returns_deep_copies(self):
+        """Test that list_jobs returns deep copies that can be mutated safely."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        job = create_job(request, config={"key": "value"})
+        
+        # List jobs
+        jobs = list_jobs()
+        assert len(jobs) == 1
+        
+        # Mutate the first job's config
+        if jobs[0].config:
+            jobs[0].config["key"] = "modified"
+        
+        # List jobs again - should have original config
+        jobs_again = list_jobs()
+        assert jobs_again[0].config == {"key": "value"}
+    
+    def test_get_job_nested_objects_are_deep_copied(self):
+        """Test that nested objects in job are properly deep copied."""
+        spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature 1"])
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan)
+        
+        job = create_job(request)
+        
+        # Get the job
+        retrieved_job = get_job(job.id)
+        
+        # Mutate the retrieved job's nested request data
+        retrieved_job.request.plan.specs[0].must.append("Feature 2")
+        
+        # Get the job again - should have original request
+        job_again = get_job(job.id)
+        assert len(job_again.request.plan.specs[0].must) == 1
+        assert job_again.request.plan.specs[0].must[0] == "Feature 1"
 
 
 class TestClearAllJobs:
