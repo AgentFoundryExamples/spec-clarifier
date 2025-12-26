@@ -925,3 +925,138 @@ class TestShowJobResultFlag:
             time.sleep(0.1)
         
         assert False, "Job did not complete within timeout"
+
+
+class TestAsyncJobLifecycleAPI:
+    """Additional tests for async job lifecycle at the API level."""
+    
+    def test_post_returns_immediately_without_result_payload(self, client):
+        """Test that POST /v1/clarifications returns immediately without ClarifiedPlan in response."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": ["Feature 1"],
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        # Response should be 202 Accepted
+        assert response.status_code == 202
+        
+        data = response.json()
+        # Should have minimal fields only
+        assert "id" in data
+        assert "status" in data
+        assert "created_at" in data
+        assert "updated_at" in data
+        assert "last_error" in data
+        
+        # Should NOT have full request or result - this is the robust check
+        assert "request" not in data
+        assert "result" not in data
+        assert "config" not in data
+        
+        # Status should be PENDING (not yet processed)
+        assert data["status"] == "PENDING"
+    
+    def test_get_returns_documented_fields(self, client):
+        """Test that GET returns id, status, timestamps, last_error, and result fields."""
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # Create job
+        post_response = client.post("/v1/clarifications", json=request_data)
+        job_id = post_response.json()["id"]
+        
+        # Get job
+        get_response = client.get(f"/v1/clarifications/{job_id}")
+        
+        assert get_response.status_code == 200
+        data = get_response.json()
+        
+        # Verify all documented fields are present
+        assert "id" in data
+        assert "status" in data
+        assert "created_at" in data
+        assert "updated_at" in data
+        assert "last_error" in data
+        assert "result" in data  # Field is present but may be null
+    
+    def test_get_returns_404_for_unknown_job_id(self, client):
+        """Test that GET returns 404 for unknown job IDs."""
+        from uuid import uuid4
+        fake_id = uuid4()
+        
+        response = client.get(f"/v1/clarifications/{fake_id}")
+        
+        assert response.status_code == 404
+        assert "detail" in response.json()
+        assert str(fake_id) in response.json()["detail"]
+    
+    def test_failed_job_shows_last_error_in_get(self, client):
+        """Test that FAILED jobs return last_error in GET response."""
+        from unittest.mock import patch
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # Patch clarify_plan BEFORE creating the job to ensure background task fails
+        with patch('app.services.clarification.clarify_plan') as mock_clarify:
+            mock_clarify.side_effect = RuntimeError("Forced failure for testing")
+            
+            # Create job (will be processed in background with mocked function)
+            post_response = client.post("/v1/clarifications", json=request_data)
+            job_id = post_response.json()["id"]
+            
+            # Wait for background processing to complete
+            max_wait = 5.0
+            start_time = time.time()
+            job_done = False
+            
+            while time.time() - start_time < max_wait:
+                get_response = client.get(f"/v1/clarifications/{job_id}")
+                data = get_response.json()
+                
+                if data["status"] in ["SUCCESS", "FAILED"]:
+                    job_done = True
+                    break
+                
+                time.sleep(0.1)
+            
+            assert job_done, f"Job did not complete within {max_wait} seconds. Final status: {data.get('status')}"
+        
+        # Get final job status
+        get_response = client.get(f"/v1/clarifications/{job_id}")
+        assert get_response.status_code == 200
+        data = get_response.json()
+        
+        assert data["status"] == "FAILED"
+        assert data["last_error"] is not None
+        assert "RuntimeError" in data["last_error"]
+        assert "Forced failure for testing" in data["last_error"]
+        assert data["result"] is None
