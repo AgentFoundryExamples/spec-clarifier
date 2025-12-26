@@ -713,6 +713,23 @@ class TestCreateClarificationJob:
         data = response.json()
         assert "id" in data
         assert data["status"] == "PENDING"
+        
+        # Verify job actually processes correctly with empty answers
+        job_id = data["id"]
+        max_wait = 5.0
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            get_response = client.get(f"/v1/clarifications/{job_id}")
+            job_data = get_response.json()
+            
+            if job_data["status"] in ["SUCCESS", "FAILED"]:
+                break
+            
+            time.sleep(0.1)
+        
+        # Job should complete successfully with empty answers
+        assert job_data["status"] == "SUCCESS", f"Job failed or timed out: {job_data.get('last_error', 'timeout')}"
 
 
 class TestGetClarificationJob:

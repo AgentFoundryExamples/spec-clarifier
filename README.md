@@ -135,7 +135,7 @@ The API enforces strict schema validation at all boundaries to ensure predictabl
 - Wrong data types (e.g., strings instead of lists)
 - Null values for required string fields
 
-**ClarificationRequest Schema:**
+**ClarificationRequest Schema (Input):**
 
 The input schema for clarification requests (`POST /v1/clarifications` and `POST /v1/clarifications/preview`) contains exactly two fields:
 
@@ -165,7 +165,9 @@ The input schema for clarification requests (`POST /v1/clarifications` and `POST
 }
 ```
 
+**Input Schema Notes:**
 - The `answers` field is optional and defaults to an empty list if omitted
+- The `open_questions` field is **allowed in the input** specification to capture questions that need clarification
 - Extra fields in the request will be rejected with a 422 validation error
 - The service validates all fields before invoking any LLM processing
 

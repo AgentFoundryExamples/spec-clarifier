@@ -159,7 +159,8 @@ class TestSpecInput:
             )
         
         errors = exc_info.value.errors()
-        assert any("nice" in str(error["loc"]) for error in errors)
+        # Check that the error is for an item inside the 'nice' list
+        assert any(error["loc"][0] == "nice" and len(error["loc"]) == 2 for error in errors)
 
 
 class TestPlanInput:
@@ -229,18 +230,16 @@ class TestClarifiedSpec:
     
     def test_clarified_spec_only_has_six_fields(self):
         """Test that ClarifiedSpec exposes exactly 6 fields as per issue requirement."""
-        spec = ClarifiedSpec(
-            purpose="Build a web app",
-            vision="Modern and user-friendly",
-            must=["Auth"],
-            dont=["Legacy"],
-            nice=["Dark mode"],
-            assumptions=["Modern browsers"],
-        )
-        
-        # Verify the model has exactly the 6 required fields
-        data = spec.model_dump()
-        assert set(data.keys()) == {"purpose", "vision", "must", "dont", "nice", "assumptions"}
+        # Verify the model schema has exactly the 6 required fields
+        # by inspecting the model's fields directly, not an instance's dumped data.
+        assert set(ClarifiedSpec.model_fields.keys()) == {
+            "purpose",
+            "vision",
+            "must",
+            "dont",
+            "nice",
+            "assumptions",
+        }
     
     def test_clarified_spec_rejects_null_strings(self):
         """Test that null/None strings are rejected (edge case from issue)."""
