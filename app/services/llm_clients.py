@@ -529,68 +529,33 @@ class OpenAIResponsesClient:
         # Pass through other parameters
         api_params.update(kwargs)
         
-        # Track timing for logging
+        # Track timing for logging using perf_counter for better async performance
         import time
-        start_time = time.time()
+        start_time = time.perf_counter()
+        
+        try:
+            from openai import (
+                APIError,
+                AuthenticationError,
+                RateLimitError,
+                APIConnectionError,
+                BadRequestError,
+                APITimeoutError,
+            )
+        except ImportError as import_err:
+            raise LLMCallError(
+                "OpenAI SDK not installed or accessible. Install with: pip install openai",
+                original_error=import_err,
+                provider=PROVIDER_OPENAI
+            ) from import_err
         
         try:
             # Call OpenAI Responses API
             response = await client.responses.create(**api_params)
             
-            # Extract text from response
-            # The Responses API returns response.output_text as a convenience property
-            # that aggregates all text content from the output list
-            text_content = response.output_text
-            
-            # If output_text is empty and we have output, try to extract from output list manually
-            if not text_content and hasattr(response, "output"):
-                text_parts = []
-                for output_item in response.output:
-                    # Handle message output items
-                    if hasattr(output_item, "type") and output_item.type == "message":
-                        if hasattr(output_item, "content"):
-                            for content_part in output_item.content:
-                                # Extract text from output_text content blocks
-                                if hasattr(content_part, "type") and content_part.type == "output_text":
-                                    if hasattr(content_part, "text"):
-                                        text_parts.append(content_part.text)
-                text_content = "".join(text_parts)
-            
-            # Log success (provider, model, duration only)
-            elapsed_time = time.time() - start_time
-            self._logger.info(
-                f"OpenAI completion successful: provider={PROVIDER_OPENAI}, "
-                f"model={model}, elapsed_time={elapsed_time:.2f}s"
-            )
-            
-            return text_content
-            
-        except Exception as e:
+        except (AuthenticationError, RateLimitError, BadRequestError, APIConnectionError, APITimeoutError, APIError) as e:
             # Calculate elapsed time for error logging
-            elapsed_time = time.time() - start_time
-            
-            # Import OpenAI error types
-            try:
-                from openai import (
-                    APIError,
-                    AuthenticationError,
-                    RateLimitError,
-                    APIConnectionError,
-                    BadRequestError,
-                    APITimeoutError,
-                )
-            except ImportError:
-                # If we can't import error types, wrap as generic error
-                self._logger.error(
-                    f"OpenAI API call failed: provider={PROVIDER_OPENAI}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                    f"error={type(e).__name__}"
-                )
-                raise LLMCallError(
-                    f"OpenAI API call failed: {str(e)}",
-                    original_error=e,
-                    provider=PROVIDER_OPENAI
-                )
+            elapsed_time = time.perf_counter() - start_time
             
             # Map OpenAI errors to our error hierarchy
             if isinstance(e, AuthenticationError):
@@ -599,23 +564,23 @@ class OpenAIResponsesClient:
                     f"model={model}, elapsed_time={elapsed_time:.2f}s"
                 )
                 raise LLMAuthenticationError(
-                    f"OpenAI authentication failed. Please check your API key.",
+                    "OpenAI authentication failed. Please check your API key.",
                     original_error=e,
                     provider=PROVIDER_OPENAI
-                )
+                ) from e
             
-            elif isinstance(e, RateLimitError):
+            if isinstance(e, RateLimitError):
                 self._logger.warning(
                     f"OpenAI rate limit exceeded: provider={PROVIDER_OPENAI}, "
                     f"model={model}, elapsed_time={elapsed_time:.2f}s"
                 )
                 raise LLMRateLimitError(
-                    f"OpenAI rate limit exceeded. Please retry after a delay.",
+                    "OpenAI rate limit exceeded. Please retry after a delay.",
                     original_error=e,
                     provider=PROVIDER_OPENAI
-                )
+                ) from e
             
-            elif isinstance(e, BadRequestError):
+            if isinstance(e, BadRequestError):
                 self._logger.error(
                     f"OpenAI request validation failed: provider={PROVIDER_OPENAI}, "
                     f"model={model}, elapsed_time={elapsed_time:.2f}s, "
@@ -625,9 +590,9 @@ class OpenAIResponsesClient:
                     f"OpenAI request validation failed: {str(e)}",
                     original_error=e,
                     provider=PROVIDER_OPENAI
-                )
+                ) from e
             
-            elif isinstance(e, (APIConnectionError, APITimeoutError)):
+            if isinstance(e, (APIConnectionError, APITimeoutError)):
                 self._logger.error(
                     f"OpenAI network error: provider={PROVIDER_OPENAI}, "
                     f"model={model}, elapsed_time={elapsed_time:.2f}s, "
@@ -637,29 +602,49 @@ class OpenAIResponsesClient:
                     f"OpenAI network error: {type(e).__name__}",
                     original_error=e,
                     provider=PROVIDER_OPENAI
-                )
+                ) from e
             
-            elif isinstance(e, APIError):
-                self._logger.error(
-                    f"OpenAI API error: provider={PROVIDER_OPENAI}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                    f"error={str(e)}"
-                )
-                raise LLMCallError(
-                    f"OpenAI API error: {str(e)}",
-                    original_error=e,
-                    provider=PROVIDER_OPENAI
-                )
-            
-            else:
-                # Unknown error type
-                self._logger.error(
-                    f"Unexpected error in OpenAI call: provider={PROVIDER_OPENAI}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                    f"error={type(e).__name__}: {str(e)}"
-                )
-                raise LLMCallError(
-                    f"Unexpected error in OpenAI call: {type(e).__name__}",
-                    original_error=e,
-                    provider=PROVIDER_OPENAI
-                )
+            # Fallback for other APIError subclasses
+            self._logger.error(
+                f"OpenAI API error: provider={PROVIDER_OPENAI}, "
+                f"model={model}, elapsed_time={elapsed_time:.2f}s, "
+                f"error={str(e)}"
+            )
+            raise LLMCallError(
+                f"OpenAI API error: {str(e)}",
+                original_error=e,
+                provider=PROVIDER_OPENAI
+            ) from e
+        
+        # Extract text from response (outside the API error handling block)
+        text_content = response.output_text
+        
+        # If output_text is empty and we have output, try to extract from output list manually
+        if not text_content and hasattr(response, "output"):
+            text_parts = []
+            for output_item in response.output:
+                # Handle message output items
+                if hasattr(output_item, "type") and output_item.type == "message":
+                    if hasattr(output_item, "content"):
+                        for content_part in output_item.content:
+                            # Extract text from output_text content blocks
+                            if hasattr(content_part, "type") and content_part.type == "output_text":
+                                if hasattr(content_part, "text"):
+                                    text_parts.append(content_part.text)
+            text_content = "".join(text_parts)
+        
+        # Validate that we got some content
+        if not text_content:
+            self._logger.warning(
+                f"OpenAI response contained no text content: provider={PROVIDER_OPENAI}, "
+                f"model={model}"
+            )
+        
+        # Log success (provider, model, duration only)
+        elapsed_time = time.perf_counter() - start_time
+        self._logger.info(
+            f"OpenAI completion successful: provider={PROVIDER_OPENAI}, "
+            f"model={model}, elapsed_time={elapsed_time:.2f}s"
+        )
+        
+        return text_content

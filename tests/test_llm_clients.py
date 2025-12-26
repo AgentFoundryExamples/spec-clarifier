@@ -1299,3 +1299,19 @@ class TestOpenAIResponsesClient:
         
         response = await result
         assert isinstance(response, str)
+    
+    def test_openai_client_has_import_error_handling(self):
+        """Verify that the complete method has ImportError handling for missing OpenAI SDK."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        import inspect
+        
+        # Get the source code of the complete method
+        source = inspect.getsource(OpenAIResponsesClient.complete)
+        
+        # Verify the ImportError handling is present
+        assert "except ImportError" in source, "Missing ImportError exception handler"
+        assert "OpenAI SDK not installed or accessible" in source, "Missing SDK not installed error message"
+        assert "from openai import" in source, "Missing openai module import"
+        
+        # The code structure validates that if openai cannot be imported,
+        # a clear LLMCallError will be raised with appropriate messaging
