@@ -31,6 +31,28 @@ def clean_job_store():
     clear_all_jobs()
 
 
+
+
+def _create_dummy_client_with_response(specs):
+    """Helper to create DummyLLMClient with valid ClarifiedPlan JSON response."""
+    from app.services.llm_clients import DummyLLMClient
+    import json
+    
+    clarified_specs = []
+    for spec in specs:
+        clarified_spec = {
+            "purpose": spec.purpose,
+            "vision": spec.vision,
+            "must": spec.must,
+            "dont": spec.dont,
+            "nice": spec.nice,
+            "assumptions": spec.assumptions
+        }
+        clarified_specs.append(clarified_spec)
+    
+    response_json = json.dumps({"specs": clarified_specs}, indent=2)
+    return DummyLLMClient(canned_response=response_json)
+
 class TestStartClarificationJob:
     """Tests for start_clarification_job function."""
     
@@ -161,11 +183,14 @@ class TestProcessClarificationJob:
         
         job = start_clarification_job(request, background_tasks)
         
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
         # Mock update_job to capture status changes
         import app.services.job_store as job_store_module
         with patch.object(job_store_module, 'update_job', 
                          wraps=job_store_module.update_job) as mock_update:
-            await process_clarification_job(job.id)
+            await process_clarification_job(job.id, llm_client=dummy_client)
             
             # Should have been called at least twice (RUNNING, then SUCCESS)
             assert mock_update.call_count >= 2
@@ -188,8 +213,11 @@ class TestProcessClarificationJob:
         job = start_clarification_job(request, background_tasks)
         original_updated_at = job.updated_at
         
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
         # Process the job
-        await process_clarification_job(job.id)
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Check that updated_at changed
         processed_job = get_job(job.id)
@@ -259,7 +287,10 @@ class TestProcessClarificationJob:
         background_tasks = MagicMock()
         
         job = start_clarification_job(request, background_tasks)
-        await process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec1, spec2, spec3])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.SUCCESS
@@ -284,7 +315,10 @@ class TestProcessClarificationJob:
         background_tasks = MagicMock()
         
         job = start_clarification_job(request, background_tasks)
-        await process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         processed_job = get_job(job.id)
         result_spec = processed_job.result.specs[0]
@@ -311,7 +345,10 @@ class TestProcessClarificationJob:
         background_tasks.reset_mock()
         
         # Call process directly (not via background tasks)
-        await process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Should have processed successfully
         processed_job = get_job(job.id)
@@ -409,9 +446,18 @@ class TestAsyncJobLifecycleEdgeCases:
         job = start_clarification_job(request, background_tasks)
         
         # Process the same job multiple times
-        await process_clarification_job(job.id)
-        await process_clarification_job(job.id)
-        await process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Should end in SUCCESS state (second and third calls should skip)
         final_job = get_job(job.id)
@@ -432,7 +478,10 @@ class TestAsyncJobLifecycleEdgeCases:
         update_job(job.id, status=JobStatus.RUNNING)
         
         # Try to process - should skip
-        await process_clarification_job(job.id)
+        # Create dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        await process_clarification_job(job.id, llm_client=dummy_client)
         
         # Job should still be in RUNNING state (not processed)
         final_job = get_job(job.id)
