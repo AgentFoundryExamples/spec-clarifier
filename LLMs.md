@@ -4,6 +4,40 @@ The following is instructions for implementing with LLM APIs. The models that ar
 
 **Important:** Always use the latest stable API versions and official SDKs. Avoid deprecated endpoints and legacy APIs.
 
+## System Prompt Templates
+
+The specification clarification service uses named system prompt templates to control LLM behavior. All templates enforce strict JSON output requirements to ensure consistent response parsing.
+
+### Available Templates
+
+- **`default`**: Standard clarification instructions with clear JSON output requirements. Balanced between conciseness and clarity.
+- **`strict_json`**: Emphasizes JSON format compliance with explicit "CRITICAL RULES - NO EXCEPTIONS" section. Use when experiencing JSON parsing issues.
+- **`verbose_explanation`**: Provides detailed explanation of the clarification task with guidance on how to incorporate answers. Useful for complex specifications or when more context helps.
+
+### Template Selection
+
+Templates are selected via the `system_prompt_id` field in `ClarificationConfig`:
+
+```python
+config = ClarificationConfig(
+    provider="openai",
+    model="gpt-5.1",
+    system_prompt_id="strict_json",  # or "default", "verbose_explanation"
+    temperature=0.1
+)
+```
+
+If an unknown `system_prompt_id` is provided, the system logs a warning and falls back to the `default` template without failing the job.
+
+### JSON Strictness Enforcement
+
+All templates enforce the following JSON requirements:
+- Return ONLY valid JSON (no markdown fences, no explanatory text)
+- Output must start with `{` and end with `}`
+- Each spec must have exactly 6 keys: `purpose`, `vision`, `must`, `dont`, `nice`, `assumptions`
+- Do NOT include `open_questions` in output
+- Single-call processing (no multi-turn interactions)
+
 ## OpenAI GPT5
 
 When implementing OpenAI integration, the target API should be the **Responses API** since it is the recommended most long term compatible option. The GPT 5 series models are supportive of the responses API and these are the models we want to use when implementing AI integration. Do not use completions it is not recommended moving forward.

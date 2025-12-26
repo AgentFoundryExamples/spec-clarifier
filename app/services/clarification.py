@@ -34,80 +34,10 @@ logger = logging.getLogger(__name__)
 # PROMPT BUILDING UTILITIES
 # ============================================================================
 
-def build_clarification_prompts(
-    request: ClarificationRequest,
-    provider: Optional[str] = None,
-    model: Optional[str] = None
-) -> Tuple[str, str]:
-    """Build system and user prompts for LLM-based specification clarification.
-    
-    This function transforms a ClarificationRequest into a pair of prompts that
-    guide the LLM to clarify specifications by incorporating provided answers.
-    The prompts are designed to elicit structured JSON responses conforming to
-    the ClarifiedPlan schema.
-    
-    System Prompt:
-        - Describes the clarification task
-        - Enumerates the exact ClarifiedPlan schema with six required keys per spec
-        - Emphasizes that responses must be raw JSON (no markdown, no prose)
-        - Requires single-call processing (no multi-turn interactions)
-    
-    User Prompt:
-        - Serializes source specs (purpose, vision, must, dont, nice, open_questions, assumptions)
-        - Includes indexed answers keyed by (spec_index, question_index)
-        - Uses pretty-printed JSON for machine readability
-        - Wrapped with guardrail reminders to emit valid JSON only
-    
-    Args:
-        request: The clarification request containing plan and answers
-        provider: Optional LLM provider for future metrics (not exposed in prompts)
-        model: Optional model identifier for future metrics (not exposed in prompts)
-    
-    Returns:
-        Tuple of (system_prompt, user_prompt) ready for LLM invocation
-    
-    Raises:
-        ValueError: If request is None or invalid
-        TypeError: If request is not a ClarificationRequest instance
-    
-    Example:
-        >>> request = ClarificationRequest(plan=plan_input, answers=answers)
-        >>> system_prompt, user_prompt = build_clarification_prompts(request)
-        >>> # Use prompts with LLM client
-    
-    Note:
-        Provider and model parameters are threaded through for future use in
-        metrics/telemetry but are not included in the generated prompts.
-    """
-    if request is None:
-        raise ValueError("request must not be None")
-    
-    # Validate request type
-    if not isinstance(request, ClarificationRequest):
-        raise TypeError(
-            f"request must be a ClarificationRequest instance, got {type(request).__name__}"
-        )
-    
-    # Validate plan exists (should always be present in valid ClarificationRequest)
-    if request.plan is None:
-        raise ValueError("request.plan must not be None")
-    
-    # Build system prompt
-    system_prompt = _build_system_prompt()
-    
-    # Build user prompt with request data
-    user_prompt = _build_user_prompt(request)
-    
-    return system_prompt, user_prompt
-
-
-def _build_system_prompt() -> str:
-    """Build the system prompt for specification clarification.
-    
-    Returns:
-        System prompt string describing the task and output schema
-    """
-    return """You are a specification clarification assistant. Your task is to transform specifications with open questions into clarified specifications by incorporating provided answers.
+# System prompt templates for specification clarification
+# All templates enforce strict JSON output requirements
+SYSTEM_PROMPT_TEMPLATES = {
+    "default": """You are a specification clarification assistant. Your task is to transform specifications with open questions into clarified specifications by incorporating provided answers.
 
 INPUT FORMAT:
 You will receive a JSON object containing:
@@ -148,7 +78,235 @@ IMPORTANT RULES:
 4. Incorporate answers into the appropriate fields (must, dont, nice, assumptions, or vision)
 5. If no answer is provided for a question, use your best judgment based on context
 6. Preserve all original content from must, dont, nice, and assumptions arrays
-7. This is a single-call task - return the complete clarified plan in one response"""
+7. This is a single-call task - return the complete clarified plan in one response""",
+    
+    "strict_json": """You are a specification clarification assistant operating in STRICT JSON MODE.
+
+INPUT FORMAT:
+You will receive a JSON object containing:
+1. "specs": Array of specifications with purpose, vision, must, dont, nice, open_questions, assumptions
+2. "answers": Array of question answers with spec_index, question_index, question, answer
+
+OUTPUT REQUIREMENTS - STRICT JSON ONLY:
+{
+  "specs": [
+    {
+      "purpose": "string",
+      "vision": "string",
+      "must": ["string"],
+      "dont": ["string"],
+      "nice": ["string"],
+      "assumptions": ["string"]
+    }
+  ]
+}
+
+CRITICAL RULES - NO EXCEPTIONS:
+1. Output MUST be valid, parseable JSON
+2. Output MUST start with { and end with }
+3. NO markdown code fences (no ```, no ```json)
+4. NO explanatory text before or after the JSON
+5. NO comments in the JSON
+6. Each spec MUST have exactly these 6 keys: purpose, vision, must, dont, nice, assumptions
+7. Do NOT include "open_questions" in output - resolve them using provided answers
+8. All string values must be properly escaped
+9. All arrays must be valid JSON arrays
+10. Return the complete clarified plan in one response""",
+    
+    "verbose_explanation": """You are a specification clarification assistant. Your task is to transform specifications with open questions into clarified specifications by incorporating provided answers.
+
+INPUT FORMAT:
+You will receive a JSON object containing:
+1. "specs": Array of specifications, each with:
+   - purpose: The purpose of the specification
+   - vision: The vision statement
+   - must: Array of must-have requirements (mandatory features)
+   - dont: Array of things to avoid (anti-patterns, constraints)
+   - nice: Array of nice-to-have features (optional enhancements)
+   - open_questions: Array of questions needing clarification
+   - assumptions: Array of assumptions made about the system
+
+2. "answers": Array of question answers, each with:
+   - spec_index: Index of the specification (0-based)
+   - question_index: Index of the question within that spec (0-based)
+   - question: The question text
+   - answer: The answer provided
+
+YOUR TASK:
+Analyze the specifications and provided answers. Incorporate each answer into the most appropriate field:
+- If an answer clarifies a requirement → add to "must" array
+- If an answer identifies something to avoid → add to "dont" array  
+- If an answer describes an optional feature → add to "nice" array
+- If an answer clarifies an assumption → add to "assumptions" array
+- If an answer refines the vision → incorporate into "vision" string
+
+OUTPUT REQUIREMENTS - STRICT JSON ONLY:
+You must return ONLY a valid JSON object with this exact structure:
+{
+  "specs": [
+    {
+      "purpose": "string",
+      "vision": "string",
+      "must": ["string"],
+      "dont": ["string"],
+      "nice": ["string"],
+      "assumptions": ["string"]
+    }
+  ]
+}
+
+IMPORTANT RULES:
+1. Each spec in your output must have exactly these 6 keys: purpose, vision, must, dont, nice, assumptions
+2. Do NOT include "open_questions" in the output - questions should be resolved using provided answers
+3. Return ONLY the JSON object - no markdown fences (```, ```json), no explanations, no additional text
+4. All fields must be present for each spec (use empty arrays [] if no items)
+5. Preserve all original content from must, dont, nice, and assumptions arrays
+6. Add new content from answers to appropriate arrays
+7. This is a single-call task - return the complete clarified plan in one response
+8. The JSON must be valid and parseable - proper escaping, no trailing commas, no comments"""
+}
+
+
+def get_system_prompt_template(system_prompt_id: str) -> str:
+    """Retrieve system prompt template by ID with fallback to default.
+    
+    This function looks up a system prompt template by its identifier and
+    returns the corresponding template text. If the requested ID is not found,
+    it logs a warning and returns the 'default' template as a fallback. This
+    ensures that jobs never fail due to unknown system_prompt_id values.
+    
+    All templates enforce strict JSON output requirements to ensure consistent
+    response parsing across different prompt styles.
+    
+    Args:
+        system_prompt_id: Identifier for the system prompt template
+                         (e.g., 'default', 'strict_json', 'verbose_explanation')
+    
+    Returns:
+        System prompt template text
+    
+    Example:
+        >>> template = get_system_prompt_template('strict_json')
+        >>> # Returns strict_json template
+        
+        >>> template = get_system_prompt_template('unknown_id')
+        >>> # Logs warning and returns 'default' template
+    
+    Note:
+        The fallback behavior is intentional - we prefer degraded behavior
+        (using default template) over failing the entire clarification job.
+        All templates maintain strict JSON output requirements.
+    """
+    template = SYSTEM_PROMPT_TEMPLATES.get(system_prompt_id)
+    if template:
+        return template
+    
+    logger.warning(
+        f"Unknown system_prompt_id '{system_prompt_id}'. "
+        f"Available templates: {', '.join(sorted(SYSTEM_PROMPT_TEMPLATES.keys()))}. "
+        "Falling back to 'default' template."
+    )
+    return SYSTEM_PROMPT_TEMPLATES['default']
+
+
+def build_clarification_prompts(
+    request: ClarificationRequest,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    system_prompt_id: Optional[str] = None
+) -> Tuple[str, str]:
+    """Build system and user prompts for LLM-based specification clarification.
+    
+    This function transforms a ClarificationRequest into a pair of prompts that
+    guide the LLM to clarify specifications by incorporating provided answers.
+    The prompts are designed to elicit structured JSON responses conforming to
+    the ClarifiedPlan schema.
+    
+    System Prompt:
+        - Selected from SYSTEM_PROMPT_TEMPLATES based on system_prompt_id
+        - Describes the clarification task
+        - Enumerates the exact ClarifiedPlan schema with six required keys per spec
+        - Emphasizes that responses must be raw JSON (no markdown, no prose)
+        - Requires single-call processing (no multi-turn interactions)
+        - All templates enforce strict JSON output requirements
+    
+    User Prompt:
+        - Serializes source specs (purpose, vision, must, dont, nice, open_questions, assumptions)
+        - Includes indexed answers keyed by (spec_index, question_index)
+        - Uses pretty-printed JSON for machine readability
+        - Wrapped with guardrail reminders to emit valid JSON only
+    
+    Args:
+        request: The clarification request containing plan and answers
+        provider: Optional LLM provider for future metrics (not exposed in prompts)
+        model: Optional model identifier for future metrics (not exposed in prompts)
+        system_prompt_id: Optional identifier for system prompt template (defaults to 'default')
+    
+    Returns:
+        Tuple of (system_prompt, user_prompt) ready for LLM invocation
+    
+    Raises:
+        ValueError: If request is None or invalid
+        TypeError: If request is not a ClarificationRequest instance
+    
+    Example:
+        >>> request = ClarificationRequest(plan=plan_input, answers=answers)
+        >>> system_prompt, user_prompt = build_clarification_prompts(request)
+        >>> # Use prompts with LLM client
+        
+        >>> # With custom template
+        >>> system_prompt, user_prompt = build_clarification_prompts(
+        ...     request, system_prompt_id='strict_json'
+        ... )
+    
+    Note:
+        Provider and model parameters are threaded through for future use in
+        metrics/telemetry but are not included in the generated prompts.
+        If system_prompt_id is unknown, falls back to 'default' template with
+        a warning log entry.
+    """
+    if request is None:
+        raise ValueError("request must not be None")
+    
+    # Validate request type
+    if not isinstance(request, ClarificationRequest):
+        raise TypeError(
+            f"request must be a ClarificationRequest instance, got {type(request).__name__}"
+        )
+    
+    # Validate plan exists (should always be present in valid ClarificationRequest)
+    if request.plan is None:
+        raise ValueError("request.plan must not be None")
+    
+    # Build system prompt using template (defaults to 'default' if not specified)
+    system_prompt = _build_system_prompt(system_prompt_id=system_prompt_id)
+    
+    # Build user prompt with request data
+    user_prompt = _build_user_prompt(request)
+    
+    return system_prompt, user_prompt
+
+
+def _build_system_prompt(system_prompt_id: Optional[str] = None) -> str:
+    """Build the system prompt for specification clarification.
+    
+    Retrieves the appropriate system prompt template based on the provided
+    system_prompt_id. If no ID is provided, defaults to 'default' template.
+    If an unknown ID is provided, logs a warning and falls back to 'default'.
+    
+    Args:
+        system_prompt_id: Optional identifier for system prompt template
+                         Defaults to 'default' if not provided
+    
+    Returns:
+        System prompt string describing the task and output schema
+    """
+    # Default to 'default' template if not specified
+    if system_prompt_id is None:
+        system_prompt_id = 'default'
+    
+    # Retrieve template (with fallback handling)
+    return get_system_prompt_template(system_prompt_id)
 
 
 def _build_user_prompt(request: ClarificationRequest) -> str:
@@ -542,36 +700,50 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         # ====================================================================
         # Resolve LLM configuration: use stored config or apply defaults
         llm_config = None
+        system_prompt_id = 'default'  # Default system prompt template
+        
         if job.config and 'clarification_config' in job.config:
             # Reconstruct ClarificationConfig from stored dict with error handling
             try:
                 clarification_config_dict = job.config['clarification_config']
                 clarification_config = ClarificationConfig(**clarification_config_dict)
                 
+                # Extract system_prompt_id if present
+                if clarification_config.system_prompt_id:
+                    system_prompt_id = clarification_config.system_prompt_id
+                
                 # Convert to ClarificationLLMConfig (without system_prompt_id)
-                llm_config = ClarificationLLMConfig(
-                    provider=clarification_config.provider,
-                    model=clarification_config.model,
-                    temperature=clarification_config.temperature,
-                    max_tokens=clarification_config.max_tokens
-                )
+                # Only pass non-None values to avoid validation errors
+                llm_config_kwargs = {
+                    'provider': clarification_config.provider,
+                    'model': clarification_config.model,
+                }
+                if clarification_config.temperature is not None:
+                    llm_config_kwargs['temperature'] = clarification_config.temperature
+                if clarification_config.max_tokens is not None:
+                    llm_config_kwargs['max_tokens'] = clarification_config.max_tokens
+                
+                llm_config = ClarificationLLMConfig(**llm_config_kwargs)
             except Exception as e:
                 # If config reconstruction fails, log error and fall through to defaults
                 logger.warning(
                     f"Failed to reconstruct clarification_config for job {job_id}: {e}. "
                     "Falling back to default configuration."
                 )
-                llm_config = None
+                # llm_config remains None, will be handled below
         elif job.config and 'llm_config' in job.config:
             # Legacy support: Reconstruct ClarificationLLMConfig from stored dict
             llm_config_dict = job.config['llm_config']
             llm_config = ClarificationLLMConfig(**llm_config_dict)
-        else:
-            # Apply default configuration: provider="openai", model="gpt-5"
+            # Legacy configs don't have system_prompt_id, so 'default' is used
+        
+        # If no config loaded, apply default configuration
+        if llm_config is None:
             llm_config = ClarificationLLMConfig(
                 provider="openai",
                 model="gpt-5"
             )
+            # system_prompt_id is already 'default'
         
         # ====================================================================
         # LLM CLIENT INITIALIZATION
@@ -619,7 +791,8 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
             system_prompt, user_prompt = build_clarification_prompts(
                 job.request,
                 provider=llm_config.provider,
-                model=llm_config.model
+                model=llm_config.model,
+                system_prompt_id=system_prompt_id
             )
         except Exception as e:
             error_message = f"Failed to build prompts: {type(e).__name__}: {str(e)}"

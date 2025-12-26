@@ -21,7 +21,154 @@ from app.services.clarification import (
     JSONCleanupError,
     build_clarification_prompts,
     cleanup_and_parse_json,
+    get_system_prompt_template,
+    SYSTEM_PROMPT_TEMPLATES,
 )
+
+
+class TestSystemPromptTemplates:
+    """Tests for system prompt template selection and fallback."""
+    
+    def test_get_system_prompt_template_default(self):
+        """Test retrieving the default template."""
+        template = get_system_prompt_template('default')
+        
+        assert template == SYSTEM_PROMPT_TEMPLATES['default']
+        assert 'specification clarification assistant' in template.lower()
+        assert 'valid JSON' in template or 'JSON object' in template
+        assert 'purpose' in template
+        assert 'vision' in template
+        assert 'must' in template
+        assert 'dont' in template
+        assert 'nice' in template
+        assert 'assumptions' in template
+    
+    def test_get_system_prompt_template_strict_json(self):
+        """Test retrieving the strict_json template."""
+        template = get_system_prompt_template('strict_json')
+        
+        assert template == SYSTEM_PROMPT_TEMPLATES['strict_json']
+        assert 'STRICT JSON MODE' in template
+        assert 'CRITICAL RULES' in template
+        assert 'NO markdown code fences' in template
+        assert 'NO explanatory text' in template
+    
+    def test_get_system_prompt_template_verbose_explanation(self):
+        """Test retrieving the verbose_explanation template."""
+        template = get_system_prompt_template('verbose_explanation')
+        
+        assert template == SYSTEM_PROMPT_TEMPLATES['verbose_explanation']
+        assert 'YOUR TASK:' in template
+        assert 'Analyze the specifications' in template
+        assert 'most appropriate field' in template
+    
+    def test_get_system_prompt_template_unknown_falls_back(self, caplog):
+        """Test that unknown template ID falls back to default with warning."""
+        import logging
+        caplog.set_level(logging.WARNING)
+        
+        template = get_system_prompt_template('unknown_template_id')
+        
+        # Should return default template
+        assert template == SYSTEM_PROMPT_TEMPLATES['default']
+        
+        # Should log a warning
+        assert any('unknown_template_id' in record.message.lower() for record in caplog.records)
+        assert any('falling back to' in record.message.lower() for record in caplog.records)
+    
+    def test_all_templates_enforce_json_strictness(self):
+        """Test that all templates contain strict JSON output requirements."""
+        for template_id, template in SYSTEM_PROMPT_TEMPLATES.items():
+            # All templates should mention JSON
+            assert 'JSON' in template, f"Template {template_id} doesn't mention JSON"
+            
+            # All templates should require ONLY JSON output
+            assert 'ONLY' in template or 'only' in template.lower(), \
+                f"Template {template_id} doesn't emphasize 'ONLY' JSON"
+            
+            # All templates should specify the 6 required keys
+            required_keys = ['purpose', 'vision', 'must', 'dont', 'nice', 'assumptions']
+            for key in required_keys:
+                assert key in template, \
+                    f"Template {template_id} missing required key: {key}"
+            
+            # All templates should say not to include open_questions
+            assert 'NOT include' in template or 'do not include' in template.lower(), \
+                f"Template {template_id} doesn't prohibit open_questions"
+            assert 'open_questions' in template or 'open questions' in template.lower(), \
+                f"Template {template_id} doesn't mention open_questions"
+    
+    def test_build_prompts_with_default_template(self):
+        """Test building prompts with default template (implicit)."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan, answers=[])
+        
+        system_prompt, user_prompt = build_clarification_prompts(request)
+        
+        # Should use default template
+        assert 'specification clarification assistant' in system_prompt.lower()
+        assert 'valid JSON' in system_prompt or 'JSON object' in system_prompt
+    
+    def test_build_prompts_with_explicit_default_template(self):
+        """Test building prompts with explicitly specified default template."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan, answers=[])
+        
+        system_prompt, user_prompt = build_clarification_prompts(
+            request, system_prompt_id='default'
+        )
+        
+        # Should use default template
+        assert 'specification clarification assistant' in system_prompt.lower()
+    
+    def test_build_prompts_with_strict_json_template(self):
+        """Test building prompts with strict_json template."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan, answers=[])
+        
+        system_prompt, user_prompt = build_clarification_prompts(
+            request, system_prompt_id='strict_json'
+        )
+        
+        # Should use strict_json template
+        assert 'STRICT JSON MODE' in system_prompt
+        assert 'CRITICAL RULES' in system_prompt
+    
+    def test_build_prompts_with_verbose_template(self):
+        """Test building prompts with verbose_explanation template."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan, answers=[])
+        
+        system_prompt, user_prompt = build_clarification_prompts(
+            request, system_prompt_id='verbose_explanation'
+        )
+        
+        # Should use verbose_explanation template
+        assert 'YOUR TASK:' in system_prompt
+        assert 'Analyze the specifications' in system_prompt
+    
+    def test_build_prompts_with_unknown_template_falls_back(self, caplog):
+        """Test that unknown template ID falls back to default when building prompts."""
+        import logging
+        caplog.set_level(logging.WARNING)
+        
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan, answers=[])
+        
+        system_prompt, user_prompt = build_clarification_prompts(
+            request, system_prompt_id='nonexistent_template'
+        )
+        
+        # Should fall back to default template
+        assert 'specification clarification assistant' in system_prompt.lower()
+        
+        # Should log a warning
+        assert any('nonexistent_template' in record.message.lower() for record in caplog.records)
 
 
 class TestBuildClarificationPrompts:
