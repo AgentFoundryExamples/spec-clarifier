@@ -295,8 +295,8 @@ The job store includes a TTL (Time-To-Live) cleanup mechanism that automatically
 - **Default TTL**: 24 hours (86,400 seconds)
 - **Eligible for cleanup**: Jobs with SUCCESS or FAILED status
 - **Stale PENDING cleanup**: Optional parameter `stale_pending_ttl_seconds` removes PENDING jobs that were never processed (useful for handling worker crashes)
-- **Protected**: RUNNING and PENDING jobs are never cleaned up
-- **Configurable**: TTL can be adjusted via the `ttl_seconds` parameter
+- **Protected**: RUNNING jobs are never cleaned up to prevent data loss during processing
+- **Configurable**: TTL can be adjusted via the `ttl_seconds` and `stale_pending_ttl_seconds` parameters
 
 To implement automated cleanup, you can schedule periodic calls to `cleanup_expired_jobs()` in your application startup or background tasks.
 
