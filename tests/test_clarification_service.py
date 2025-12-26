@@ -204,8 +204,23 @@ class TestProcessClarificationJobService:
         original_created_at = job.created_at
         original_updated_at = job.updated_at
         
-        # Process job (manually invoke)
-        process_clarification_job(job.id)
+        # Track state transitions to verify RUNNING state occurs
+        from app.services import job_store
+        states_observed = []
+        original_update = job_store.update_job
+        
+        def track_updates(job_id, **kwargs):
+            if 'status' in kwargs:
+                states_observed.append(kwargs['status'])
+            return original_update(job_id, **kwargs)
+        
+        with patch.object(job_store, 'update_job', side_effect=track_updates):
+            # Process job (manually invoke)
+            process_clarification_job(job.id)
+        
+        # Verify we observed RUNNING state during processing
+        assert JobStatus.RUNNING in states_observed
+        assert JobStatus.SUCCESS in states_observed
         
         # Verify final state
         processed_job = get_job(job.id)
@@ -236,6 +251,8 @@ class TestProcessClarificationJobService:
             
             # Process should handle exception gracefully
             process_clarification_job(job.id)
+            
+            mock_clarify.assert_called_once()
         
         # Verify job is marked as FAILED
         failed_job = get_job(job.id)

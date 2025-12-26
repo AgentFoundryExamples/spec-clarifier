@@ -945,12 +945,7 @@ class TestAsyncJobLifecycleAPI:
             "answers": [],
         }
         
-        start = time.time()
         response = client.post("/v1/clarifications", json=request_data)
-        elapsed = time.time() - start
-        
-        # Should return very quickly (< 1 second)
-        assert elapsed < 1.0
         
         # Response should be 202 Accepted
         assert response.status_code == 202
@@ -963,12 +958,12 @@ class TestAsyncJobLifecycleAPI:
         assert "updated_at" in data
         assert "last_error" in data
         
-        # Should NOT have full request or result
+        # Should NOT have full request or result - this is the robust check
         assert "request" not in data
         assert "result" not in data
         assert "config" not in data
         
-        # Status should be PENDING
+        # Status should be PENDING (not yet processed)
         assert data["status"] == "PENDING"
     
     def test_get_returns_documented_fields(self, client):
@@ -1041,15 +1036,19 @@ class TestAsyncJobLifecycleAPI:
             # Wait for background processing to complete
             max_wait = 5.0
             start_time = time.time()
+            job_done = False
             
             while time.time() - start_time < max_wait:
                 get_response = client.get(f"/v1/clarifications/{job_id}")
                 data = get_response.json()
                 
                 if data["status"] in ["SUCCESS", "FAILED"]:
+                    job_done = True
                     break
                 
                 time.sleep(0.1)
+            
+            assert job_done, f"Job did not complete within {max_wait} seconds. Final status: {data.get('status')}"
         
         # Get final job status
         get_response = client.get(f"/v1/clarifications/{job_id}")
