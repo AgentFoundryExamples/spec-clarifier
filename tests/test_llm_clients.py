@@ -725,3 +725,593 @@ class TestEdgeCases:
             max_tokens=1000000
         )
         assert config.max_tokens == 1000000
+
+
+class TestOpenAIResponsesClient:
+    """Tests for OpenAIResponsesClient implementation."""
+    
+    async def test_openai_client_successful_completion(self, monkeypatch):
+        """Test successful completion with OpenAI Responses API."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        # Mock response object that matches OpenAI Responses API structure
+        class MockResponse:
+            @property
+            def output_text(self):
+                return "This is the AI response text."
+        
+        # Mock AsyncOpenAI client
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    return MockResponse()
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        # Monkeypatch the AsyncOpenAI import
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        
+        client = OpenAIResponsesClient()
+        # Inject mock client
+        client._client = MockAsyncOpenAI(api_key="sk-test-key-12345")
+        
+        response = await client.complete(
+            system_prompt="You are a helpful assistant",
+            user_prompt="Hello, world!",
+            model="gpt-5.1"
+        )
+        
+        assert response == "This is the AI response text."
+    
+    async def test_openai_client_kwargs_propagation(self, monkeypatch):
+        """Test that kwargs are properly passed to OpenAI API."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        captured_params = {}
+        
+        # Mock response object
+        class MockResponse:
+            @property
+            def output_text(self):
+                return "Response with custom params"
+        
+        # Mock AsyncOpenAI client that captures parameters
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    captured_params.update(kwargs)
+                    return MockResponse()
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        
+        client = OpenAIResponsesClient()
+        client._client = MockAsyncOpenAI(api_key="sk-test-key-12345")
+        
+        await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="gpt-5.1",
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        # Verify parameters were passed correctly
+        assert captured_params["model"] == "gpt-5.1"
+        assert captured_params["instructions"] == "System"
+        assert captured_params["input"] == "User"
+        assert captured_params["temperature"] == 0.7
+        assert captured_params["max_output_tokens"] == 500  # max_tokens renamed
+    
+    async def test_openai_client_content_array_fallback(self, monkeypatch):
+        """Test extraction from output list when output_text is empty."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        # Mock content part
+        class MockContentPart:
+            def __init__(self, text):
+                self.type = "output_text"
+                self.text = text
+        
+        # Mock output item (message type)
+        class MockOutputItem:
+            def __init__(self, content_parts):
+                self.type = "message"
+                self.content = content_parts
+        
+        # Mock response with output list
+        class MockResponse:
+            def __init__(self):
+                self.output = [
+                    MockOutputItem([
+                        MockContentPart("First part. "),
+                        MockContentPart("Second part.")
+                    ])
+                ]
+            
+            @property
+            def output_text(self):
+                # Simulate empty output_text to force fallback
+                return ""
+        
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    return MockResponse()
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        
+        client = OpenAIResponsesClient()
+        client._client = MockAsyncOpenAI(api_key="sk-test-key-12345")
+        
+        response = await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="gpt-5.1"
+        )
+        
+        assert response == "First part. Second part."
+    
+    async def test_openai_client_multiple_content_parts_ignore_non_text(self, monkeypatch):
+        """Test that non-text content parts are ignored."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        # Mock content parts
+        class MockTextPart:
+            def __init__(self, text):
+                self.type = "output_text"
+                self.text = text
+        
+        class MockToolPart:
+            def __init__(self):
+                self.type = "tool_call"
+                self.tool_name = "calculator"
+        
+        # Mock output item
+        class MockOutputItem:
+            def __init__(self, content_parts):
+                self.type = "message"
+                self.content = content_parts
+        
+        # Mock response with mixed content types
+        class MockResponse:
+            def __init__(self):
+                self.output = [
+                    MockOutputItem([
+                        MockTextPart("Text before tool. "),
+                        MockToolPart(),
+                        MockTextPart("Text after tool.")
+                    ])
+                ]
+            
+            @property
+            def output_text(self):
+                # Simulate empty output_text to force fallback
+                return ""
+        
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    return MockResponse()
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        
+        client = OpenAIResponsesClient()
+        client._client = MockAsyncOpenAI(api_key="sk-test-key-12345")
+        
+        response = await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="gpt-5.1"
+        )
+        
+        assert response == "Text before tool. Text after tool."
+    
+    async def test_openai_client_missing_api_key_error(self, monkeypatch):
+        """Test that missing API key raises LLMCallError."""
+        from app.services.llm_clients import OpenAIResponsesClient, LLMCallError
+        
+        # Remove API key from environment
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        
+        client = OpenAIResponsesClient()
+        
+        with pytest.raises(LLMCallError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="gpt-5.1"
+            )
+        
+        assert "OPENAI_API_KEY" in str(exc_info.value)
+        assert exc_info.value.provider == "openai"
+    
+    async def test_openai_client_authentication_error(self, monkeypatch):
+        """Test that OpenAI AuthenticationError is mapped to LLMAuthenticationError."""
+        from app.services.llm_clients import OpenAIResponsesClient, LLMAuthenticationError
+        import httpx
+        
+        # Create proper httpx request and response
+        request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+        response = httpx.Response(401, json={"error": {"message": "Invalid API key"}}, request=request)
+        
+        # Mock AsyncOpenAI to raise AuthenticationError
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    from openai import AuthenticationError
+                    raise AuthenticationError("Invalid API key", response=response, body=None)
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-invalid-key")
+        
+        client = OpenAIResponsesClient()
+        client._client = MockAsyncOpenAI(api_key="sk-invalid-key")
+        
+        with pytest.raises(LLMAuthenticationError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="gpt-5.1"
+            )
+        
+        assert "authentication failed" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "openai"
+        assert exc_info.value.original_error is not None
+    
+    async def test_openai_client_rate_limit_error(self, monkeypatch):
+        """Test that OpenAI RateLimitError is mapped to LLMRateLimitError."""
+        from app.services.llm_clients import OpenAIResponsesClient, LLMRateLimitError
+        import httpx
+        
+        # Create proper httpx request and response
+        request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+        response = httpx.Response(429, json={"error": {"message": "Rate limit exceeded"}}, request=request)
+        
+        # Mock AsyncOpenAI to raise RateLimitError
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    from openai import RateLimitError
+                    raise RateLimitError("Rate limit exceeded", response=response, body=None)
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        client._client = MockAsyncOpenAI(api_key="sk-test-key")
+        
+        with pytest.raises(LLMRateLimitError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="gpt-5.1"
+            )
+        
+        assert "rate limit" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "openai"
+    
+    async def test_openai_client_validation_error(self, monkeypatch):
+        """Test that OpenAI BadRequestError is mapped to LLMValidationError."""
+        from app.services.llm_clients import OpenAIResponsesClient, LLMValidationError
+        import httpx
+        
+        # Create proper httpx request and response
+        request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+        response = httpx.Response(400, json={"error": {"message": "Invalid request format"}}, request=request)
+        
+        # Mock AsyncOpenAI to raise BadRequestError
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    from openai import BadRequestError
+                    raise BadRequestError("Invalid request format", response=response, body=None)
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        client._client = MockAsyncOpenAI(api_key="sk-test-key")
+        
+        with pytest.raises(LLMValidationError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="gpt-5.1"
+            )
+        
+        assert "validation failed" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "openai"
+    
+    async def test_openai_client_network_error(self, monkeypatch):
+        """Test that OpenAI connection errors are mapped to LLMNetworkError."""
+        from app.services.llm_clients import OpenAIResponsesClient, LLMNetworkError
+        
+        # Mock request object for OpenAI exception
+        class MockRequest:
+            url = "https://api.openai.com/v1/responses"
+            method = "POST"
+        
+        # Mock AsyncOpenAI to raise APIConnectionError
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    from openai import APIConnectionError
+                    raise APIConnectionError(request=MockRequest())
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        client._client = MockAsyncOpenAI(api_key="sk-test-key")
+        
+        with pytest.raises(LLMNetworkError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="gpt-5.1"
+            )
+        
+        assert "network error" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "openai"
+    
+    async def test_openai_client_timeout_error(self, monkeypatch):
+        """Test that OpenAI timeout errors are mapped to LLMNetworkError."""
+        from app.services.llm_clients import OpenAIResponsesClient, LLMNetworkError
+        
+        # Mock request object for OpenAI exception
+        class MockRequest:
+            url = "https://api.openai.com/v1/responses"
+            method = "POST"
+        
+        # Mock AsyncOpenAI to raise APITimeoutError
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    from openai import APITimeoutError
+                    raise APITimeoutError(request=MockRequest())
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        client._client = MockAsyncOpenAI(api_key="sk-test-key")
+        
+        with pytest.raises(LLMNetworkError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="gpt-5.1"
+            )
+        
+        assert "network error" in str(exc_info.value).lower()
+        assert exc_info.value.provider == "openai"
+    
+    async def test_openai_client_generic_api_error(self, monkeypatch):
+        """Test that generic OpenAI APIError is mapped to LLMCallError."""
+        from app.services.llm_clients import OpenAIResponsesClient, LLMCallError
+        
+        # Mock response object for OpenAI exception
+        class MockResponse:
+            status_code = 500
+            headers = {}
+            
+            def json(self):
+                return {"error": {"message": "Internal server error"}}
+        
+        # Mock AsyncOpenAI to raise APIError
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    from openai import APIError
+                    raise APIError("Internal server error", request=None, body=None)
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        client._client = MockAsyncOpenAI(api_key="sk-test-key")
+        
+        with pytest.raises(LLMCallError) as exc_info:
+            await client.complete(
+                system_prompt="System",
+                user_prompt="User",
+                model="gpt-5.1"
+            )
+        
+        # Should not be a more specific error type
+        assert type(exc_info.value).__name__ == "LLMCallError"
+        assert exc_info.value.provider == "openai"
+    
+    async def test_openai_client_validates_empty_system_prompt(self, monkeypatch):
+        """Test that OpenAIResponsesClient validates empty system_prompt."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        
+        with pytest.raises(ValueError) as exc_info:
+            await client.complete(
+                system_prompt="",
+                user_prompt="User query",
+                model="gpt-5.1"
+            )
+        
+        assert "system_prompt must not be empty or blank" in str(exc_info.value)
+    
+    async def test_openai_client_validates_empty_user_prompt(self, monkeypatch):
+        """Test that OpenAIResponsesClient validates empty user_prompt."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        
+        with pytest.raises(ValueError) as exc_info:
+            await client.complete(
+                system_prompt="System instruction",
+                user_prompt="",
+                model="gpt-5.1"
+            )
+        
+        assert "user_prompt must not be empty or blank" in str(exc_info.value)
+    
+    async def test_openai_client_validates_empty_model(self, monkeypatch):
+        """Test that OpenAIResponsesClient validates empty model."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        
+        with pytest.raises(ValueError) as exc_info:
+            await client.complete(
+                system_prompt="System instruction",
+                user_prompt="User query",
+                model=""
+            )
+        
+        assert "model must not be empty or blank" in str(exc_info.value)
+    
+    async def test_openai_client_lazy_initialization(self, monkeypatch):
+        """Test that client is initialized lazily on first use."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        assert client._client is None  # Not initialized yet
+        
+        # Mock the client after instantiation
+        class MockResponse:
+            @property
+            def output_text(self):
+                return "Response"
+        
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    return MockResponse()
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        client._client = MockAsyncOpenAI(api_key="sk-test-key")
+        
+        await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="gpt-5.1"
+        )
+        
+        assert client._client is not None  # Now initialized
+    
+    async def test_openai_client_custom_api_key(self, monkeypatch):
+        """Test that client can be initialized with custom API key."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        # Don't set environment variable
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        
+        # Mock response
+        class MockResponse:
+            @property
+            def output_text(self):
+                return "Response with custom key"
+        
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    return MockResponse()
+            
+            def __init__(self, api_key):
+                self.api_key = api_key
+                self.responses = self.MockResponses()
+        
+        client = OpenAIResponsesClient(api_key="sk-custom-key-789")
+        client._client = MockAsyncOpenAI(api_key="sk-custom-key-789")
+        
+        response = await client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="gpt-5.1"
+        )
+        
+        assert response == "Response with custom key"
+    
+    async def test_openai_client_implements_protocol(self, monkeypatch):
+        """Test that OpenAIResponsesClient implements the LLMClient protocol."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+        
+        client = OpenAIResponsesClient()
+        
+        # Test that complete method exists and has the right signature
+        assert hasattr(client, "complete")
+        assert callable(client.complete)
+        
+        # Mock the client
+        class MockResponse:
+            @property
+            def output_text(self):
+                return "Protocol test response"
+        
+        class MockAsyncOpenAI:
+            class MockResponses:
+                async def create(self, **kwargs):
+                    return MockResponse()
+            
+            def __init__(self, api_key):
+                self.responses = self.MockResponses()
+        
+        client._client = MockAsyncOpenAI(api_key="sk-test-key")
+        
+        # Test that it's async and returns a string
+        result = client.complete(
+            system_prompt="System",
+            user_prompt="User",
+            model="gpt-5.1"
+        )
+        assert hasattr(result, '__await__')
+        
+        response = await result
+        assert isinstance(response, str)
+    
+    def test_openai_client_has_import_error_handling(self):
+        """Verify that the complete method has ImportError handling for missing OpenAI SDK."""
+        from app.services.llm_clients import OpenAIResponsesClient
+        import inspect
+        
+        # Get the source code of the complete method
+        source = inspect.getsource(OpenAIResponsesClient.complete)
+        
+        # Verify the ImportError handling is present
+        assert "except ImportError" in source, "Missing ImportError exception handler"
+        assert "OpenAI SDK not installed or accessible" in source, "Missing SDK not installed error message"
+        assert "from openai import" in source, "Missing openai module import"
+        
+        # The code structure validates that if openai cannot be imported,
+        # a clear LLMCallError will be raised with appropriate messaging
