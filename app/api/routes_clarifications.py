@@ -17,26 +17,40 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan
+from app.config import get_settings
+from app.models.specs import (
+    ClarificationRequest,
+    ClarifiedPlan,
+    JobStatusResponse,
+    JobSummaryResponse,
+)
 from app.services.clarification import clarify_plan, start_clarification_job
 from app.services.job_store import JobNotFoundError, get_job
 
-router = APIRouter(prefix="/v1/clarifications", tags=["clarifications"])
+router = APIRouter(prefix="/v1/clarifications", tags=["Clarifications"])
 
 
 @router.post(
     "/preview",
     response_model=ClarifiedPlan,
-    summary="Preview clarified specifications",
+    summary="Preview clarified specifications (synchronous, developer-only)",
     description=(
+        "⚠️ DEVELOPER-ONLY ENDPOINT - NOT FOR PRODUCTION USE\n\n"
+        "This endpoint provides a synchronous preview of the clarification process "
+        "for development and debugging purposes only. It returns immediately with the "
+        "clarified specifications without async processing or LLM operations.\n\n"
+        "For production use cases, use POST /v1/clarifications to create an async job "
+        "and poll GET /v1/clarifications/{job_id} for results.\n\n"
         "Accepts a ClarificationRequest containing specifications with open questions "
-        "and returns a ClarifiedPlan with the questions removed. This endpoint provides "
-        "a synchronous preview of the clarification process without processing answers "
-        "or triggering async/LLM operations."
+        "and returns a ClarifiedPlan with the questions removed. Answers in the request "
+        "are currently ignored."
     ),
 )
 def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
     """Preview clarified specifications from a plan.
+    
+    ⚠️ DEVELOPER-ONLY - This is a synchronous endpoint for development/debugging.
+    For production, use the async POST /v1/clarifications endpoint instead.
     
     This endpoint transforms specifications by copying the required fields
     (purpose, vision, must, dont, nice, assumptions) while omitting open_questions.
@@ -56,61 +70,93 @@ def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
 
 @router.post(
     "",
-    response_model=ClarificationJob,
+    response_model=JobSummaryResponse,
     status_code=202,
     summary="Start async clarification job",
     description=(
-        "Accepts a ClarificationRequest and creates an asynchronous clarification job. "
-        "The job is initially in PENDING status and will be processed in the background. "
-        "Returns immediately with the job details. Use GET /v1/clarifications/{job_id} "
-        "to poll for job status and retrieve results when complete."
+        "Creates an asynchronous clarification job and returns immediately with "
+        "lightweight job details (id, status, timestamps). The job is initially in "
+        "PENDING status and will be processed in the background.\n\n"
+        "Returns HTTP 202 Accepted with minimal job metadata. The response does NOT "
+        "include the full request payload or result to keep responses lightweight.\n\n"
+        "Use GET /v1/clarifications/{job_id} to poll for job status and retrieve "
+        "results when complete."
     ),
 )
 def create_clarification_job(
     request: ClarificationRequest,
     background_tasks: BackgroundTasks
-) -> ClarificationJob:
+) -> JobSummaryResponse:
     """Create and start an asynchronous clarification job.
     
     This endpoint creates a new clarification job with PENDING status,
-    schedules it for background processing, and returns immediately
-    without blocking. The job will transition through RUNNING to either
-    SUCCESS or FAILED status.
+    schedules it for background processing, and returns immediately with
+    a lightweight summary (no request/result payloads).
+    
+    The job will transition through RUNNING to either SUCCESS or FAILED status.
     
     Args:
         request: The clarification request containing the plan and optional answers
         background_tasks: FastAPI BackgroundTasks for async processing
         
     Returns:
-        ClarificationJob: The newly created job with PENDING status
+        JobSummaryResponse: Lightweight job summary with id, status, and timestamps
     """
-    return start_clarification_job(request, background_tasks)
+    job = start_clarification_job(request, background_tasks)
+    
+    # Return lightweight summary without request/result payloads
+    return JobSummaryResponse(
+        id=job.id,
+        status=job.status,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        last_error=job.last_error,
+    )
 
 
 @router.get(
     "/{job_id}",
-    response_model=ClarificationJob,
+    response_model=JobStatusResponse,
     summary="Get clarification job status",
     description=(
         "Retrieves the current status and details of a clarification job by its ID. "
-        "Use this endpoint to poll for job completion after creating an async job. "
-        "When status is SUCCESS, the result field will contain the clarified plan. "
-        "When status is FAILED, the last_error field will contain the error message."
+        "Use this endpoint to poll for job completion after creating an async job.\n\n"
+        "When status is SUCCESS, the result field will contain the clarified plan "
+        "(only if APP_SHOW_JOB_RESULT development flag is enabled).\n\n"
+        "When status is FAILED, the last_error field will contain the error message.\n\n"
+        "Returns 404 if the job ID is not found. Invalid UUIDs return 422 validation errors."
     ),
 )
-def get_clarification_job(job_id: UUID) -> ClarificationJob:
+def get_clarification_job(job_id: UUID) -> JobStatusResponse:
     """Get the status and details of a clarification job.
+    
+    Returns job metadata and conditionally includes the result field based on
+    the APP_SHOW_JOB_RESULT development flag. In production mode (flag=False),
+    the result is excluded to prevent clients from depending on embedded results.
     
     Args:
         job_id: The UUID of the job to retrieve
         
     Returns:
-        ClarificationJob: The job with current status and results (if complete)
+        JobStatusResponse: Job status with conditional result field
         
     Raises:
-        HTTPException: 404 if job not found
+        HTTPException: 404 if job not found, 422 if UUID is malformed
     """
     try:
-        return get_job(job_id)
+        job = get_job(job_id)
+        settings = get_settings()
+        
+        # Conditionally include result based on development flag
+        result = job.result if settings.show_job_result else None
+        
+        return JobStatusResponse(
+            id=job.id,
+            status=job.status,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            last_error=job.last_error,
+            result=result,
+        )
     except JobNotFoundError:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")

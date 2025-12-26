@@ -397,7 +397,7 @@ class TestClarificationsOpenAPI:
         
         # Check tags
         post_spec = endpoint["post"]
-        assert "clarifications" in post_spec["tags"]
+        assert "Clarifications" in post_spec["tags"]
         
         # Check that request body is documented
         assert "requestBody" in post_spec
@@ -429,16 +429,16 @@ class TestCreateClarificationJob:
         assert response.status_code == 202
         data = response.json()
         
-        # Should return a job with PENDING status
+        # Should return a lightweight job summary with PENDING status
         assert data["status"] == "PENDING"
         assert "id" in data
-        # Request should be stored (with defaults filled in by Pydantic)
-        assert data["request"]["plan"]["specs"][0]["purpose"] == "Test"
-        assert data["request"]["plan"]["specs"][0]["must"] == ["Feature 1"]
-        assert data["result"] is None
-        assert data["last_error"] is None
         assert "created_at" in data
         assert "updated_at" in data
+        assert data["last_error"] is None
+        # Request and result should NOT be in lightweight summary
+        assert "request" not in data
+        assert "result" not in data
+        assert "config" not in data
     
     def test_create_job_returns_immediately(self, client):
         """Test that job creation returns immediately without blocking."""
@@ -537,22 +537,9 @@ class TestCreateClarificationJob:
         # Job should have completed successfully
         assert job_data is not None
         assert job_data["status"] == "SUCCESS"
-        assert job_data["result"] is not None
+        # Result is NOT included by default (show_job_result=False)
+        assert job_data["result"] is None
         assert job_data["last_error"] is None
-        
-        # Result should contain the clarified spec
-        result = job_data["result"]
-        assert len(result["specs"]) == 1
-        
-        spec = result["specs"][0]
-        assert spec["purpose"] == "Test Service"
-        assert spec["vision"] == "High performance"
-        assert spec["must"] == ["Fast", "Reliable"]
-        assert spec["dont"] == ["Slow"]
-        assert spec["nice"] == ["Configurable"]
-        assert spec["assumptions"] == ["Cloud deployment"]
-        # open_questions should not be in the result
-        assert "open_questions" not in spec
     
     def test_create_job_with_multiple_specs(self, client):
         """Test creating a job with multiple specs."""
@@ -597,12 +584,10 @@ class TestCreateClarificationJob:
         
         assert job_data["status"] in ["SUCCESS", "FAILED"], "Job did not complete within timeout"
         
-        # Should have all specs processed
+        # Job should have completed successfully
         assert job_data["status"] == "SUCCESS"
-        assert len(job_data["result"]["specs"]) == 3
-        assert job_data["result"]["specs"][0]["purpose"] == "Frontend"
-        assert job_data["result"]["specs"][1]["purpose"] == "Backend"
-        assert job_data["result"]["specs"][2]["purpose"] == "DevOps"
+        # Result is NOT included by default (show_job_result=False)
+        assert job_data["result"] is None
     
     def test_create_job_invalid_request_returns_422(self, client):
         """Test that invalid requests return 422."""
@@ -697,7 +682,8 @@ class TestGetClarificationJob:
             
             if job_data["status"] in ["SUCCESS", "FAILED"]:
                 assert job_data["status"] == "SUCCESS"
-                assert job_data["result"] is not None
+                # Result is NOT included by default (show_job_result=False)
+                assert job_data["result"] is None
                 return
             
             time.sleep(0.1)
@@ -745,7 +731,7 @@ class TestAsyncClarificationsOpenAPI:
         # Should have POST method
         assert "post" in clarifications_path
         post_spec = clarifications_path["post"]
-        assert "clarifications" in post_spec["tags"]
+        assert "Clarifications" in post_spec["tags"]
         assert "202" in post_spec["responses"]
         
         # Check GET by ID endpoint
@@ -755,6 +741,178 @@ class TestAsyncClarificationsOpenAPI:
         # Should have GET method
         assert "get" in get_path
         get_spec = get_path["get"]
-        assert "clarifications" in get_spec["tags"]
+        assert "Clarifications" in get_spec["tags"]
         assert "200" in get_spec["responses"]
         # 404 is handled by HTTPException but not always in OpenAPI spec
+
+
+class TestShowJobResultFlag:
+    """Tests for APP_SHOW_JOB_RESULT development flag behavior."""
+    
+    def test_get_job_excludes_result_by_default(self, client, monkeypatch):
+        """Test that result is excluded when flag is False (default)."""
+        # Ensure flag is False (default)
+        monkeypatch.setenv("APP_SHOW_JOB_RESULT", "false")
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # Create job
+        response = client.post("/v1/clarifications", json=request_data)
+        job_id = response.json()["id"]
+        
+        # Wait for completion
+        max_wait = 5.0
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            get_response = client.get(f"/v1/clarifications/{job_id}")
+            job_data = get_response.json()
+            
+            if job_data["status"] == "SUCCESS":
+                # Result should be None (excluded)
+                assert job_data["result"] is None
+                return
+            
+            time.sleep(0.1)
+        
+        assert False, "Job did not complete within timeout"
+    
+    def test_get_job_includes_result_when_flag_enabled(self, client, monkeypatch):
+        """Test that result is included when flag is True."""
+        # Enable the flag
+        monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
+        # Force settings reload
+        from app.config import get_settings
+        get_settings.cache_clear()
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test Service",
+                        "vision": "High performance",
+                        "must": ["Fast", "Reliable"],
+                        "open_questions": ["Which cloud?"],
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # Create job
+        response = client.post("/v1/clarifications", json=request_data)
+        job_id = response.json()["id"]
+        
+        # Wait for completion
+        max_wait = 5.0
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            get_response = client.get(f"/v1/clarifications/{job_id}")
+            job_data = get_response.json()
+            
+            if job_data["status"] == "SUCCESS":
+                # Result SHOULD be included when flag is enabled
+                assert job_data["result"] is not None
+                assert "specs" in job_data["result"]
+                assert len(job_data["result"]["specs"]) == 1
+                
+                spec = job_data["result"]["specs"][0]
+                assert spec["purpose"] == "Test Service"
+                assert spec["vision"] == "High performance"
+                assert spec["must"] == ["Fast", "Reliable"]
+                # open_questions should not be in the result
+                assert "open_questions" not in spec
+                return
+            
+            time.sleep(0.1)
+        
+        assert False, "Job did not complete within timeout"
+    
+    def test_post_job_never_includes_result(self, client, monkeypatch):
+        """Test that POST response never includes result, regardless of flag."""
+        # Enable flag to verify POST ignores it
+        monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
+        from app.config import get_settings
+        get_settings.cache_clear()
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        response = client.post("/v1/clarifications", json=request_data)
+        
+        assert response.status_code == 202
+        data = response.json()
+        
+        # POST response should NEVER include result (lightweight summary)
+        assert "result" not in data
+        assert "request" not in data
+        assert "config" not in data
+        
+        # Only includes id, status, timestamps, and last_error
+        assert "id" in data
+        assert "status" in data
+        assert "created_at" in data
+        assert "updated_at" in data
+        assert "last_error" in data
+    
+    def test_flag_only_affects_get_endpoint(self, client, monkeypatch):
+        """Test that flag only controls GET, not POST responses."""
+        monkeypatch.setenv("APP_SHOW_JOB_RESULT", "false")
+        from app.config import get_settings
+        get_settings.cache_clear()
+        
+        request_data = {
+            "plan": {
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                    }
+                ]
+            },
+            "answers": [],
+        }
+        
+        # POST should return lightweight summary
+        post_response = client.post("/v1/clarifications", json=request_data)
+        post_data = post_response.json()
+        assert "result" not in post_data
+        
+        job_id = post_data["id"]
+        
+        # Wait for completion
+        max_wait = 5.0
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait:
+            get_response = client.get(f"/v1/clarifications/{job_id}")
+            get_data = get_response.json()
+            
+            if get_data["status"] == "SUCCESS":
+                # GET should have result=None when flag is False
+                assert get_data["result"] is None
+                return
+            
+            time.sleep(0.1)
+        
+        assert False, "Job did not complete within timeout"
