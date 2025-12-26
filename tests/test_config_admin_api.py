@@ -35,12 +35,15 @@ def disabled_config_client(monkeypatch):
     from app.config import get_settings
     get_settings.cache_clear()
     app = create_app()
-    return TestClient(app)
+    client = TestClient(app)
+    yield client
+    # Clean up: clear cache after test completes
+    get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)
 def reset_config():
-    """Reset config to default before each test."""
+    """Reset config to default before and after each test."""
     # Reset to known defaults
     default = ClarificationConfig(
         provider="openai",
@@ -53,9 +56,6 @@ def reset_config():
     yield
     # Reset after test
     set_default_config(default)
-    # Clear settings cache
-    from app.config import get_settings
-    get_settings.cache_clear()
 
 
 class TestGetDefaultsEndpoint:

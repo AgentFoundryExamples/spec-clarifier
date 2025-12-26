@@ -54,9 +54,8 @@ def _check_config_admin_enabled():
         HTTPException: 403 if endpoints are disabled
     """
     settings = get_settings()
-    enabled = getattr(settings, 'enable_config_admin_endpoints', True)  # Default to enabled
     
-    if not enabled:
+    if not settings.enable_config_admin_endpoints:
         logger.warning("Attempted access to disabled config admin endpoint")
         raise HTTPException(
             status_code=403,
@@ -171,9 +170,9 @@ def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
             f"temperature={config.temperature}, max_tokens={config.max_tokens}"
         )
         
-        # Return the new defaults
+        # Return the config that was just set to avoid race conditions
         return DefaultsResponse(
-            default_config=get_default_config(),
+            default_config=config,
             allowed_models=get_allowed_models(),
         )
         
@@ -183,3 +182,6 @@ def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
     except TypeError as e:
         logger.error(f"Type error in config update: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error updating config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
