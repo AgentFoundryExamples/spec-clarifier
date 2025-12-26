@@ -20,6 +20,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Import and re-export ClarificationConfig to maintain backward compatibility
+from app.models.config_models import ClarificationConfig
+
 
 class JobStatus(str, Enum):
     """Status of a clarification job.
