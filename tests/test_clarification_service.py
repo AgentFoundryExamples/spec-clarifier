@@ -628,3 +628,542 @@ class TestClarificationServiceWithLLMConfig:
         assert reconstructed.provider == "openai"
         assert reconstructed.model == "gpt-5.1"
         assert reconstructed.temperature == 0.5
+
+
+class TestLLMPipelineWithDummyClient:
+    """Tests for LLM pipeline using DummyLLMClient with various response scenarios.
+    
+    These tests cover the acceptance criteria from the issue:
+    - Valid DummyLLMClient JSON leads to SUCCESS jobs
+    - Cleaned JSON from markdown fences parses successfully
+    - Malformed outputs trigger FAILED status
+    - ClarifiedPlan contains only the 6 required keys
+    """
+    
+    async def test_valid_json_response_leads_to_success(self):
+        """Test that valid JSON from DummyLLMClient results in SUCCESS job."""
+        spec = SpecInput(
+            purpose="Test",
+            vision="Test vision",
+            must=["Feature 1"],
+            dont=["No feature 2"],
+            nice=["Feature 3"],
+            assumptions=["Assumption 1"],
+            open_questions=["Question 1?"]
+        )
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create DummyLLMClient with valid ClarifiedPlan JSON (no open_questions)
+        valid_response = {
+            "specs": [{
+                "purpose": "Test",
+                "vision": "Test vision",
+                "must": ["Feature 1"],
+                "dont": ["No feature 2"],
+                "nice": ["Feature 3"],
+                "assumptions": ["Assumption 1"]
+            }]
+        }
+        import json
+        dummy_client = DummyLLMClient(canned_response=json.dumps(valid_response))
+        
+        # Start and process job
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Verify SUCCESS status and ClarifiedPlan structure
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result is not None
+        assert len(processed_job.result.specs) == 1
+        
+        # Verify ClarifiedPlan contains only 6 keys (not open_questions)
+        result_spec = processed_job.result.specs[0]
+        assert result_spec.purpose == "Test"
+        assert result_spec.vision == "Test vision"
+        assert result_spec.must == ["Feature 1"]
+        assert result_spec.dont == ["No feature 2"]
+        assert result_spec.nice == ["Feature 3"]
+        assert result_spec.assumptions == ["Assumption 1"]
+        assert not hasattr(result_spec, "open_questions")
+    
+    async def test_markdown_wrapped_json_parses_successfully(self):
+        """Test that markdown-wrapped JSON is cleaned and parsed successfully."""
+        spec = SpecInput(purpose="Markdown Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create response with markdown fences
+        markdown_wrapped = '''```json
+{
+  "specs": [{
+    "purpose": "Markdown Test",
+    "vision": "Test vision",
+    "must": [],
+    "dont": [],
+    "nice": [],
+    "assumptions": []
+  }]
+}
+```'''
+        dummy_client = DummyLLMClient(canned_response=markdown_wrapped)
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Should succeed despite markdown fences
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result is not None
+        assert processed_job.result.specs[0].purpose == "Markdown Test"
+    
+    async def test_plain_markdown_fences_cleaned(self):
+        """Test that plain ``` markdown fences are removed."""
+        spec = SpecInput(purpose="Plain Fence Test", vision="Test")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Plain markdown fences without 'json' keyword
+        plain_fences = '''```
+{"specs": [{"purpose": "Plain Fence Test", "vision": "Test", "must": [], "dont": [], "nice": [], "assumptions": []}]}
+```'''
+        dummy_client = DummyLLMClient(canned_response=plain_fences)
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result.specs[0].purpose == "Plain Fence Test"
+    
+    async def test_json_with_trailing_prose_ignored(self):
+        """Test that trailing prose after JSON is ignored."""
+        spec = SpecInput(purpose="Trailing Text", vision="Test")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # JSON followed by prose
+        with_prose = '{"specs": [{"purpose": "Trailing Text", "vision": "Test", "must": [], "dont": [], "nice": [], "assumptions": []}]} Hope this helps!'
+        dummy_client = DummyLLMClient(canned_response=with_prose)
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result.specs[0].purpose == "Trailing Text"
+    
+    async def test_malformed_json_triggers_failed_status(self):
+        """Test that malformed JSON triggers FAILED status with sanitized error."""
+        spec = SpecInput(purpose="Test", vision="Test")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Malformed JSON (missing closing brace)
+        malformed = '{"specs": [{"purpose": "Test"}'
+        dummy_client = DummyLLMClient(canned_response=malformed)
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Should be FAILED with error message
+        failed_job = get_job(job.id)
+        assert failed_job.status == JobStatus.FAILED
+        assert failed_job.last_error is not None
+        assert "Failed to parse" in failed_job.last_error or "parse" in failed_job.last_error.lower()
+        assert failed_job.result is None
+    
+    async def test_missing_specs_key_fails_with_helpful_error(self):
+        """Test that missing specs key results in failed job with helpful error."""
+        spec = SpecInput(purpose="Test", vision="Test")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Valid JSON but missing required 'specs' key
+        missing_specs_key = '{"result": "oops, wrong format"}'
+        dummy_client = DummyLLMClient(canned_response=missing_specs_key)
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        failed_job = get_job(job.id)
+        assert failed_job.status == JobStatus.FAILED
+        assert failed_job.last_error is not None
+        # Should mention validation failure
+        assert "validation" in failed_job.last_error.lower() or "field required" in failed_job.last_error.lower()
+    
+    async def test_invalid_must_dont_nice_types_rejected(self):
+        """Test that non-list values for must/dont/nice are rejected."""
+        spec = SpecInput(purpose="Test", vision="Test")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # 'must' is a string instead of list
+        invalid_types = {
+            "specs": [{
+                "purpose": "Test",
+                "vision": "Test",
+                "must": "should be a list, not string",
+                "dont": [],
+                "nice": [],
+                "assumptions": []
+            }]
+        }
+        import json
+        dummy_client = DummyLLMClient(canned_response=json.dumps(invalid_types))
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        failed_job = get_job(job.id)
+        assert failed_job.status == JobStatus.FAILED
+        assert failed_job.last_error is not None
+        assert "validation" in failed_job.last_error.lower()
+    
+    async def test_must_dont_nice_non_string_items_rejected(self):
+        """Test that list items that aren't strings are rejected."""
+        spec = SpecInput(purpose="Test", vision="Test")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # 'must' contains integers instead of strings
+        invalid_item_types = {
+            "specs": [{
+                "purpose": "Test",
+                "vision": "Test",
+                "must": [1, 2, 3],  # Should be strings
+                "dont": [],
+                "nice": [],
+                "assumptions": []
+            }]
+        }
+        import json
+        dummy_client = DummyLLMClient(canned_response=json.dumps(invalid_item_types))
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        failed_job = get_job(job.id)
+        assert failed_job.status == JobStatus.FAILED
+        assert failed_job.last_error is not None
+    
+    async def test_empty_answers_handled_correctly(self):
+        """Test that empty answers list is handled correctly."""
+        spec = SpecInput(
+            purpose="Empty Answers",
+            vision="Test",
+            must=["Feature"],
+            open_questions=["Question?"]
+        )
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan, answers=[])  # Empty answers
+        background_tasks = MagicMock()
+        
+        valid_response = {
+            "specs": [{
+                "purpose": "Empty Answers",
+                "vision": "Test",
+                "must": ["Feature"],
+                "dont": [],
+                "nice": [],
+                "assumptions": []
+            }]
+        }
+        import json
+        dummy_client = DummyLLMClient(canned_response=json.dumps(valid_response))
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        # Verify open_questions not in result
+        assert not hasattr(processed_job.result.specs[0], "open_questions")
+    
+    async def test_answers_merged_into_must_dont_nice(self):
+        """Test that answers are intended to be merged into must/dont/nice arrays.
+        
+        Note: The actual merging logic is done by the LLM, but we test that
+        the pipeline accepts answers and produces valid output.
+        """
+        spec = SpecInput(
+            purpose="Merge Test",
+            vision="Test",
+            must=["Existing feature"],
+            open_questions=["Add new feature?"]
+        )
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import QuestionAnswer, ClarificationRequest
+        answers = [
+            QuestionAnswer(
+                spec_index=0,
+                question_index=0,
+                question="Add new feature?",
+                answer="Yes, add feature X"
+            )
+        ]
+        request = ClarificationRequest(plan=plan, answers=answers)
+        background_tasks = MagicMock()
+        
+        # LLM response should include both existing and new features
+        merged_response = {
+            "specs": [{
+                "purpose": "Merge Test",
+                "vision": "Test",
+                "must": ["Existing feature", "Feature X"],
+                "dont": [],
+                "nice": [],
+                "assumptions": []
+            }]
+        }
+        import json
+        dummy_client = DummyLLMClient(canned_response=json.dumps(merged_response))
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert "Existing feature" in processed_job.result.specs[0].must
+        assert "Feature X" in processed_job.result.specs[0].must
+        assert not hasattr(processed_job.result.specs[0], "open_questions")
+    
+    async def test_sanitized_error_messages_no_prompts(self):
+        """Test that error messages don't contain prompts or sensitive data."""
+        spec = SpecInput(
+            purpose="Secret Info: api_key=sk-12345",
+            vision="Contains token=abc-xyz"
+        )
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Use failing client
+        dummy_client = DummyLLMClient(
+            simulate_failure=True,
+            failure_message="Processing failed"
+        )
+        
+        job = start_clarification_job(request, background_tasks)
+        await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        failed_job = get_job(job.id)
+        assert failed_job.status == JobStatus.FAILED
+        # Error message should not contain the sensitive info from purpose/vision
+        assert "api_key=sk-12345" not in failed_job.last_error
+        assert "token=abc-xyz" not in failed_job.last_error
+        # But should contain the failure message
+        assert "Processing failed" in failed_job.last_error or "failed" in failed_job.last_error.lower()
+
+
+class TestClarifiedPlanValidation:
+    """Tests for ClarifiedPlan validation edge cases.
+    
+    These tests ensure that the Pydantic model correctly validates
+    the structure of clarified specifications.
+    """
+    
+    def test_clarified_spec_requires_purpose_and_vision(self):
+        """Test that ClarifiedSpec requires purpose and vision fields."""
+        from app.models.specs import ClarifiedSpec
+        from pydantic import ValidationError
+        
+        # Missing required 'vision' field
+        with pytest.raises(ValidationError):
+            ClarifiedSpec(
+                purpose="Test"
+                # Missing vision
+            )
+        
+        # Missing required 'purpose' field
+        with pytest.raises(ValidationError):
+            ClarifiedSpec(
+                vision="Test"
+                # Missing purpose
+            )
+    
+    def test_clarified_spec_rejects_extra_fields(self):
+        """Test that ClarifiedSpec rejects extra fields like open_questions."""
+        from app.models.specs import ClarifiedSpec
+        from pydantic import ValidationError
+        
+        # Try to include open_questions (should be rejected)
+        with pytest.raises(ValidationError):
+            ClarifiedSpec(
+                purpose="Test",
+                vision="Test",
+                must=[],
+                dont=[],
+                nice=[],
+                assumptions=[],
+                open_questions=["Should not be here"]
+            )
+    
+    def test_clarified_spec_list_fields_must_be_lists(self):
+        """Test that must/dont/nice/assumptions must be lists."""
+        from app.models.specs import ClarifiedSpec
+        from pydantic import ValidationError
+        
+        # 'must' as string instead of list
+        with pytest.raises(ValidationError):
+            ClarifiedSpec(
+                purpose="Test",
+                vision="Test",
+                must="Not a list",
+                dont=[],
+                nice=[],
+                assumptions=[]
+            )
+    
+    def test_clarified_spec_list_items_must_be_strings(self):
+        """Test that list items must be strings."""
+        from app.models.specs import ClarifiedSpec
+        from pydantic import ValidationError
+        
+        # 'must' contains integers
+        with pytest.raises(ValidationError):
+            ClarifiedSpec(
+                purpose="Test",
+                vision="Test",
+                must=[1, 2, 3],
+                dont=[],
+                nice=[],
+                assumptions=[]
+            )
+    
+    def test_clarified_plan_requires_specs_key(self):
+        """Test that ClarifiedPlan requires specs key."""
+        from app.models.specs import ClarifiedPlan
+        from pydantic import ValidationError
+        
+        with pytest.raises(ValidationError):
+            ClarifiedPlan()  # Missing required 'specs' field
+    
+    def test_clarified_plan_accepts_empty_specs_list(self):
+        """Test that ClarifiedPlan accepts empty specs list."""
+        from app.models.specs import ClarifiedPlan
+        
+        plan = ClarifiedPlan(specs=[])
+        assert plan.specs == []
+    
+    def test_clarified_plan_rejects_non_list_specs(self):
+        """Test that ClarifiedPlan rejects non-list specs."""
+        from app.models.specs import ClarifiedPlan
+        from pydantic import ValidationError
+        
+        with pytest.raises(ValidationError):
+            ClarifiedPlan(specs="Not a list")
+
+
+class TestJSONCleanupEdgeCases:
+    """Tests for JSON cleanup utility edge cases.
+    
+    These tests cover cleanup_and_parse_json edge cases including:
+    - Multiple markdown fence formats
+    - Nested JSON structures
+    - Various prose patterns
+    """
+    
+    def test_nested_json_structures_preserved(self):
+        """Test that nested JSON structures are preserved during cleanup."""
+        from app.services.clarification import cleanup_and_parse_json
+        
+        nested = '''```json
+{
+  "specs": [{
+    "purpose": "Test",
+    "vision": "Nested",
+    "must": ["A", "B"],
+    "dont": [],
+    "nice": [],
+    "assumptions": []
+  }]
+}
+```'''
+        result = cleanup_and_parse_json(nested)
+        assert result["specs"][0]["must"] == ["A", "B"]
+    
+    def test_json_with_escaped_characters(self):
+        """Test JSON with escaped characters is handled correctly."""
+        from app.services.clarification import cleanup_and_parse_json
+        
+        escaped = r'```{"specs": [{"purpose": "Test \"quoted\"", "vision": "Line\nbreak", "must": [], "dont": [], "nice": [], "assumptions": []}]}```'
+        result = cleanup_and_parse_json(escaped)
+        assert 'Test "quoted"' in result["specs"][0]["purpose"]
+    
+    def test_json_with_unicode(self):
+        """Test that unicode characters are preserved."""
+        from app.services.clarification import cleanup_and_parse_json
+        
+        unicode_json = '```{"specs": [{"purpose": "系统管理", "vision": "🚀", "must": [], "dont": [], "nice": [], "assumptions": []}]}```'
+        result = cleanup_and_parse_json(unicode_json)
+        assert result["specs"][0]["purpose"] == "系统管理"
+        assert result["specs"][0]["vision"] == "🚀"
+    
+    def test_multiple_json_objects_extracts_first(self):
+        """Test that when multiple JSON objects exist, first complete one is extracted."""
+        from app.services.clarification import cleanup_and_parse_json
+        
+        multiple = '{"first": "object"} {"second": "object"}'
+        result = cleanup_and_parse_json(multiple)
+        # Should extract the first complete object
+        assert result == {"first": "object"}
+    
+    def test_json_with_leading_prose_patterns(self):
+        """Test various leading prose patterns are removed."""
+        from app.services.clarification import cleanup_and_parse_json
+        
+        patterns = [
+            'Here is the JSON: {"key": "value"}',
+            "Here's the result: {\"key\": \"value\"}",
+            'Sure! {"key": "value"}',
+            'Certainly, {"key": "value"}',
+        ]
+        
+        for pattern in patterns:
+            result = cleanup_and_parse_json(pattern)
+            assert result == {"key": "value"}
+    
+    def test_cleanup_max_attempts_parameter(self):
+        """Test that max_attempts parameter limits retry attempts."""
+        from app.services.clarification import cleanup_and_parse_json, JSONCleanupError
+        
+        # This will fail all attempts
+        invalid = "definitely not json at all"
+        
+        with pytest.raises(JSONCleanupError) as exc_info:
+            cleanup_and_parse_json(invalid, max_attempts=2)
+        
+        # Should have made 2 attempts
+        assert exc_info.value.attempts == 2
+    
+    def test_cleanup_error_includes_raw_content(self):
+        """Test that JSONCleanupError includes raw content for debugging."""
+        from app.services.clarification import cleanup_and_parse_json, JSONCleanupError
+        
+        invalid = "not json"
+        
+        with pytest.raises(JSONCleanupError) as exc_info:
+            cleanup_and_parse_json(invalid)
+        
+        assert exc_info.value.raw_content == "not json"
+        assert exc_info.value.message is not None
