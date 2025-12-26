@@ -14,6 +14,7 @@
 """Service for clarifying specifications."""
 
 import logging
+from typing import Optional
 from uuid import UUID
 
 from fastapi import BackgroundTasks
@@ -56,7 +57,7 @@ def clarify_plan(plan_input: PlanInput) -> ClarifiedPlan:
 def start_clarification_job(
     request: ClarificationRequest,
     background_tasks: BackgroundTasks,
-    config: dict | None = None
+    config: Optional[dict] = None
 ) -> ClarificationJob:
     """Start a clarification job asynchronously.
     
