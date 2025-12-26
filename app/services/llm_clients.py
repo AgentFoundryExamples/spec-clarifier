@@ -538,17 +538,22 @@ class OpenAIResponsesClient:
             response = await client.responses.create(**api_params)
             
             # Extract text from response
-            # The Responses API returns response.output_text as the primary text field
+            # The Responses API returns response.output_text as a convenience property
+            # that aggregates all text content from the output list
             text_content = response.output_text
             
-            # If output_text is empty, try to extract from content array
-            if not text_content and hasattr(response, "content"):
+            # If output_text is empty and we have output, try to extract from output list manually
+            if not text_content and hasattr(response, "output"):
                 text_parts = []
-                for part in response.content:
-                    # Handle different content types
-                    if hasattr(part, "type") and part.type == "text":
-                        if hasattr(part, "text"):
-                            text_parts.append(part.text)
+                for output_item in response.output:
+                    # Handle message output items
+                    if hasattr(output_item, "type") and output_item.type == "message":
+                        if hasattr(output_item, "content"):
+                            for content_part in output_item.content:
+                                # Extract text from output_text content blocks
+                                if hasattr(content_part, "type") and content_part.type == "output_text":
+                                    if hasattr(content_part, "text"):
+                                        text_parts.append(content_part.text)
                 text_content = "".join(text_parts)
             
             # Log success (provider, model, duration only)

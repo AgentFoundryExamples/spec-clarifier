@@ -734,10 +734,11 @@ class TestOpenAIResponsesClient:
         """Test successful completion with OpenAI Responses API."""
         from app.services.llm_clients import OpenAIResponsesClient
         
-        # Mock response object
+        # Mock response object that matches OpenAI Responses API structure
         class MockResponse:
-            def __init__(self):
-                self.output_text = "This is the AI response text."
+            @property
+            def output_text(self):
+                return "This is the AI response text."
         
         # Mock AsyncOpenAI client
         class MockAsyncOpenAI:
@@ -771,8 +772,9 @@ class TestOpenAIResponsesClient:
         
         # Mock response object
         class MockResponse:
-            def __init__(self):
-                self.output_text = "Response with custom params"
+            @property
+            def output_text(self):
+                return "Response with custom params"
         
         # Mock AsyncOpenAI client that captures parameters
         class MockAsyncOpenAI:
@@ -805,22 +807,35 @@ class TestOpenAIResponsesClient:
         assert captured_params["max_output_tokens"] == 500  # max_tokens renamed
     
     async def test_openai_client_content_array_fallback(self, monkeypatch):
-        """Test extraction from content array when output_text is empty."""
+        """Test extraction from output list when output_text is empty."""
         from app.services.llm_clients import OpenAIResponsesClient
         
-        # Mock response with content array
+        # Mock content part
         class MockContentPart:
             def __init__(self, text):
-                self.type = "text"
+                self.type = "output_text"
                 self.text = text
         
+        # Mock output item (message type)
+        class MockOutputItem:
+            def __init__(self, content_parts):
+                self.type = "message"
+                self.content = content_parts
+        
+        # Mock response with output list
         class MockResponse:
             def __init__(self):
-                self.output_text = ""
-                self.content = [
-                    MockContentPart("First part. "),
-                    MockContentPart("Second part.")
+                self.output = [
+                    MockOutputItem([
+                        MockContentPart("First part. "),
+                        MockContentPart("Second part.")
+                    ])
                 ]
+            
+            @property
+            def output_text(self):
+                # Simulate empty output_text to force fallback
+                return ""
         
         class MockAsyncOpenAI:
             class MockResponses:
@@ -847,10 +862,10 @@ class TestOpenAIResponsesClient:
         """Test that non-text content parts are ignored."""
         from app.services.llm_clients import OpenAIResponsesClient
         
-        # Mock response with mixed content types
+        # Mock content parts
         class MockTextPart:
             def __init__(self, text):
-                self.type = "text"
+                self.type = "output_text"
                 self.text = text
         
         class MockToolPart:
@@ -858,14 +873,27 @@ class TestOpenAIResponsesClient:
                 self.type = "tool_call"
                 self.tool_name = "calculator"
         
+        # Mock output item
+        class MockOutputItem:
+            def __init__(self, content_parts):
+                self.type = "message"
+                self.content = content_parts
+        
+        # Mock response with mixed content types
         class MockResponse:
             def __init__(self):
-                self.output_text = ""
-                self.content = [
-                    MockTextPart("Text before tool. "),
-                    MockToolPart(),
-                    MockTextPart("Text after tool.")
+                self.output = [
+                    MockOutputItem([
+                        MockTextPart("Text before tool. "),
+                        MockToolPart(),
+                        MockTextPart("Text after tool.")
+                    ])
                 ]
+            
+            @property
+            def output_text(self):
+                # Simulate empty output_text to force fallback
+                return ""
         
         class MockAsyncOpenAI:
             class MockResponses:
@@ -1178,8 +1206,9 @@ class TestOpenAIResponsesClient:
         
         # Mock the client after instantiation
         class MockResponse:
-            def __init__(self):
-                self.output_text = "Response"
+            @property
+            def output_text(self):
+                return "Response"
         
         class MockAsyncOpenAI:
             class MockResponses:
@@ -1208,8 +1237,9 @@ class TestOpenAIResponsesClient:
         
         # Mock response
         class MockResponse:
-            def __init__(self):
-                self.output_text = "Response with custom key"
+            @property
+            def output_text(self):
+                return "Response with custom key"
         
         class MockAsyncOpenAI:
             class MockResponses:
@@ -1245,8 +1275,9 @@ class TestOpenAIResponsesClient:
         
         # Mock the client
         class MockResponse:
-            def __init__(self):
-                self.output_text = "Protocol test response"
+            @property
+            def output_text(self):
+                return "Protocol test response"
         
         class MockAsyncOpenAI:
             class MockResponses:
