@@ -736,9 +736,16 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
                 # If config reconstruction fails, log error and fall through to defaults
                 logger.warning(
                     f"Failed to reconstruct clarification_config for job {job_id}: {e}. "
-                    "Falling back to default configuration."
+                    "Falling back to legacy or default configuration."
                 )
-                # llm_config remains None, will be handled below
+                # llm_config remains None, try legacy config as a fallback
+                if job.config and "llm_config" in job.config:
+                    try:
+                        llm_config_dict = job.config["llm_config"]
+                        llm_config = ClarificationLLMConfig(**llm_config_dict)
+                    except Exception:
+                        # Legacy config is also invalid, llm_config remains None
+                        pass
         elif job.config and "llm_config" in job.config:
             # Legacy support: Reconstruct ClarificationLLMConfig from stored dict
             llm_config_dict = job.config["llm_config"]

@@ -107,7 +107,11 @@ class PlaceholderDownstreamDispatcher:
             plan_json = f"[JSON serialization failed: {e}]\n{str(plan)}"
 
         # Banner start - use print for high visibility in production logs
-        banner_start = f"{'=' * 80}\n" f"DOWNSTREAM DISPATCH START - Job {job_id}\n" f"{'=' * 80}"
+        banner_start = (
+            f"{'=' * 80}\n"
+            f"DOWNSTREAM DISPATCH START - Job {job_id}\n"
+            f"{'=' * 80}"
+        )
         print(banner_start)
         logger.info(banner_start)
 

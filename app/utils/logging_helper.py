@@ -61,7 +61,7 @@ def redact_sensitive_data(message: str) -> str:
     )
 
     # Remove bearer tokens
-    message = re.sub(r"(bearer\s+)\S+", r"\1[REDACTED]", message, flags=re.IGNORECASE)
+    message = re.sub(r"(bearer\s+)[a-zA-Z0-9_.-]+", r"\1[REDACTED]", message, flags=re.IGNORECASE)
 
     # Remove tokens (various formats)
     message = re.sub(r'(token["\s:=]+)\S+', r"\1[REDACTED]", message, flags=re.IGNORECASE)
