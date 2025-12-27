@@ -18,6 +18,7 @@ import threading
 from functools import lru_cache
 from typing import Dict, List, Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Import ClarificationConfig from config_models to avoid circular dependency
@@ -49,6 +50,15 @@ class Settings(BaseSettings):
     # LLM configuration defaults
     llm_default_provider: str = "openai"
     llm_default_model: str = "gpt-5"
+    
+    # LLM provider selection (defaults to "dummy" for testing without API keys)
+    # Can be set via LLM_PROVIDER env var (no APP_ prefix)
+    llm_provider: str = Field(default="dummy", validation_alias="LLM_PROVIDER")
+    
+    # Optional API keys for real LLM providers (no APP_ prefix)
+    # Read from OPENAI_API_KEY and ANTHROPIC_API_KEY environment variables
+    openai_api_key: Optional[str] = Field(default=None, validation_alias="OPENAI_API_KEY")
+    anthropic_api_key: Optional[str] = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
     
     # CORS settings
     cors_origins: str = "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
@@ -155,6 +165,7 @@ class GlobalDefaults:
         self._allowed_models: Dict[str, List[str]] = {
             "openai": ["gpt-5", "gpt-5.1", "gpt-4o"],
             "anthropic": ["claude-sonnet-4.5", "claude-opus-4"],
+            "dummy": ["test-model", "dummy-model"],
         }
         
         # Optionally seed from environment variables (deployment flexibility)
@@ -163,8 +174,8 @@ class GlobalDefaults:
         
         # Built-in default configuration
         self._default_config = ClarificationConfig(
-            provider="openai",
-            model="gpt-5.1",
+            provider="dummy",
+            model="test-model",
             system_prompt_id="default",
             temperature=0.1,
             max_tokens=None
@@ -173,9 +184,10 @@ class GlobalDefaults:
     def _seed_allowed_models_from_env(self) -> None:
         """Seed allowed models from environment variables if present.
         
-        Reads APP_ALLOWED_MODELS_OPENAI and APP_ALLOWED_MODELS_ANTHROPIC
-        environment variables (comma-separated model lists) and updates
-        allowed_models if valid. Falls back to built-in defaults on error.
+        Reads APP_ALLOWED_MODELS_OPENAI, APP_ALLOWED_MODELS_ANTHROPIC, and
+        APP_ALLOWED_MODELS_DUMMY environment variables (comma-separated model
+        lists) and updates allowed_models if valid. Falls back to built-in
+        defaults on error.
         
         This allows deployments to customize allowed models without code changes
         while maintaining safe defaults if environment config is invalid.
@@ -193,6 +205,13 @@ class GlobalDefaults:
             models = [m.strip() for m in anthropic_models_str.split(",") if m.strip()]
             if models:  # Only override if we got at least one model
                 self._allowed_models["anthropic"] = models
+        
+        # Try to read Dummy models from environment
+        dummy_models_str = os.environ.get("APP_ALLOWED_MODELS_DUMMY", "").strip()
+        if dummy_models_str:
+            models = [m.strip() for m in dummy_models_str.split(",") if m.strip()]
+            if models:  # Only override if we got at least one model
+                self._allowed_models["dummy"] = models
     
     @property
     def allowed_models(self) -> Dict[str, List[str]]:

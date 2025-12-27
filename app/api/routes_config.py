@@ -27,6 +27,7 @@ from app.config import (
     ConfigValidationError,
 )
 from app.models.config_models import ClarificationConfig
+from app.utils.logging_helper import log_info, log_warning, log_error
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ def _check_config_admin_enabled():
     settings = get_settings()
     
     if not settings.enable_config_admin_endpoints:
-        logger.warning("Attempted access to disabled config admin endpoint")
+        log_warning(logger, "config_admin_endpoint_disabled_access_attempt")
         raise HTTPException(
             status_code=403,
             detail="Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable."
@@ -133,7 +134,7 @@ def get_defaults() -> DefaultsResponse:
     """
     _check_config_admin_enabled()
     
-    logger.info("Admin endpoint accessed: GET /v1/config/defaults")
+    log_info(logger, "config_admin_get_defaults_accessed")
     
     return DefaultsResponse(
         default_config=get_default_config(),
@@ -265,9 +266,11 @@ def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
     """
     _check_config_admin_enabled()
     
-    logger.warning(
-        f"Admin endpoint accessed: PUT /v1/config/defaults - "
-        f"Attempting to update defaults to provider={config.provider}, model={config.model}"
+    log_warning(
+        logger,
+        "config_admin_update_defaults_accessed",
+        provider=config.provider,
+        model=config.model
     )
     
     try:
@@ -275,10 +278,14 @@ def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
         # This will raise ConfigValidationError if provider/model is invalid
         set_default_config(config)
         
-        logger.info(
-            f"Successfully updated default config: provider={config.provider}, "
-            f"model={config.model}, system_prompt_id={config.system_prompt_id}, "
-            f"temperature={config.temperature}, max_tokens={config.max_tokens}"
+        log_info(
+            logger,
+            "config_admin_defaults_updated",
+            provider=config.provider,
+            model=config.model,
+            system_prompt_id=config.system_prompt_id,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens
         )
         
         # Return the config that was just set to avoid race conditions
@@ -288,11 +295,11 @@ def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
         )
         
     except ConfigValidationError as e:
-        logger.warning(f"Config validation failed: {e}")
+        log_warning(logger, "config_validation_failed", error_message=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except TypeError as e:
-        logger.error(f"Type error in config update: {e}")
+        log_error(logger, "config_type_error", error=e)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Unexpected error updating config: {e}", exc_info=True)
+        log_error(logger, "config_update_unexpected_error", error=e)
         raise HTTPException(status_code=500, detail="Internal server error")

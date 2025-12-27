@@ -26,7 +26,7 @@ from app.models.config_models import ClarificationConfig
 from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan, ClarifiedSpec, JobStatus, PlanInput
 from app.services import job_store
 from app.services.downstream import get_downstream_dispatcher
-from app.services.llm_clients import ClarificationLLMConfig, get_llm_client
+from app.services.llm_clients import ClarificationLLMConfig, get_llm_client, LLMCallError
 from app.utils.logging_helper import log_info, log_warning, log_error
 from app.utils.metrics import get_metrics_collector
 
@@ -752,8 +752,8 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         # If no config loaded, apply default configuration
         if llm_config is None:
             llm_config = ClarificationLLMConfig(
-                provider="openai",
-                model="gpt-5"
+                provider="dummy",
+                model="test-model"
             )
             # system_prompt_id is already 'default'
         
@@ -773,9 +773,9 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
                     provider=llm_config.provider,
                     model=llm_config.model
                 )
-            except ValueError as e:
-                # Invalid/unsupported provider - fail the job immediately
-                error_message = f"Invalid LLM provider '{llm_config.provider}': {str(e)}"
+            except (ValueError, LLMCallError) as e:
+                # Invalid/unsupported provider or missing API key - fail the job immediately
+                error_message = f"Failed to initialize LLM client for provider '{llm_config.provider}': {str(e)}"
                 log_error(
                     logger,
                     "llm_client_init_failed",

@@ -82,9 +82,9 @@ class ClarificationConfig(BaseModel):
         }
     )
     
-    provider: Optional[Literal["openai", "anthropic"]] = Field(
+    provider: Optional[Literal["openai", "anthropic", "dummy"]] = Field(
         default=None,
-        description="LLM provider identifier (must be 'openai' or 'anthropic')"
+        description="LLM provider identifier (must be 'openai', 'anthropic', or 'dummy')"
     )
     model: Optional[str] = Field(
         default=None,

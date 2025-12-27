@@ -28,6 +28,7 @@ from app.models.specs import (
 )
 from app.services.clarification import clarify_plan, start_clarification_job
 from app.services.job_store import JobNotFoundError, get_job
+from app.utils.logging_helper import log_info, log_warning
 
 logger = logging.getLogger(__name__)
 
@@ -169,14 +170,23 @@ def create_clarification_job(
     try:
         merged_config = validate_and_merge_config(request.config)
     except ConfigValidationError as e:
-        logger.warning(f"Config validation failed: {e}")
+        log_warning(
+            logger,
+            "config_validation_failed",
+            error_message=str(e),
+            provided_config=request.config.model_dump() if request.config else None
+        )
         raise HTTPException(status_code=400, detail=str(e))
     
     # Log if non-default config is used
     if request.config is not None:
         # Log only the fields that were actually provided in the request
         overridden_fields = {k: v for k, v in request.config.model_dump().items() if v is not None}
-        logger.info(f"Creating job with overridden config fields: {overridden_fields}")
+        log_info(
+            logger,
+            "job_created_with_config",
+            overridden_fields=overridden_fields
+        )
     
     # Convert to ClarificationRequest for service layer
     clarification_request = ClarificationRequest(
@@ -335,6 +345,11 @@ def get_clarification_job(job_id: UUID) -> JobStatusResponse:
             result=result,
         )
     except JobNotFoundError:
+        log_warning(
+            logger,
+            "job_not_found",
+            job_id=job_id
+        )
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
 
@@ -473,4 +488,9 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
         return debug_info
         
     except JobNotFoundError:
+        log_warning(
+            logger,
+            "job_not_found_debug",
+            job_id=job_id
+        )
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")

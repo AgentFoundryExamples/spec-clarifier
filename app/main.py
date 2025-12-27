@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.api import routes_health, routes_clarifications, routes_config
+from app.utils.logging_helper import log_error, get_correlation_id
 
 # Configure logging
 logging.basicConfig(
@@ -65,12 +66,27 @@ def create_app() -> FastAPI:
     if not settings.debug:
         @app.exception_handler(Exception)
         async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-            """Handle uncaught exceptions globally."""
-            # Log the exception with full details for debugging
-            logger.error(f"Unhandled exception: {exc}", exc_info=True)
+            """Handle uncaught exceptions globally with sanitized responses and structured logging."""
+            # Generate correlation ID for tracing
+            correlation_id = get_correlation_id()
+            
+            # Log the exception with full details including correlation ID and traceback
+            log_error(
+                logger,
+                "unhandled_exception",
+                error=exc,
+                path=request.url.path,
+                method=request.method,
+                correlation_id=correlation_id
+            )
+            
+            # Return sanitized error response (no stack trace)
             return JSONResponse(
                 status_code=500,
-                content={"detail": "Internal server error"},
+                content={
+                    "detail": "Internal server error",
+                    "correlation_id": correlation_id
+                },
             )
     
     # Register routers

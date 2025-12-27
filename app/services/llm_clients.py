@@ -205,9 +205,11 @@ class ClarificationLLMConfig(BaseModel):
         Raises:
             ValueError: If provider is not supported
         """
-        if v not in SUPPORTED_PROVIDERS:
+        # Include "dummy" as a valid provider for testing
+        valid_providers = SUPPORTED_PROVIDERS | {"dummy"}
+        if v not in valid_providers:
             raise ValueError(
-                f"Invalid provider '{v}'. Must be one of: {', '.join(sorted(SUPPORTED_PROVIDERS))}"
+                f"Invalid provider '{v}'. Must be one of: {', '.join(sorted(valid_providers))}"
             )
         return v
     
@@ -681,9 +683,9 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
     """Factory function to create LLM clients based on provider configuration.
     
     This factory provides a centralized way to construct LLM clients for different
-    providers (OpenAI, Anthropic, Google) while maintaining consistent configuration
-    and error handling. It also supports dependency injection by allowing tests to
-    use the 'dummy' provider for deterministic behavior.
+    providers (OpenAI, Anthropic, Google, Dummy) while maintaining consistent
+    configuration and error handling. It validates that required API keys are
+    present before creating real provider clients.
     
     Provider-specific implementations are initialized lazily (client created on first
     use) and configured according to the provided ClarificationLLMConfig settings.
@@ -704,6 +706,7 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
         
     Raises:
         ValueError: When provider is not supported or is empty/blank
+        LLMCallError: When API keys are missing for real providers (openai/anthropic)
         
     Example:
         >>> config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
@@ -737,16 +740,35 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
     if provider not in SUPPORTED_PROVIDERS:
         raise ValueError(
             f"Unsupported provider '{provider}'. "
-            f"Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}"
+            f"Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}, dummy"
         )
+    
+    # Check for required API keys before creating real provider clients
+    import os
     
     # Route to provider-specific implementation
     # Note: Clients currently use environment variables for API keys.
     # Future enhancement: Pass config.api_key if/when added to ClarificationLLMConfig
     if provider == PROVIDER_OPENAI:
+        # Validate API key is present
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise LLMCallError(
+                "OPENAI_API_KEY environment variable is required to use the OpenAI provider. "
+                "Set it with a valid OpenAI API key or use LLM_PROVIDER=dummy for testing.",
+                provider=PROVIDER_OPENAI
+            )
         return OpenAIResponsesClient()
     
     elif provider == PROVIDER_ANTHROPIC:
+        # Validate API key is present
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise LLMCallError(
+                "ANTHROPIC_API_KEY environment variable is required to use the Anthropic provider. "
+                "Set it with a valid Anthropic API key or use LLM_PROVIDER=dummy for testing.",
+                provider=PROVIDER_ANTHROPIC
+            )
         return AnthropicResponsesClient()
     
     elif provider == PROVIDER_GOOGLE:
