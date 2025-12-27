@@ -278,6 +278,21 @@
       }
     },
     {
+      "id": "tests/conftest.py",
+      "path": "tests/conftest.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "json",
+          "unittest.mock.patch"
+        ],
+        "third-party": [
+          "fastapi.testclient.TestClient",
+          "pytest"
+        ]
+      }
+    },
+    {
       "id": "tests/test_async_job_lifecycle.py",
       "path": "tests/test_async_job_lifecycle.py",
       "type": "file",
@@ -686,6 +701,34 @@
     {
       "source": "app/utils/metrics.py",
       "target": "app/utils/logging_helper.py"
+    },
+    {
+      "source": "tests/conftest.py",
+      "target": "app/config.py"
+    },
+    {
+      "source": "tests/conftest.py",
+      "target": "app/main.py"
+    },
+    {
+      "source": "tests/conftest.py",
+      "target": "app/models/config_models.py"
+    },
+    {
+      "source": "tests/conftest.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/conftest.py",
+      "target": "app/services/job_store.py"
+    },
+    {
+      "source": "tests/conftest.py",
+      "target": "app/services/llm_clients.py"
+    },
+    {
+      "source": "tests/conftest.py",
+      "target": "app/utils/metrics.py"
     },
     {
       "source": "tests/test_async_job_lifecycle.py",
