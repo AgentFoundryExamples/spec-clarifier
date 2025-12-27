@@ -2142,21 +2142,20 @@ class TestGetLLMClientFactory:
         assert client1 is not client2
 
     def test_factory_accepts_config_parameter(self, monkeypatch):
-        """Test that factory accepts and uses config parameter."""
+        """Test that factory accepts config parameter but uses provider arg for routing."""
         # Mock both API keys
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
 
-        config1 = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
-        config2 = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
+        # Create a config for a different provider than the one being requested
+        # to prove the factory currently ignores the config's provider.
+        config_for_anthropic = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
 
-        # Config parameter is accepted but not currently used by factory
-        # (it will be used when we pass it to clients in future iterations)
-        client1 = get_llm_client("openai", config1)
-        client2 = get_llm_client("anthropic", config2)
+        # Request an OpenAI client but pass an Anthropic config
+        client = get_llm_client("openai", config_for_anthropic)
 
-        assert isinstance(client1, OpenAIResponsesClient)
-        assert isinstance(client2, AnthropicResponsesClient)
+        # The factory should still create an OpenAI client, ignoring the config.
+        assert isinstance(client, OpenAIResponsesClient)
 
     def test_factory_error_message_lists_supported_providers(self):
         """Test that error message for unsupported provider lists valid options."""
@@ -2187,26 +2186,23 @@ class TestGetLLMClientFactory:
 
     def test_factory_returns_llm_client_protocol_implementations(self, monkeypatch):
         """Test that all clients returned by factory implement LLMClient protocol."""
-        # Mock both API keys
+        # Mock API keys for all real providers
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
 
-        config_openai = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
-        config_anthropic = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
-        # Use valid provider for config even though factory will create dummy
-        config_for_dummy = ClarificationLLMConfig(provider="openai", model="test")
+        # Test real providers and the special 'dummy' case
+        providers_to_test = ["openai", "anthropic", "dummy"]
+        config = ClarificationLLMConfig(provider="openai", model="test-model")
 
-        client_openai = get_llm_client("openai", config_openai)
-        client_anthropic = get_llm_client("anthropic", config_anthropic)
-        client_dummy = get_llm_client("dummy", config_for_dummy)
+        for provider in providers_to_test:
+            # Skip 'google' as it's not yet implemented
+            if provider == "google":
+                continue
 
-        # All should have the 'complete' method
-        assert hasattr(client_openai, "complete")
-        assert callable(client_openai.complete)
-        assert hasattr(client_anthropic, "complete")
-        assert callable(client_anthropic.complete)
-        assert hasattr(client_dummy, "complete")
-        assert callable(client_dummy.complete)
+            client = get_llm_client(provider, config)
+            # All clients should have the 'complete' method
+            assert hasattr(client, "complete"), f"Client for '{provider}' is missing 'complete' method"
+            assert callable(client.complete), f"'complete' method for '{provider}' is not callable"
 
     def test_factory_with_special_characters_in_provider(self):
         """Test that factory handles special characters in provider name correctly."""
