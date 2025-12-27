@@ -183,6 +183,7 @@
           "datetime.datetime",
           "datetime.timedelta",
           "datetime.timezone",
+          "logging",
           "threading",
           "typing.Dict",
           "typing.List",
@@ -231,6 +232,45 @@
           "pydantic.Field",
           "pydantic.field_validator"
         ]
+      }
+    },
+    {
+      "id": "app/utils/__init__.py",
+      "path": "app/utils/__init__.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
+        "third-party": []
+      }
+    },
+    {
+      "id": "app/utils/logging_helper.py",
+      "path": "app/utils/logging_helper.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "json",
+          "logging",
+          "re",
+          "typing.Any",
+          "typing.Optional",
+          "uuid",
+          "uuid.UUID"
+        ],
+        "third-party": []
+      }
+    },
+    {
+      "id": "app/utils/metrics.py",
+      "path": "app/utils/metrics.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "logging",
+          "threading",
+          "typing.Dict"
+        ],
+        "third-party": []
       }
     },
     {
@@ -396,6 +436,22 @@
       }
     },
     {
+      "id": "tests/test_logging_helper.py",
+      "path": "tests/test_logging_helper.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "json",
+          "logging",
+          "uuid",
+          "uuid.UUID"
+        ],
+        "third-party": [
+          "pytest"
+        ]
+      }
+    },
+    {
       "id": "tests/test_main.py",
       "path": "tests/test_main.py",
       "type": "file",
@@ -409,6 +465,20 @@
           "fastapi.testclient.TestClient",
           "pytest",
           "starlette.middleware.cors.CORSMiddleware"
+        ]
+      }
+    },
+    {
+      "id": "tests/test_metrics.py",
+      "path": "tests/test_metrics.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "threading"
+        ],
+        "third-party": [
+          "fastapi.testclient.TestClient",
+          "pytest"
         ]
       }
     },
@@ -487,6 +557,10 @@
       "target": "app/models/config_models.py"
     },
     {
+      "source": "app/api/routes_health.py",
+      "target": "app/utils/metrics.py"
+    },
+    {
       "source": "app/config.py",
       "target": "app/models/config_models.py"
     },
@@ -539,8 +613,36 @@
       "target": "app/services/llm_clients.py"
     },
     {
+      "source": "app/services/clarification.py",
+      "target": "app/utils/logging_helper.py"
+    },
+    {
+      "source": "app/services/clarification.py",
+      "target": "app/utils/metrics.py"
+    },
+    {
       "source": "app/services/job_store.py",
       "target": "app/models/specs.py"
+    },
+    {
+      "source": "app/services/job_store.py",
+      "target": "app/utils/logging_helper.py"
+    },
+    {
+      "source": "app/services/job_store.py",
+      "target": "app/utils/metrics.py"
+    },
+    {
+      "source": "app/services/llm_clients.py",
+      "target": "app/utils/logging_helper.py"
+    },
+    {
+      "source": "app/services/llm_clients.py",
+      "target": "app/utils/metrics.py"
+    },
+    {
+      "source": "app/utils/metrics.py",
+      "target": "app/utils/logging_helper.py"
     },
     {
       "source": "tests/test_async_job_lifecycle.py",
@@ -623,6 +725,10 @@
       "target": "app/main.py"
     },
     {
+      "source": "tests/test_health.py",
+      "target": "app/utils/metrics.py"
+    },
+    {
       "source": "tests/test_job_store.py",
       "target": "app/models/specs.py"
     },
@@ -655,12 +761,28 @@
       "target": "app/models/config_models.py"
     },
     {
+      "source": "tests/test_logging_helper.py",
+      "target": "app/utils/logging_helper.py"
+    },
+    {
       "source": "tests/test_main.py",
       "target": "app/main.py"
     },
     {
       "source": "tests/test_main.py",
       "target": "app/config.py"
+    },
+    {
+      "source": "tests/test_metrics.py",
+      "target": "app/main.py"
+    },
+    {
+      "source": "tests/test_metrics.py",
+      "target": "app/utils/metrics.py"
+    },
+    {
+      "source": "tests/test_metrics.py",
+      "target": "app/models/specs.py"
     },
     {
       "source": "tests/test_models.py",
@@ -708,6 +830,7 @@
       "unittest.mock.MagicMock",
       "unittest.mock.Mock",
       "unittest.mock.patch",
+      "uuid",
       "uuid.UUID",
       "uuid.uuid4"
     ],
@@ -748,7 +871,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 29,
+    "stdlib_count": 30,
     "third-party_count": 35
   }
 }

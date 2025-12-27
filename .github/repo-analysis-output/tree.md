@@ -28,9 +28,15 @@
     ├── clarification.py
     ├── job_store.py
     └── llm_clients.py
+  ├── utils
+    ├── __init__.py
+    ├── logging_helper.py
+    └── metrics.py
   ├── __init__.py
   ├── config.py
   └── main.py
+├── docs
+  └── LOGGING_AND_METRICS.md
 ├── tests
   ├── __init__.py
   ├── test_async_job_lifecycle.py
@@ -42,7 +48,9 @@
   ├── test_job_store.py
   ├── test_llm_clients.py
   ├── test_llm_integration.py
+  ├── test_logging_helper.py
   ├── test_main.py
+  ├── test_metrics.py
   ├── test_models.py
   ├── test_openapi_metadata.py
   └── test_prompt_builder.py
