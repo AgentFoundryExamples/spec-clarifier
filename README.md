@@ -10,6 +10,7 @@ A FastAPI service for clarifying specifications.
 - **Structured JSON logging with correlation IDs**
 - **Basic operational metrics endpoint (/v1/metrics/basic)**
 - **Automatic sensitive data redaction (API keys, tokens, prompts)**
+- **DownstreamDispatcher extension point for forwarding clarified plans**
 - OpenAPI documentation (Swagger UI)
 - Configuration via environment variables
 - In-memory job store for async clarification workflows
@@ -126,6 +127,27 @@ Download the complete OpenAPI 3.1 specification for integration with API clients
 - **Async Workflow Documentation**: Explicit descriptions emphasizing asynchronous processing semantics
 - **Valid UUIDs**: All job_id examples use valid UUID format (36 characters)
 
+### API Tags and Endpoints
+
+The OpenAPI specification organizes endpoints into three logical tags:
+
+#### Clarifications Tag
+Endpoints for creating and managing specification clarification jobs:
+- `POST /v1/clarifications` - Create async clarification job (returns 202 Accepted with job_id)
+- `GET /v1/clarifications/{job_id}` - Retrieve job status and metadata (result excluded in production by default)
+- `POST /v1/clarifications/preview` - Synchronous preview for development only (not for production)
+- `GET /v1/clarifications/{job_id}/debug` - Debug endpoint for job inspection (disabled by default, enable with `APP_ENABLE_DEBUG_ENDPOINT=true`)
+
+#### Configuration Tag
+Admin endpoints for runtime configuration management (use only in trusted environments):
+- `GET /v1/config/defaults` - Retrieve current global default configuration
+- `PUT /v1/config/defaults` - Update global default configuration (changes not persisted across restarts)
+
+#### Health Tag
+Operational endpoints for monitoring and health checks:
+- `GET /health` - Basic health check (returns `{"status": "ok"}`)
+- `GET /v1/metrics/basic` - Operational metrics counters (jobs queued, pending, running, success, failed, LLM errors)
+
 ### Asynchronous Processing Semantics
 
 **Important:** The `/v1/clarifications` endpoint implements an asynchronous workflow:
@@ -135,6 +157,8 @@ Download the complete OpenAPI 3.1 specification for integration with API clients
 3. **Result Retrieval** - When status is SUCCESS, processing is complete (result field is null in production mode)
 
 The service does **NOT** return clarified specifications inline in POST responses. Always poll the GET endpoint to monitor job progress.
+
+**Critical Limitation**: The status lookup endpoint (`GET /v1/clarifications/{job_id}`) returns **metadata only** by default. In production mode (default), the `result` field is always `null` to keep responses lightweight. Downstream systems receive clarified plans exclusively through the **DownstreamDispatcher** integration (see [Downstream Integration](#downstream-integration) section). The debug payload controlled by `APP_SHOW_JOB_RESULT` is intended for development/debugging only and should never be relied upon in production workflows.
 
 ### Configuration
 
@@ -1029,11 +1053,298 @@ The job store handles several important edge cases:
 - **Timestamp management**: All timestamps are UTC-aware and `updated_at` is always refreshed on updates
 - **Optional config**: Config parameter defaults to None and doesn't require client input
 
-## Privacy and Logging
+## Downstream Integration
 
-The spec-clarifier service is designed with privacy and security in mind. The LLM pipeline and API endpoints intentionally redact sensitive information from logs and responses.
+### Overview
 
-### What is Logged
+The spec-clarifier service includes a **DownstreamDispatcher** abstraction that serves as the **sole integration point** for forwarding clarified plans to downstream systems. After a clarification job completes successfully, the service invokes the configured dispatcher to send the clarified plan to your downstream processing pipeline.
+
+**Important**: Downstream dispatch is the **only** way to receive clarified plans in production workflows. The API endpoint `GET /v1/clarifications/{job_id}` returns metadata only (the `result` field is `null` by default) and is not intended for retrieving the actual clarified plan data.
+
+### File Location
+
+The dispatcher implementation is located at:
+```
+app/services/downstream.py
+```
+
+This file contains:
+- `DownstreamDispatcher` - Protocol defining the dispatcher interface
+- `PlaceholderDownstreamDispatcher` - Temporary placeholder implementation
+- `get_downstream_dispatcher()` - Factory function for obtaining the configured dispatcher
+
+### PlaceholderDownstreamDispatcher
+
+The service currently ships with a **placeholder implementation** that logs clarified plans to stdout/logs without making external calls. This placeholder serves as:
+
+1. A reference implementation demonstrating the dispatcher interface
+2. A clear hook point for future integrations (marked with TODO comments)
+3. A debugging aid for operators to verify successful clarification
+
+**TODO Marker**: The `PlaceholderDownstreamDispatcher` class docstring contains a comprehensive TODO comment with a complete integration checklist. **To locate it quickly**: Open `app/services/downstream.py` and navigate to lines 72-79 within the `PlaceholderDownstreamDispatcher` class. The TODO lists these integration tasks:
+- Determine target downstream system (HTTP endpoint, message queue, storage, etc.)
+- Implement error handling for network failures and timeouts
+- Add retry logic with exponential backoff for transient failures
+- Configure authentication/authorization requirements
+- Add metrics for dispatch success/failure rates
+- Ensure idempotency to handle duplicate dispatches
+- Add configuration for endpoint URLs and credentials via environment variables
+
+### Replacing the Placeholder
+
+**Integration Approaches**: Consider these patterns for receiving clarified plans:
+
+1. **Webhook/HTTP Callback (Recommended)**: Configure the service to POST results to your HTTP endpoint. This is the simplest approach and works well for most integrations. The HTTP dispatcher example below demonstrates this pattern.
+
+2. **Message Queue**: Publish results to a message queue (RabbitMQ, Kafka, AWS SQS) for asynchronous processing, retry logic, and decoupling. Useful for high-volume or distributed systems.
+
+3. **Database/Storage**: Write results directly to a shared database or object storage (S3, Azure Blob). Useful when multiple systems need access to results.
+
+To integrate with a real downstream system, follow these steps:
+
+#### 1. Implement a Custom Dispatcher
+
+Create a new class that conforms to the `DownstreamDispatcher` protocol:
+
+```python
+# Example: HTTP-based dispatcher
+class HTTPDownstreamDispatcher:
+    def __init__(self, endpoint: str, api_key: str, timeout: int = 30):
+        self.endpoint = endpoint
+        self.api_key = api_key
+        self.timeout = timeout
+    
+    async def dispatch(self, job: ClarificationJob, plan: ClarifiedPlan) -> None:
+        """Send clarified plan to HTTP endpoint."""
+        import httpx
+        
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(
+                self.endpoint,
+                json={
+                    "job_id": str(job.id),
+                    "status": job.status.value,
+                    "clarified_plan": plan.model_dump(),
+                    "created_at": job.created_at.isoformat(),
+                },
+                headers={"Authorization": f"Bearer {self.api_key}"}
+            )
+            response.raise_for_status()
+
+# Example: Message queue dispatcher (using AWS SQS as example)
+class QueueDownstreamDispatcher:
+    def __init__(self, queue_url: str, queue_name: str):
+        self.queue_url = queue_url
+        self.queue_name = queue_name
+        # Initialize queue client (e.g., boto3 for SQS, pika for RabbitMQ)
+        # Example: self.sqs_client = boto3.client('sqs')
+    
+    async def dispatch(self, job: ClarificationJob, plan: ClarifiedPlan) -> None:
+        """Publish clarified plan to message queue."""
+        import json
+        
+        message_body = json.dumps({
+            "job_id": str(job.id),
+            "status": job.status.value,
+            "clarified_plan": plan.model_dump(),
+            "created_at": job.created_at.isoformat(),
+        })
+        
+        # Example for AWS SQS:
+        # response = self.sqs_client.send_message(
+        #     QueueUrl=self.queue_url,
+        #     MessageBody=message_body
+        # )
+        
+        # Example for RabbitMQ:
+        # channel.basic_publish(
+        #     exchange='',
+        #     routing_key=self.queue_name,
+        #     body=message_body
+        # )
+```
+
+#### 2. Update the Factory Function
+
+Modify `get_downstream_dispatcher()` in `app/services/downstream.py` to return your custom implementation based on environment configuration:
+
+```python
+def get_downstream_dispatcher() -> DownstreamDispatcher:
+    """Factory function to obtain the configured downstream dispatcher."""
+    import os
+    
+    dispatcher_type = os.getenv("DOWNSTREAM_DISPATCHER_TYPE", "placeholder")
+    
+    if dispatcher_type == "http":
+        endpoint = os.getenv("DOWNSTREAM_HTTP_ENDPOINT")
+        api_key = os.getenv("DOWNSTREAM_API_KEY")
+        
+        # Validate required environment variables
+        if not endpoint or not api_key:
+            raise ValueError(
+                "For 'http' dispatcher, DOWNSTREAM_HTTP_ENDPOINT and "
+                "DOWNSTREAM_API_KEY environment variables must be set."
+            )
+        
+        return HTTPDownstreamDispatcher(endpoint=endpoint, api_key=api_key)
+    
+    elif dispatcher_type == "queue":
+        queue_url = os.getenv("DOWNSTREAM_QUEUE_URL")
+        queue_name = os.getenv("DOWNSTREAM_QUEUE_NAME")
+        
+        # Validate required environment variables
+        if not queue_url or not queue_name:
+            raise ValueError(
+                "For 'queue' dispatcher, DOWNSTREAM_QUEUE_URL and "
+                "DOWNSTREAM_QUEUE_NAME environment variables must be set."
+            )
+        
+        return QueueDownstreamDispatcher(queue_url=queue_url, queue_name=queue_name)
+    
+    else:
+        # Default to placeholder for development/testing
+        return PlaceholderDownstreamDispatcher()
+```
+
+#### 3. Configure Environment Variables
+
+Set environment variables to configure your dispatcher:
+
+```bash
+# For HTTP dispatcher
+export DOWNSTREAM_DISPATCHER_TYPE=http
+export DOWNSTREAM_HTTP_ENDPOINT=https://your-service.com/api/v1/clarified-plans
+export DOWNSTREAM_API_KEY=your-api-key-here
+
+# For queue dispatcher
+export DOWNSTREAM_DISPATCHER_TYPE=queue
+export DOWNSTREAM_QUEUE_URL=amqp://localhost:5672
+export DOWNSTREAM_QUEUE_NAME=clarified-plans
+```
+
+**Security Best Practices**:
+
+⚠️ **Critical Security Requirements**:
+- **Never commit credentials to source control** - Use environment variables, AWS Secrets Manager, HashiCorp Vault, or similar secret management systems
+- **Validate all environment variables** - The factory function example above shows validation to fail fast if required credentials are missing
+- **Use HTTPS for HTTP dispatchers** - Never send clarified plans or credentials over unencrypted connections
+- **Rotate credentials regularly** - Implement credential rotation policies for API keys and tokens
+- **Restrict network access** - Use firewall rules, VPCs, or security groups to limit which services can receive dispatched results
+- **Implement authentication** - Always use authentication (API keys, OAuth tokens, mutual TLS) for downstream endpoints
+- **Log dispatch operations** - The service logs dispatch events with structured logging (see [Structured Logging and Metrics](#structured-logging-and-metrics)) but never logs credentials or full plan content
+
+The example code intentionally shows credential handling via environment variables to prevent accidental hardcoding. Adapt the security measures to your organization's requirements.
+
+### Dispatcher Behavior and Error Handling
+
+The dispatcher is invoked **after** the job is marked as `SUCCESS` in the job store. This ensures that:
+
+1. The clarified plan is persisted before dispatch attempts
+2. Job status remains `SUCCESS` even if dispatch fails
+3. Operators can retry failed dispatches without re-running clarification
+
+**Error Handling**: If the dispatcher raises an exception:
+- The exception is logged with event `downstream_dispatch_failed`
+- The job status remains `SUCCESS` (dispatch is considered an optimization/notification)
+- The service continues operating normally
+
+This design ensures that dispatch failures do not affect core clarification functionality.
+
+### Monitoring Dispatch Operations
+
+Dispatcher operations emit structured log events for monitoring:
+
+- `downstream_dispatch_start` - Dispatcher invoked for a job
+- `downstream_dispatch_success` - Plan successfully dispatched
+- `downstream_dispatch_failed` - Dispatch failed (includes error details)
+- `downstream_dispatch_placeholder` - Placeholder dispatcher used (logs plan to console)
+
+See [Structured Logging and Metrics](#structured-logging-and-metrics) for details on consuming these events.
+
+## Structured Logging and Metrics
+
+The spec-clarifier service provides comprehensive structured logging with correlation IDs and operational metrics for monitoring and debugging. For complete details, see [Logging and Metrics Guide](docs/LOGGING_AND_METRICS.md).
+
+### Structured JSON Logging
+
+All key lifecycle events are logged as structured JSON objects with key/value pairs for easy parsing by log aggregation systems. Each log entry includes a descriptive `event` field and relevant context:
+
+```json
+{
+  "event": "job_created",
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "num_specs": 3,
+  "num_answers": 2
+}
+```
+
+**Key Event Categories:**
+- **Job Lifecycle**: `job_created`, `job_status_transition`, `job_processing_start`, `job_processing_complete`, `job_processing_failed`
+- **LLM Operations**: `llm_call_start`, `llm_call_success`, `llm_call_failed`, `llm_response_parsed`
+- **Downstream Dispatch**: `downstream_dispatch_start`, `downstream_dispatch_success`, `downstream_dispatch_failed`, `downstream_dispatch_placeholder`
+
+For a complete list of logged events, see the [Structured Logging section](docs/LOGGING_AND_METRICS.md#structured-logging) in the Logging and Metrics Guide.
+
+### Correlation IDs
+
+Every request is assigned a correlation identifier for end-to-end tracing:
+
+- **job_id**: UUID assigned to clarification jobs (included in all logs related to that job)
+- **correlation_id**: Generated UUID for requests without a job_id
+
+These identifiers enable operators to trace a request through the entire system, from API entry to job completion and downstream dispatch.
+
+**Example**: To trace all logs for a specific job:
+```bash
+# Using grep
+grep '"job_id": "550e8400-e29b-41d4-a716-446655440000"' application.log
+
+# Using jq for JSON logs
+cat application.log | jq 'select(.job_id == "550e8400-e29b-41d4-a716-446655440000")'
+```
+
+### Operational Metrics Endpoint
+
+The service exposes operational metrics at `GET /v1/metrics/basic` for monitoring system health and job throughput:
+
+```bash
+curl http://localhost:8000/v1/metrics/basic
+```
+
+**Response:**
+```json
+{
+  "jobs_queued": 150,
+  "jobs_pending": 3,
+  "jobs_running": 2,
+  "jobs_success": 142,
+  "jobs_failed": 3,
+  "llm_errors": 5
+}
+```
+
+**Metric Definitions:**
+- `jobs_queued` - Total jobs created since service start (monotonic counter)
+- `jobs_pending` - Current number of jobs waiting for processing (gauge)
+- `jobs_running` - Current number of jobs actively being processed (gauge)
+- `jobs_success` - Total successfully completed jobs (monotonic counter)
+- `jobs_failed` - Total failed jobs (monotonic counter)
+- `llm_errors` - Total LLM API errors encountered (monotonic counter)
+
+**Monitoring Integration**: The metrics endpoint can be polled by monitoring systems (Prometheus, Datadog, CloudWatch, etc.) to track service health. Set up alerts on:
+- High `jobs_failed` rate
+- Growing `jobs_pending` backlog
+- Elevated `llm_errors` count
+
+**Feature Flag**: The metrics endpoint is always enabled and requires no configuration. No authentication is required as the metrics contain no sensitive data.
+
+For implementation details and best practices, see the complete [Logging and Metrics Guide](docs/LOGGING_AND_METRICS.md).
+
+### Privacy and Security
+
+The service is designed with privacy and security in mind. The LLM pipeline and API endpoints intentionally redact sensitive information from logs and responses.
+
+#### What is Logged
 
 The service logs the following **non-sensitive** information:
 
@@ -1043,7 +1354,7 @@ The service logs the following **non-sensitive** information:
 - Sanitized error messages (without prompts or data)
 - HTTP request methods and status codes
 
-### What is NOT Logged
+#### What is NOT Logged
 
 The following **sensitive information** is intentionally excluded from all logs:
 
@@ -1053,7 +1364,7 @@ The following **sensitive information** is intentionally excluded from all logs:
 - ❌ Question answers provided by users
 - ❌ ClarifiedPlan results and clarified specifications
 
-### Debug Endpoint Safety
+#### Debug Endpoint Safety
 
 Even when the debug endpoint (`/v1/clarifications/{job_id}/debug`) is enabled via `APP_ENABLE_DEBUG_ENDPOINT=true`, it returns only sanitized metadata:
 
@@ -1065,7 +1376,7 @@ Even when the debug endpoint (`/v1/clarifications/{job_id}/debug`) is enabled vi
 
 The debug endpoint **never** returns raw prompts, LLM responses, or full specification content.
 
-### Logging in Production
+#### Logging in Production
 
 For production deployments:
 
