@@ -49,6 +49,10 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# Tooling cache directories
+.mypy_cache/
+.ruff_cache/
+
 # Virtual environments
 venv/
 env/
