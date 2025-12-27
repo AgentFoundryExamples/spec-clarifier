@@ -14,6 +14,7 @@
 """Tests for the FastAPI application factory and configuration."""
 
 import os
+import uuid
 from unittest.mock import patch
 
 import pytest
@@ -91,7 +92,6 @@ def test_global_exception_handler_in_production():
         assert response_json["detail"] == "Internal server error"
         assert "correlation_id" in response_json
         # correlation_id should be a valid UUID string
-        import uuid
         uuid.UUID(response_json["correlation_id"])  # Should not raise
 
 
