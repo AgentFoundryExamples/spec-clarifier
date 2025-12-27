@@ -1178,3 +1178,243 @@ class TestJSONCleanupEdgeCases:
         
         assert exc_info.value.raw_content == "not json"
         assert exc_info.value.message is not None
+
+
+class TestDownstreamDispatcherIntegration:
+    """Tests for downstream dispatcher integration in clarification processing.
+    
+    These tests verify that the dispatcher is invoked after successful job
+    completion and that dispatcher errors are handled without affecting job status.
+    """
+    
+    async def test_dispatcher_invoked_after_successful_job(self, caplog):
+        """Test that dispatcher is called after job completes successfully."""
+        spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature"])
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create and start job
+        job = start_clarification_job(request, background_tasks)
+        
+        # Process job with dummy client
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        import logging
+        with caplog.at_level(logging.INFO):
+            await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Verify job succeeded
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        
+        # Verify dispatcher was invoked (check for dispatch logs)
+        log_text = caplog.text
+        assert "downstream_dispatch_start" in log_text
+        assert "DOWNSTREAM DISPATCH START" in log_text
+        assert "DOWNSTREAM DISPATCH END" in log_text
+    
+    async def test_dispatcher_not_invoked_for_failed_jobs(self, caplog):
+        """Test that dispatcher is NOT called when job fails."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Create job
+        job = start_clarification_job(request, background_tasks)
+        
+        # Use failing LLM client
+        from app.services.llm_clients import DummyLLMClient
+        failing_client = DummyLLMClient(
+            simulate_failure=True,
+            failure_message="Simulated failure"
+        )
+        
+        import logging
+        with caplog.at_level(logging.INFO):
+            await process_clarification_job(job.id, llm_client=failing_client)
+        
+        # Verify job failed
+        failed_job = get_job(job.id)
+        assert failed_job.status == JobStatus.FAILED
+        
+        # Verify dispatcher was NOT invoked (no dispatch logs)
+        log_text = caplog.text
+        assert "downstream_dispatch_start" not in log_text
+        assert "DOWNSTREAM DISPATCH START" not in log_text
+    
+    async def test_dispatcher_errors_dont_affect_job_status(self, caplog):
+        """Test that dispatcher exceptions don't change job status from SUCCESS."""
+        spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature"])
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Mock the dispatcher to raise an exception
+        from unittest.mock import patch, AsyncMock
+        
+        failing_dispatcher = AsyncMock()
+        failing_dispatcher.dispatch.side_effect = RuntimeError("Dispatcher failed")
+        
+        job = start_clarification_job(request, background_tasks)
+        
+        # Process job with mocked failing dispatcher
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        import logging
+        with caplog.at_level(logging.INFO):
+            with patch('app.services.clarification.get_downstream_dispatcher', return_value=failing_dispatcher):
+                await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Verify job is still SUCCESS despite dispatcher error
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        assert processed_job.result is not None
+        
+        # Verify dispatcher error was logged
+        log_text = caplog.text
+        assert "downstream_dispatch_failed" in log_text
+        assert "Dispatcher failed" in log_text
+    
+    async def test_dispatcher_errors_are_logged_with_job_id(self, caplog):
+        """Test that dispatcher errors include job_id in structured logs."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Mock failing dispatcher
+        from unittest.mock import patch, AsyncMock
+        
+        failing_dispatcher = AsyncMock()
+        failing_dispatcher.dispatch.side_effect = ValueError("Dispatch error")
+        
+        job = start_clarification_job(request, background_tasks)
+        
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        import logging
+        with caplog.at_level(logging.INFO):
+            with patch('app.services.clarification.get_downstream_dispatcher', return_value=failing_dispatcher):
+                await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Verify error log contains job_id
+        log_text = caplog.text
+        assert str(job.id) in log_text
+        assert "downstream_dispatch_failed" in log_text
+    
+    async def test_concurrent_jobs_dispatch_independently(self, caplog):
+        """Test that multiple concurrent jobs each invoke dispatcher independently."""
+        # Create two jobs
+        spec1 = SpecInput(purpose="Job 1", vision="First job")
+        spec2 = SpecInput(purpose="Job 2", vision="Second job")
+        plan1 = PlanInput(specs=[spec1])
+        plan2 = PlanInput(specs=[spec2])
+        from app.models.specs import ClarificationRequest
+        request1 = ClarificationRequest(plan=plan1)
+        request2 = ClarificationRequest(plan=plan2)
+        background_tasks = MagicMock()
+        
+        job1 = start_clarification_job(request1, background_tasks)
+        job2 = start_clarification_job(request2, background_tasks)
+        
+        # Process both jobs
+        dummy_client1 = _create_dummy_client_with_response([spec1])
+        dummy_client2 = _create_dummy_client_with_response([spec2])
+        
+        import logging
+        with caplog.at_level(logging.INFO):
+            await process_clarification_job(job1.id, llm_client=dummy_client1)
+            await process_clarification_job(job2.id, llm_client=dummy_client2)
+        
+        # Verify both jobs succeeded
+        assert get_job(job1.id).status == JobStatus.SUCCESS
+        assert get_job(job2.id).status == JobStatus.SUCCESS
+        
+        # Verify dispatcher was called for both jobs (check for both job IDs in logs)
+        log_text = caplog.text
+        assert str(job1.id) in log_text
+        assert str(job2.id) in log_text
+        assert "Job 1" in log_text
+        assert "Job 2" in log_text
+    
+    async def test_dispatcher_serialization_error_handled(self, caplog):
+        """Test that JSON serialization errors in dispatcher are caught."""
+        spec = SpecInput(purpose="Test", vision="Test vision")
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Mock dispatcher that fails during serialization
+        from unittest.mock import patch, AsyncMock
+        import json
+        
+        failing_dispatcher = AsyncMock()
+        failing_dispatcher.dispatch.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
+        
+        job = start_clarification_job(request, background_tasks)
+        
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        import logging
+        with caplog.at_level(logging.INFO):
+            with patch('app.services.clarification.get_downstream_dispatcher', return_value=failing_dispatcher):
+                await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Job should still be SUCCESS
+        processed_job = get_job(job.id)
+        assert processed_job.status == JobStatus.SUCCESS
+        
+        # Error should be logged
+        log_text = caplog.text
+        assert "downstream_dispatch_failed" in log_text
+    
+    async def test_dispatcher_receives_correct_job_and_plan(self):
+        """Test that dispatcher receives the correct job and plan objects."""
+        spec = SpecInput(
+            purpose="Verification Test",
+            vision="Ensure correct data",
+            must=["Feature A", "Feature B"]
+        )
+        plan = PlanInput(specs=[spec])
+        from app.models.specs import ClarificationRequest
+        request = ClarificationRequest(plan=plan)
+        background_tasks = MagicMock()
+        
+        # Mock dispatcher to capture arguments
+        from unittest.mock import patch, AsyncMock
+        
+        captured_args = []
+        
+        async def capture_dispatch(job, plan):
+            captured_args.append((job, plan))
+        
+        mock_dispatcher = AsyncMock()
+        mock_dispatcher.dispatch = capture_dispatch
+        
+        job = start_clarification_job(request, background_tasks)
+        
+        dummy_client = _create_dummy_client_with_response([spec])
+        
+        with patch('app.services.clarification.get_downstream_dispatcher', return_value=mock_dispatcher):
+            await process_clarification_job(job.id, llm_client=dummy_client)
+        
+        # Verify dispatcher was called with correct arguments
+        assert len(captured_args) == 1
+        dispatched_job, dispatched_plan = captured_args[0]
+        
+        # Check job
+        assert dispatched_job.id == job.id
+        assert dispatched_job.status == JobStatus.SUCCESS
+        
+        # Check plan
+        assert len(dispatched_plan.specs) == 1
+        assert dispatched_plan.specs[0].purpose == "Verification Test"
+        assert dispatched_plan.specs[0].vision == "Ensure correct data"
+        assert dispatched_plan.specs[0].must == ["Feature A", "Feature B"]
