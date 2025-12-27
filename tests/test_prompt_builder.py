@@ -32,72 +32,75 @@ class TestSystemPromptTemplates:
 
     def test_get_system_prompt_template_default(self):
         """Test retrieving the default template."""
-        template = get_system_prompt_template('default')
+        template = get_system_prompt_template("default")
 
-        assert template == SYSTEM_PROMPT_TEMPLATES['default']
-        assert 'specification clarification assistant' in template.lower()
-        assert 'valid JSON' in template or 'JSON object' in template
-        assert 'purpose' in template
-        assert 'vision' in template
-        assert 'must' in template
-        assert 'dont' in template
-        assert 'nice' in template
-        assert 'assumptions' in template
+        assert template == SYSTEM_PROMPT_TEMPLATES["default"]
+        assert "specification clarification assistant" in template.lower()
+        assert "valid JSON" in template or "JSON object" in template
+        assert "purpose" in template
+        assert "vision" in template
+        assert "must" in template
+        assert "dont" in template
+        assert "nice" in template
+        assert "assumptions" in template
 
     def test_get_system_prompt_template_strict_json(self):
         """Test retrieving the strict_json template."""
-        template = get_system_prompt_template('strict_json')
+        template = get_system_prompt_template("strict_json")
 
-        assert template == SYSTEM_PROMPT_TEMPLATES['strict_json']
-        assert 'STRICT JSON MODE' in template
-        assert 'CRITICAL RULES' in template
-        assert 'NO markdown code fences' in template
-        assert 'NO explanatory text' in template
+        assert template == SYSTEM_PROMPT_TEMPLATES["strict_json"]
+        assert "STRICT JSON MODE" in template
+        assert "CRITICAL RULES" in template
+        assert "NO markdown code fences" in template
+        assert "NO explanatory text" in template
 
     def test_get_system_prompt_template_verbose_explanation(self):
         """Test retrieving the verbose_explanation template."""
-        template = get_system_prompt_template('verbose_explanation')
+        template = get_system_prompt_template("verbose_explanation")
 
-        assert template == SYSTEM_PROMPT_TEMPLATES['verbose_explanation']
-        assert 'YOUR TASK:' in template
-        assert 'Analyze the specifications' in template
-        assert 'most appropriate field' in template
+        assert template == SYSTEM_PROMPT_TEMPLATES["verbose_explanation"]
+        assert "YOUR TASK:" in template
+        assert "Analyze the specifications" in template
+        assert "most appropriate field" in template
 
     def test_get_system_prompt_template_unknown_falls_back(self, caplog):
         """Test that unknown template ID falls back to default with warning."""
         import logging
+
         caplog.set_level(logging.WARNING)
 
-        template = get_system_prompt_template('unknown_template_id')
+        template = get_system_prompt_template("unknown_template_id")
 
         # Should return default template
-        assert template == SYSTEM_PROMPT_TEMPLATES['default']
+        assert template == SYSTEM_PROMPT_TEMPLATES["default"]
 
         # Should log a warning
-        assert any('unknown_template_id' in record.message.lower() for record in caplog.records)
-        assert any('falling back to' in record.message.lower() for record in caplog.records)
+        assert any("unknown_template_id" in record.message.lower() for record in caplog.records)
+        assert any("falling back to" in record.message.lower() for record in caplog.records)
 
     def test_all_templates_enforce_json_strictness(self):
         """Test that all templates contain strict JSON output requirements."""
         for template_id, template in SYSTEM_PROMPT_TEMPLATES.items():
             # All templates should mention JSON
-            assert 'JSON' in template, f"Template {template_id} doesn't mention JSON"
+            assert "JSON" in template, f"Template {template_id} doesn't mention JSON"
 
             # All templates should require ONLY JSON output
-            assert 'ONLY' in template or 'only' in template.lower(), \
-                f"Template {template_id} doesn't emphasize 'ONLY' JSON"
+            assert (
+                "ONLY" in template or "only" in template.lower()
+            ), f"Template {template_id} doesn't emphasize 'ONLY' JSON"
 
             # All templates should specify the 6 required keys
-            required_keys = ['purpose', 'vision', 'must', 'dont', 'nice', 'assumptions']
+            required_keys = ["purpose", "vision", "must", "dont", "nice", "assumptions"]
             for key in required_keys:
-                assert key in template, \
-                    f"Template {template_id} missing required key: {key}"
+                assert key in template, f"Template {template_id} missing required key: {key}"
 
             # All templates should say not to include open_questions
-            assert 'NOT include' in template or 'do not include' in template.lower(), \
-                f"Template {template_id} doesn't prohibit open_questions"
-            assert 'open_questions' in template or 'open questions' in template.lower(), \
-                f"Template {template_id} doesn't mention open_questions"
+            assert (
+                "NOT include" in template or "do not include" in template.lower()
+            ), f"Template {template_id} doesn't prohibit open_questions"
+            assert (
+                "open_questions" in template or "open questions" in template.lower()
+            ), f"Template {template_id} doesn't mention open_questions"
 
     def test_build_prompts_with_default_template(self):
         """Test building prompts with default template (implicit)."""
@@ -108,8 +111,8 @@ class TestSystemPromptTemplates:
         system_prompt, user_prompt = build_clarification_prompts(request)
 
         # Should use default template
-        assert 'specification clarification assistant' in system_prompt.lower()
-        assert 'valid JSON' in system_prompt or 'JSON object' in system_prompt
+        assert "specification clarification assistant" in system_prompt.lower()
+        assert "valid JSON" in system_prompt or "JSON object" in system_prompt
 
     def test_build_prompts_with_explicit_default_template(self):
         """Test building prompts with explicitly specified default template."""
@@ -118,11 +121,11 @@ class TestSystemPromptTemplates:
         request = ClarificationRequest(plan=plan, answers=[])
 
         system_prompt, user_prompt = build_clarification_prompts(
-            request, system_prompt_id='default'
+            request, system_prompt_id="default"
         )
 
         # Should use default template
-        assert 'specification clarification assistant' in system_prompt.lower()
+        assert "specification clarification assistant" in system_prompt.lower()
 
     def test_build_prompts_with_strict_json_template(self):
         """Test building prompts with strict_json template."""
@@ -131,12 +134,12 @@ class TestSystemPromptTemplates:
         request = ClarificationRequest(plan=plan, answers=[])
 
         system_prompt, user_prompt = build_clarification_prompts(
-            request, system_prompt_id='strict_json'
+            request, system_prompt_id="strict_json"
         )
 
         # Should use strict_json template
-        assert 'STRICT JSON MODE' in system_prompt
-        assert 'CRITICAL RULES' in system_prompt
+        assert "STRICT JSON MODE" in system_prompt
+        assert "CRITICAL RULES" in system_prompt
 
     def test_build_prompts_with_verbose_template(self):
         """Test building prompts with verbose_explanation template."""
@@ -145,16 +148,17 @@ class TestSystemPromptTemplates:
         request = ClarificationRequest(plan=plan, answers=[])
 
         system_prompt, user_prompt = build_clarification_prompts(
-            request, system_prompt_id='verbose_explanation'
+            request, system_prompt_id="verbose_explanation"
         )
 
         # Should use verbose_explanation template
-        assert 'YOUR TASK:' in system_prompt
-        assert 'Analyze the specifications' in system_prompt
+        assert "YOUR TASK:" in system_prompt
+        assert "Analyze the specifications" in system_prompt
 
     def test_build_prompts_with_unknown_template_falls_back(self, caplog):
         """Test that unknown template ID falls back to default when building prompts."""
         import logging
+
         caplog.set_level(logging.WARNING)
 
         spec = SpecInput(purpose="Test", vision="Test vision")
@@ -162,14 +166,14 @@ class TestSystemPromptTemplates:
         request = ClarificationRequest(plan=plan, answers=[])
 
         system_prompt, user_prompt = build_clarification_prompts(
-            request, system_prompt_id='nonexistent_template'
+            request, system_prompt_id="nonexistent_template"
         )
 
         # Should fall back to default template
-        assert 'specification clarification assistant' in system_prompt.lower()
+        assert "specification clarification assistant" in system_prompt.lower()
 
         # Should log a warning
-        assert any('nonexistent_template' in record.message.lower() for record in caplog.records)
+        assert any("nonexistent_template" in record.message.lower() for record in caplog.records)
 
 
 class TestBuildClarificationPrompts:
@@ -222,16 +226,10 @@ class TestBuildClarificationPrompts:
 
         answers = [
             QuestionAnswer(
-                spec_index=0,
-                question_index=0,
-                question="Question 1",
-                answer="Answer to question 1"
+                spec_index=0, question_index=0, question="Question 1", answer="Answer to question 1"
             ),
             QuestionAnswer(
-                spec_index=0,
-                question_index=1,
-                question="Question 2",
-                answer="Answer to question 2"
+                spec_index=0, question_index=1, question="Question 2", answer="Answer to question 2"
             ),
         ]
 
@@ -291,12 +289,7 @@ class TestBuildClarificationPrompts:
 
         # Only answer one question
         answers = [
-            QuestionAnswer(
-                spec_index=0,
-                question_index=0,
-                question="Q1",
-                answer="Answer 1"
-            ),
+            QuestionAnswer(spec_index=0, question_index=0, question="Q1", answer="Answer 1"),
         ]
 
         request = ClarificationRequest(plan=plan, answers=answers)
@@ -359,11 +352,11 @@ class TestBuildClarificationPrompts:
 
         # Verify JSON is valid (can be parsed)
         # Extract JSON from user prompt
-        start = user_prompt.find('{')
-        end = user_prompt.rfind('}') + 1
+        start = user_prompt.find("{")
+        end = user_prompt.rfind("}") + 1
         json_str = user_prompt[start:end]
         parsed = json.loads(json_str)
-        assert len(parsed['specs'][0]['must']) == 100
+        assert len(parsed["specs"][0]["must"]) == 100
 
     def test_unicode_and_special_characters(self):
         """Test handling of unicode and special characters in specs."""
@@ -371,7 +364,7 @@ class TestBuildClarificationPrompts:
             purpose="Système de gestion 系统管理",
             vision="🚀 Modern & scalable <system>",
             must=["UTF-8 支持", "Émojis 👍"],
-            dont=['Special "quotes" and \'apostrophes\''],
+            dont=["Special \"quotes\" and 'apostrophes'"],
             open_questions=["Comment gérer les accents?"],
         )
         plan = PlanInput(specs=[spec])
@@ -386,17 +379,17 @@ class TestBuildClarificationPrompts:
         assert "Émojis 👍" in user_prompt
 
         # Verify JSON is valid
-        start = user_prompt.find('{')
-        end = user_prompt.rfind('}') + 1
+        start = user_prompt.find("{")
+        end = user_prompt.rfind("}") + 1
         json_str = user_prompt[start:end]
         parsed = json.loads(json_str)  # Should not raise
-        assert parsed['specs'][0]['purpose'] == "Système de gestion 系统管理"
+        assert parsed["specs"][0]["purpose"] == "Système de gestion 系统管理"
 
     def test_no_secrets_in_prompts(self, monkeypatch):
         """Test that no environment secrets leak into prompts."""
         # Set some fake environment variables using monkeypatch for isolation
-        monkeypatch.setenv('TEST_API_KEY', 'secret-key-12345')
-        monkeypatch.setenv('TEST_PASSWORD', 'super-secret-pwd')
+        monkeypatch.setenv("TEST_API_KEY", "secret-key-12345")
+        monkeypatch.setenv("TEST_PASSWORD", "super-secret-pwd")
 
         spec = SpecInput(
             purpose="Test security",
@@ -409,10 +402,10 @@ class TestBuildClarificationPrompts:
         system_prompt, user_prompt = build_clarification_prompts(request)
 
         # Verify no secrets in prompts
-        assert 'secret-key-12345' not in system_prompt
-        assert 'secret-key-12345' not in user_prompt
-        assert 'super-secret-pwd' not in system_prompt
-        assert 'super-secret-pwd' not in user_prompt
+        assert "secret-key-12345" not in system_prompt
+        assert "secret-key-12345" not in user_prompt
+        assert "super-secret-pwd" not in system_prompt
+        assert "super-secret-pwd" not in user_prompt
 
     def test_provider_model_metadata_not_in_prompts(self):
         """Test that provider/model metadata doesn't leak into prompts."""
@@ -422,9 +415,7 @@ class TestBuildClarificationPrompts:
 
         # Pass provider and model metadata
         system_prompt, user_prompt = build_clarification_prompts(
-            request,
-            provider="test-provider",
-            model="test-model-123"
+            request, provider="test-provider", model="test-model-123"
         )
 
         # Verify metadata is NOT in prompts (reserved for future use)
@@ -482,6 +473,7 @@ class TestBuildClarificationPrompts:
 
     def test_raises_error_for_none_plan(self):
         """Test that request with None plan raises ValueError."""
+
         # Create a mock request without proper initialization
         class MockRequest:
             plan = None
@@ -539,7 +531,7 @@ class TestCleanupAndParseJSON:
         test_cases = [
             'Sure! {"key": "value"}',
             'Here is the JSON: {"key": "value"}',
-            "Here's the result: {\"key\": \"value\"}",
+            'Here\'s the result: {"key": "value"}',
             'The answer is: {"key": "value"}',
             'Certainly, {"key": "value"}',
         ]
@@ -557,7 +549,7 @@ class TestCleanupAndParseJSON:
 
     def test_handles_nested_json(self):
         """Test parsing nested JSON structures."""
-        json_str = '''```json
+        json_str = """```json
 {
   "specs": [
     {
@@ -566,7 +558,7 @@ class TestCleanupAndParseJSON:
     }
   ]
 }
-```'''
+```"""
         result = cleanup_and_parse_json(json_str)
 
         assert result["specs"][0]["purpose"] == "Test"
@@ -589,7 +581,7 @@ class TestCleanupAndParseJSON:
 
     def test_max_attempts_parameter(self):
         """Test that max_attempts parameter is respected."""
-        invalid_json = 'This is not JSON at all'
+        invalid_json = "This is not JSON at all"
 
         with pytest.raises(JSONCleanupError) as exc_info:
             cleanup_and_parse_json(invalid_json, max_attempts=2)
@@ -599,7 +591,7 @@ class TestCleanupAndParseJSON:
 
     def test_raises_structured_error_on_failure(self):
         """Test that JSONCleanupError is raised with proper attributes."""
-        invalid_json = 'Not valid JSON {broken}'
+        invalid_json = "Not valid JSON {broken}"
 
         with pytest.raises(JSONCleanupError) as exc_info:
             cleanup_and_parse_json(invalid_json)
@@ -655,13 +647,13 @@ class TestCleanupAndParseJSON:
 
     def test_handles_multiline_json(self):
         """Test parsing pretty-printed multiline JSON."""
-        json_str = '''{
+        json_str = """{
   "key1": "value1",
   "key2": "value2",
   "nested": {
     "inner": "value"
   }
-}'''
+}"""
         result = cleanup_and_parse_json(json_str)
 
         assert result["key1"] == "value1"
@@ -705,7 +697,7 @@ Let me know if you need any changes!"""
 
     def test_complex_nested_structure(self):
         """Test parsing complex nested JSON structure matching ClarifiedPlan."""
-        json_str = '''```json
+        json_str = """```json
 {
   "specs": [
     {
@@ -726,7 +718,7 @@ Let me know if you need any changes!"""
     }
   ]
 }
-```'''
+```"""
         result = cleanup_and_parse_json(json_str)
 
         assert len(result["specs"]) == 2

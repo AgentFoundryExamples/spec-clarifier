@@ -50,20 +50,26 @@ def mock_llm_client():
         """Create dummy client that returns valid response based on request specs."""
         # Return a DummyLLMClient that echoes back valid ClarifiedPlan JSON
         # This is a simplified approach for API tests
-        return DummyLLMClient(canned_response=json.dumps({
-            "specs": [
+        return DummyLLMClient(
+            canned_response=json.dumps(
                 {
-                    "purpose": "Test",
-                    "vision": "Test vision",
-                    "must": [],
-                    "dont": [],
-                    "nice": [],
-                    "assumptions": []
+                    "specs": [
+                        {
+                            "purpose": "Test",
+                            "vision": "Test vision",
+                            "must": [],
+                            "dont": [],
+                            "nice": [],
+                            "assumptions": [],
+                        }
+                    ]
                 }
-            ]
-        }))
+            )
+        )
 
-    with patch('app.services.clarification.get_llm_client', side_effect=create_dummy_client_from_request):
+    with patch(
+        "app.services.clarification.get_llm_client", side_effect=create_dummy_client_from_request
+    ):
         yield
 
 
@@ -72,10 +78,12 @@ def enabled_debug_client(monkeypatch):
     """Return a TestClient with the debug endpoint enabled."""
     monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
     from app.config import get_settings
+
     get_settings.cache_clear()
     from fastapi.testclient import TestClient
 
     from app.main import create_app
+
     return TestClient(create_app())
 
 
@@ -301,7 +309,7 @@ class TestPreviewClarificationsEndpoint:
                 ]
             },
             "answers": [],
-            "extra_request_field": "should trigger validation error"
+            "extra_request_field": "should trigger validation error",
         }
 
         response = client.post("/v1/clarifications/preview", json=request_data)
@@ -724,7 +732,7 @@ class TestCreateClarificationJob:
                 ]
             },
             "answers": [],
-            "unexpected_field": "should fail"
+            "unexpected_field": "should fail",
         }
 
         response = client.post("/v1/clarifications", json=request_data)
@@ -770,7 +778,9 @@ class TestCreateClarificationJob:
             time.sleep(0.1)
 
         # Job should complete successfully with empty answers
-        assert job_data["status"] == "SUCCESS", f"Job failed or timed out: {job_data.get('last_error', 'timeout')}"
+        assert (
+            job_data["status"] == "SUCCESS"
+        ), f"Job failed or timed out: {job_data.get('last_error', 'timeout')}"
 
 
 class TestGetClarificationJob:
@@ -959,10 +969,12 @@ class TestShowJobResultFlag:
         monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
         # Force settings reload and create a new client with the updated settings
         from app.config import get_settings
+
         get_settings.cache_clear()
         from fastapi.testclient import TestClient
 
         from app.main import create_app
+
         client = TestClient(create_app())
 
         request_data = {
@@ -1014,10 +1026,12 @@ class TestShowJobResultFlag:
         # Enable flag to verify POST ignores it
         monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
         from app.config import get_settings
+
         get_settings.cache_clear()
         from fastapi.testclient import TestClient
 
         from app.main import create_app
+
         client = TestClient(create_app())
 
         request_data = {
@@ -1053,10 +1067,12 @@ class TestShowJobResultFlag:
         """Test that flag only controls GET, not POST responses."""
         monkeypatch.setenv("APP_SHOW_JOB_RESULT", "false")
         from app.config import get_settings
+
         get_settings.cache_clear()
         from fastapi.testclient import TestClient
 
         from app.main import create_app
+
         client = TestClient(create_app())
 
         request_data = {
@@ -1170,6 +1186,7 @@ class TestAsyncJobLifecycleAPI:
     def test_get_returns_404_for_unknown_job_id(self, client):
         """Test that GET returns 404 for unknown job IDs."""
         from uuid import uuid4
+
         fake_id = uuid4()
 
         response = client.get(f"/v1/clarifications/{fake_id}")
@@ -1199,11 +1216,10 @@ class TestAsyncJobLifecycleAPI:
         # Patch get_llm_client to return a failing client
         def create_failing_client(provider, config):
             return DummyLLMClient(
-                simulate_failure=True,
-                failure_message="Forced failure for testing"
+                simulate_failure=True, failure_message="Forced failure for testing"
             )
 
-        with patch('app.services.clarification.get_llm_client', side_effect=create_failing_client):
+        with patch("app.services.clarification.get_llm_client", side_effect=create_failing_client):
             # Create job (will be processed in background with failing client)
             post_response = client.post("/v1/clarifications", json=request_data)
             job_id = post_response.json()["id"]
@@ -1223,7 +1239,9 @@ class TestAsyncJobLifecycleAPI:
 
                 time.sleep(0.1)
 
-            assert job_done, f"Job did not complete within {max_wait} seconds. Final status: {data.get('status')}"
+            assert (
+                job_done
+            ), f"Job did not complete within {max_wait} seconds. Final status: {data.get('status')}"
 
         # Get final job status
         get_response = client.get(f"/v1/clarifications/{job_id}")
@@ -1390,6 +1408,7 @@ class TestDebugEndpoint:
         client = enabled_debug_client
 
         from uuid import uuid4
+
         fake_id = uuid4()
 
         debug_response = client.get(f"/v1/clarifications/{fake_id}/debug")
@@ -1447,17 +1466,21 @@ class TestDebugEndpoint:
 
         # Manually create a job with sensitive config data
         from app.services import job_store
-        job = job_store.create_job(request, config={
-            "llm_config": {
-                "provider": "openai",
-                "model": "gpt-5",
-                "api_key": "sk-secret-key-12345",  # This should be filtered
-                "temperature": 0.5
+
+        job = job_store.create_job(
+            request,
+            config={
+                "llm_config": {
+                    "provider": "openai",
+                    "model": "gpt-5",
+                    "api_key": "sk-secret-key-12345",  # This should be filtered
+                    "temperature": 0.5,
+                },
+                "api_key": "should-be-filtered",  # This should be filtered
+                "token": "should-be-filtered",  # This should be filtered
+                "safe_field": "should-be-included",  # This should be included
             },
-            "api_key": "should-be-filtered",  # This should be filtered
-            "token": "should-be-filtered",  # This should be filtered
-            "safe_field": "should-be-included"  # This should be included
-        })
+        )
 
         # Access debug endpoint
         debug_response = client.get(f"/v1/clarifications/{job.id}/debug")
@@ -1492,10 +1515,13 @@ class TestDebugEndpoint:
         request = ClarificationRequest(plan=plan, answers=[])
 
         from app.services import job_store
+
         job = job_store.create_job(request)
 
         # Update job with error message containing sensitive data
-        error_message = "Authentication failed with api_key=sk-secret-12345 and token=bearer-token-xyz"
+        error_message = (
+            "Authentication failed with api_key=sk-secret-12345 and token=bearer-token-xyz"
+        )
         job_store.update_job(job.id, status=JobStatus.FAILED, last_error=error_message)
 
         # Access debug endpoint
@@ -1587,20 +1613,23 @@ class TestDebugEndpointOpenAPI:
 
         # Verify description mentions it's disabled by default
         assert "description" in get_spec
-        assert "disabled by default" in get_spec["description"].lower() or "debug mode only" in get_spec["description"].lower()
+        assert (
+            "disabled by default" in get_spec["description"].lower()
+            or "debug mode only" in get_spec["description"].lower()
+        )
 
 
 def _wait_for_job_completion(client, job_id, timeout=5.0):
     """Poll the API until the job is complete or timeout is reached.
-    
+
     Args:
         client: TestClient instance
         job_id: Job ID to poll
         timeout: Maximum time to wait in seconds
-        
+
     Returns:
         Job data dictionary
-        
+
     Raises:
         AssertionError if job doesn't complete within timeout
     """
@@ -1619,16 +1648,18 @@ def client_with_job_results(monkeypatch):
     """Fixture to provide a TestClient with APP_SHOW_JOB_RESULT enabled."""
     monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
     from app.config import get_settings
+
     get_settings.cache_clear()
     from fastapi.testclient import TestClient
 
     from app.main import create_app
+
     return TestClient(create_app())
 
 
 class TestOpenQuestionsNeverExposed:
     """Tests ensuring open_questions are never exposed in API responses.
-    
+
     These tests verify the acceptance criteria that GET responses never expose
     open_questions, while must/dont/nice arrays retain prior entries.
     """
@@ -1637,17 +1668,19 @@ class TestOpenQuestionsNeverExposed:
         """Test that preview endpoint response excludes open_questions."""
         request_data = {
             "plan": {
-                "specs": [{
-                    "purpose": "Test",
-                    "vision": "Test vision",
-                    "must": ["Feature 1"],
-                    "dont": [],
-                    "nice": [],
-                    "open_questions": ["Question 1?", "Question 2?"],
-                    "assumptions": []
-                }]
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": ["Feature 1"],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": ["Question 1?", "Question 2?"],
+                        "assumptions": [],
+                    }
+                ]
             },
-            "answers": []
+            "answers": [],
         }
 
         response = client.post("/v1/clarifications/preview", json=request_data)
@@ -1671,20 +1704,24 @@ class TestOpenQuestionsNeverExposed:
         assert "nice" in spec
         assert "assumptions" in spec
 
-    def test_get_job_result_never_includes_open_questions_when_enabled(self, client_with_job_results):
+    def test_get_job_result_never_includes_open_questions_when_enabled(
+        self, client_with_job_results
+    ):
         """Test that GET job result never includes open_questions (development mode)."""
         client = client_with_job_results
 
         request_data = {
             "plan": {
-                "specs": [{
-                    "purpose": "Test",
-                    "vision": "Test vision",
-                    "must": ["Feature 1"],
-                    "open_questions": ["Question 1?"]
-                }]
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "must": ["Feature 1"],
+                        "open_questions": ["Question 1?"],
+                    }
+                ]
             },
-            "answers": []
+            "answers": [],
         }
 
         # Create job
@@ -1694,7 +1731,9 @@ class TestOpenQuestionsNeverExposed:
         # Wait for completion using helper
         job_data = _wait_for_job_completion(client, job_id)
 
-        assert job_data["status"] == "SUCCESS", f"Job failed or timed out: {job_data.get('last_error', 'unknown')}"
+        assert (
+            job_data["status"] == "SUCCESS"
+        ), f"Job failed or timed out: {job_data.get('last_error', 'unknown')}"
 
         # Verify result exists and open_questions is not present
         assert job_data["result"] is not None
@@ -1713,13 +1752,15 @@ class TestOpenQuestionsNeverExposed:
         """Test that POST response doesn't leak open_questions in any field."""
         request_data = {
             "plan": {
-                "specs": [{
-                    "purpose": "Test",
-                    "vision": "Test vision",
-                    "open_questions": ["Secret question?"]
-                }]
+                "specs": [
+                    {
+                        "purpose": "Test",
+                        "vision": "Test vision",
+                        "open_questions": ["Secret question?"],
+                    }
+                ]
             },
-            "answers": []
+            "answers": [],
         }
 
         response = client.post("/v1/clarifications", json=request_data)
@@ -1744,32 +1785,42 @@ class TestOpenQuestionsNeverExposed:
 
         # Create a custom mock that preserves the input arrays
         def create_preserving_client(provider, config):
-            return DummyLLMClient(canned_response=json.dumps({
-                "specs": [{
-                    "purpose": "Test",
-                    "vision": "Test vision",
-                    "must": ["Existing feature A", "Existing feature B"],
-                    "dont": ["Existing constraint X"],
-                    "nice": ["Existing nice-to-have Y"],
-                    "assumptions": []
-                }]
-            }))
+            return DummyLLMClient(
+                canned_response=json.dumps(
+                    {
+                        "specs": [
+                            {
+                                "purpose": "Test",
+                                "vision": "Test vision",
+                                "must": ["Existing feature A", "Existing feature B"],
+                                "dont": ["Existing constraint X"],
+                                "nice": ["Existing nice-to-have Y"],
+                                "assumptions": [],
+                            }
+                        ]
+                    }
+                )
+            )
 
-        with patch('app.services.clarification.get_llm_client', side_effect=create_preserving_client):
+        with patch(
+            "app.services.clarification.get_llm_client", side_effect=create_preserving_client
+        ):
             client = client_with_job_results
 
             request_data = {
                 "plan": {
-                    "specs": [{
-                        "purpose": "Test",
-                        "vision": "Test vision",
-                        "must": ["Existing feature A", "Existing feature B"],
-                        "dont": ["Existing constraint X"],
-                        "nice": ["Existing nice-to-have Y"],
-                        "open_questions": ["Add feature C?"]
-                    }]
+                    "specs": [
+                        {
+                            "purpose": "Test",
+                            "vision": "Test vision",
+                            "must": ["Existing feature A", "Existing feature B"],
+                            "dont": ["Existing constraint X"],
+                            "nice": ["Existing nice-to-have Y"],
+                            "open_questions": ["Add feature C?"],
+                        }
+                    ]
                 },
-                "answers": []
+                "answers": [],
             }
 
             # Create and wait for job
@@ -1779,7 +1830,9 @@ class TestOpenQuestionsNeverExposed:
             # Wait for completion using helper
             job_data = _wait_for_job_completion(client, job_id)
 
-            assert job_data["status"] == "SUCCESS", f"Job failed: {job_data.get('last_error', 'unknown')}"
+            assert (
+                job_data["status"] == "SUCCESS"
+            ), f"Job failed: {job_data.get('last_error', 'unknown')}"
 
             result_spec = job_data["result"]["specs"][0]
 
@@ -1802,24 +1855,12 @@ class TestOpenQuestionsNeverExposed:
         request_data = {
             "plan": {
                 "specs": [
-                    {
-                        "purpose": "Spec 1",
-                        "vision": "Vision 1",
-                        "open_questions": ["Q1?"]
-                    },
-                    {
-                        "purpose": "Spec 2",
-                        "vision": "Vision 2",
-                        "open_questions": ["Q2?", "Q3?"]
-                    },
-                    {
-                        "purpose": "Spec 3",
-                        "vision": "Vision 3",
-                        "open_questions": []
-                    }
+                    {"purpose": "Spec 1", "vision": "Vision 1", "open_questions": ["Q1?"]},
+                    {"purpose": "Spec 2", "vision": "Vision 2", "open_questions": ["Q2?", "Q3?"]},
+                    {"purpose": "Spec 3", "vision": "Vision 3", "open_questions": []},
                 ]
             },
-            "answers": []
+            "answers": [],
         }
 
         response = client.post("/v1/clarifications/preview", json=request_data)
@@ -1838,7 +1879,7 @@ class TestOpenQuestionsNeverExposed:
 
 class TestAPIWithVariousDummyClientResponses:
     """API-level tests with various DummyLLMClient response scenarios.
-    
+
     These tests verify the full API workflow with different LLM response patterns.
     """
 
@@ -1850,7 +1891,8 @@ class TestAPIWithVariousDummyClientResponses:
 
         # Create a dummy client that returns markdown-wrapped JSON
         def create_markdown_client(provider, config):
-            return DummyLLMClient(canned_response='''```json
+            return DummyLLMClient(
+                canned_response="""```json
 {
   "specs": [{
     "purpose": "Test",
@@ -1861,17 +1903,13 @@ class TestAPIWithVariousDummyClientResponses:
     "assumptions": []
   }]
 }
-```''')
+```"""
+            )
 
-        with patch('app.services.clarification.get_llm_client', side_effect=create_markdown_client):
+        with patch("app.services.clarification.get_llm_client", side_effect=create_markdown_client):
             request_data = {
-                "plan": {
-                    "specs": [{
-                        "purpose": "Test",
-                        "vision": "Test"
-                    }]
-                },
-                "answers": []
+                "plan": {"specs": [{"purpose": "Test", "vision": "Test"}]},
+                "answers": [],
             }
 
             # Create job
@@ -1894,15 +1932,12 @@ class TestAPIWithVariousDummyClientResponses:
         def create_malformed_client(provider, config):
             return DummyLLMClient(canned_response='{"incomplete": "json"')
 
-        with patch('app.services.clarification.get_llm_client', side_effect=create_malformed_client):
+        with patch(
+            "app.services.clarification.get_llm_client", side_effect=create_malformed_client
+        ):
             request_data = {
-                "plan": {
-                    "specs": [{
-                        "purpose": "Test",
-                        "vision": "Test"
-                    }]
-                },
-                "answers": []
+                "plan": {"specs": [{"purpose": "Test", "vision": "Test"}]},
+                "answers": [],
             }
 
             response = client.post("/v1/clarifications", json=request_data)
@@ -1914,24 +1949,29 @@ class TestAPIWithVariousDummyClientResponses:
             # Should be FAILED with error
             assert job_data["status"] == "FAILED"
             assert job_data["last_error"] is not None
-            assert "parse" in job_data["last_error"].lower() or "failed" in job_data["last_error"].lower()
+            assert (
+                "parse" in job_data["last_error"].lower()
+                or "failed" in job_data["last_error"].lower()
+            )
 
     def test_api_backward_compatible_with_existing_clients(self, client):
         """Test that API remains backward compatible."""
         # Test that old-style requests still work
         request_data = {
             "plan": {
-                "specs": [{
-                    "purpose": "Backward Compatible",
-                    "vision": "Still works",
-                    "must": ["Feature"],
-                    "dont": [],
-                    "nice": [],
-                    "open_questions": [],
-                    "assumptions": []
-                }]
+                "specs": [
+                    {
+                        "purpose": "Backward Compatible",
+                        "vision": "Still works",
+                        "must": ["Feature"],
+                        "dont": [],
+                        "nice": [],
+                        "open_questions": [],
+                        "assumptions": [],
+                    }
+                ]
             },
-            "answers": []
+            "answers": [],
         }
 
         # POST should work
@@ -2003,8 +2043,8 @@ class TestPerRequestConfig:
                 "model": "gpt-4o",
                 "system_prompt_id": "custom",
                 "temperature": 0.2,
-                "max_tokens": 2000
-            }
+                "max_tokens": 2000,
+            },
         }
 
         response = client.post("/v1/clarifications", json=request_data)
@@ -2034,8 +2074,8 @@ class TestPerRequestConfig:
             "config": {
                 "provider": "anthropic",
                 "model": "claude-sonnet-4.5",
-                "system_prompt_id": "default"
-            }
+                "system_prompt_id": "default",
+            },
         }
 
         response = client.post("/v1/clarifications", json=request_data)
@@ -2064,8 +2104,8 @@ class TestPerRequestConfig:
             "config": {
                 "provider": "openai",
                 "model": "invalid-model-xyz",
-                "system_prompt_id": "default"
-            }
+                "system_prompt_id": "default",
+            },
         }
 
         response = client.post("/v1/clarifications", json=request_data)
@@ -2096,8 +2136,8 @@ class TestPerRequestConfig:
             "config": {
                 "provider": "invalid-provider",
                 "model": "some-model",
-                "system_prompt_id": "default"
-            }
+                "system_prompt_id": "default",
+            },
         }
 
         response = client.post("/v1/clarifications", json=request_data)
@@ -2133,8 +2173,8 @@ class TestPerRequestConfig:
                 "model": "claude-opus-4",
                 "system_prompt_id": "custom-prompt",
                 "temperature": 0.3,
-                "max_tokens": 1500
-            }
+                "max_tokens": 1500,
+            },
         }
 
         response = enabled_debug_client.post("/v1/clarifications", json=request_data)
@@ -2143,6 +2183,7 @@ class TestPerRequestConfig:
 
         # Wait a bit for background task to start
         import time
+
         time.sleep(0.5)
 
         # Check debug endpoint for config
@@ -2181,8 +2222,8 @@ class TestPerRequestConfig:
                 "provider": "openai",
                 "model": "gpt-5",
                 "system_prompt_id": "default",
-                "temperature": 0.5  # Only override temperature
-            }
+                "temperature": 0.5,  # Only override temperature
+            },
         }
 
         response = client.post("/v1/clarifications", json=request_data)
@@ -2212,8 +2253,8 @@ class TestPerRequestConfig:
                 "provider": "openai",
                 "model": "gpt-5",
                 "system_prompt_id": "default",
-                "extra_field": "not allowed"
-            }
+                "extra_field": "not allowed",
+            },
         }
 
         response = client.post("/v1/clarifications", json=request_data)

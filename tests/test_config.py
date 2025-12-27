@@ -39,7 +39,10 @@ def test_settings_defaults():
     # Updated to reflect dummy-first defaults
     assert settings.llm_default_provider == "dummy"
     assert settings.llm_default_model == "test-model"
-    assert settings.cors_origins == "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
+    assert (
+        settings.cors_origins
+        == "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
+    )
     assert settings.cors_allow_credentials is True
     assert settings.cors_allow_methods == "*"
     assert settings.cors_allow_headers == "*"
@@ -358,7 +361,7 @@ class TestGlobalDefaults:
             provider="anthropic",
             model="claude-sonnet-4.5",
             system_prompt_id="advanced",
-            temperature=0.5
+            temperature=0.5,
         )
 
         defaults.set_default_config(new_config)
@@ -381,9 +384,7 @@ class TestGlobalDefaults:
 
         # Now try to set a config with anthropic provider
         config = ClarificationConfig(
-            provider="anthropic",
-            model="claude-sonnet-4.5",
-            system_prompt_id="default"
+            provider="anthropic", model="claude-sonnet-4.5", system_prompt_id="default"
         )
 
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -399,9 +400,7 @@ class TestGlobalDefaults:
         defaults = GlobalDefaults()
 
         config = ClarificationConfig(
-            provider="openai",
-            model="not-in-allowed-list",
-            system_prompt_id="default"
+            provider="openai", model="not-in-allowed-list", system_prompt_id="default"
         )
 
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -440,9 +439,7 @@ class TestConfigHelperFunctions:
         from app.models.specs import ClarificationConfig
 
         new_config = ClarificationConfig(
-            provider="anthropic",
-            model="claude-opus-4",
-            system_prompt_id="custom"
+            provider="anthropic", model="claude-opus-4", system_prompt_id="custom"
         )
 
         set_default_config(new_config)
@@ -454,9 +451,7 @@ class TestConfigHelperFunctions:
 
         # Reset to default for other tests
         reset_config = ClarificationConfig(
-            provider="openai",
-            model="gpt-5.1",
-            system_prompt_id="default"
+            provider="openai", model="gpt-5.1", system_prompt_id="default"
         )
         set_default_config(reset_config)
 
@@ -511,12 +506,12 @@ class TestConfigValidationEdgeCases:
         defaults = GlobalDefaults()
 
         # Patch the internal _allowed_models dict using monkeypatch
-        monkeypatch.setattr(defaults, "_allowed_models", {"openai": [], "anthropic": ["claude-opus-4"]})
+        monkeypatch.setattr(
+            defaults, "_allowed_models", {"openai": [], "anthropic": ["claude-opus-4"]}
+        )
 
         config = ClarificationConfig(
-            provider="openai",
-            model="any-model",
-            system_prompt_id="default"
+            provider="openai", model="any-model", system_prompt_id="default"
         )
 
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -612,17 +607,13 @@ class TestThreadSafety:
 
         def set_config(model_name):
             config = ClarificationConfig(
-                provider="openai",
-                model=model_name,
-                system_prompt_id="default"
+                provider="openai", model=model_name, system_prompt_id="default"
             )
             set_default_config(config)
 
         # Set up initial state
         initial_config = ClarificationConfig(
-            provider="openai",
-            model="gpt-5.1",
-            system_prompt_id="default"
+            provider="openai", model="gpt-5.1", system_prompt_id="default"
         )
         set_default_config(initial_config)
 
@@ -676,7 +667,7 @@ class TestValidateAndMergeConfig:
             model="gpt-5",
             system_prompt_id="custom",
             temperature=0.2,
-            max_tokens=2000
+            max_tokens=2000,
         )
 
         result = validate_and_merge_config(config)
@@ -697,9 +688,7 @@ class TestValidateAndMergeConfig:
         # So creating an invalid config raises ValidationError before merge
         with pytest.raises(ValidationError) as exc_info:
             config = ClarificationConfig(
-                provider="invalid",
-                model="some-model",
-                system_prompt_id="default"
+                provider="invalid", model="some-model", system_prompt_id="default"
             )
 
         assert "provider" in str(exc_info.value)
@@ -711,9 +700,7 @@ class TestValidateAndMergeConfig:
         from app.models.config_models import ClarificationConfig
 
         config = ClarificationConfig(
-            provider="openai",
-            model="invalid-model",
-            system_prompt_id="default"
+            provider="openai", model="invalid-model", system_prompt_id="default"
         )
 
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -728,9 +715,7 @@ class TestValidateAndMergeConfig:
         from app.models.config_models import ClarificationConfig
 
         config = ClarificationConfig(
-            provider="anthropic",
-            model="claude-sonnet-4.5",
-            system_prompt_id="default"
+            provider="anthropic", model="claude-sonnet-4.5", system_prompt_id="default"
         )
 
         result = validate_and_merge_config(config)
@@ -753,10 +738,7 @@ class TestValidateAndMergeConfig:
         from app.models.config_models import ClarificationConfig
 
         original = ClarificationConfig(
-            provider="openai",
-            model="gpt-5",
-            system_prompt_id="default",
-            temperature=0.3
+            provider="openai", model="gpt-5", system_prompt_id="default", temperature=0.3
         )
 
         result = validate_and_merge_config(original)
@@ -778,7 +760,7 @@ class TestValidateAndMergeConfig:
             provider="anthropic",
             model="claude-sonnet-4.5",
             system_prompt_id="custom",
-            temperature=0.8
+            temperature=0.8,
         )
 
         result = validate_and_merge_config(request)

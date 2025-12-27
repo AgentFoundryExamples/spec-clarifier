@@ -120,6 +120,7 @@ def test_cors_middleware_configured():
     # Check that CORSMiddleware is in the middleware stack
     # Middleware is wrapped in Middleware objects, so we check the cls attribute
     from starlette.middleware.cors import CORSMiddleware
+
     middleware_classes = [m.cls for m in app.user_middleware]
     assert CORSMiddleware in middleware_classes
 
@@ -130,10 +131,7 @@ def test_cors_allows_configured_origins():
     client = TestClient(app)
 
     # Test with default localhost origin
-    response = client.get(
-        "/health",
-        headers={"Origin": "http://localhost:3000"}
-    )
+    response = client.get("/health", headers={"Origin": "http://localhost:3000"})
     assert response.status_code == 200
     assert "access-control-allow-origin" in response.headers
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
@@ -145,10 +143,7 @@ def test_cors_rejects_non_configured_origins():
     client = TestClient(app)
 
     # Test with non-configured origin
-    response = client.get(
-        "/health",
-        headers={"Origin": "https://evil.com"}
-    )
+    response = client.get("/health", headers={"Origin": "https://evil.com"})
     assert response.status_code == 200
     # The access-control-allow-origin header should not be present for a disallowed origin
     assert "access-control-allow-origin" not in response.headers
@@ -165,8 +160,8 @@ def test_cors_preflight_request():
         headers={
             "Origin": "http://localhost:3000",
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "Content-Type"
-        }
+            "Access-Control-Request-Headers": "Content-Type",
+        },
     )
     assert response.status_code == 200
     assert "access-control-allow-origin" in response.headers
@@ -178,10 +173,7 @@ def test_cors_with_credentials():
     app = create_app()
     client = TestClient(app)
 
-    response = client.get(
-        "/health",
-        headers={"Origin": "http://localhost:3000"}
-    )
+    response = client.get("/health", headers={"Origin": "http://localhost:3000"})
     assert response.status_code == 200
     assert response.headers.get("access-control-allow-credentials") == "true"
 

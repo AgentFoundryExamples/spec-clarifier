@@ -35,10 +35,11 @@ router = APIRouter(prefix="/v1/config", tags=["Configuration"])
 
 class DefaultsResponse(BaseModel):
     """Response model for GET /v1/config/defaults.
-    
+
     Contains the current default configuration and allowed models
     for all providers.
     """
+
     default_config: ClarificationConfig = Field(
         description="Current default ClarificationConfig used when no config is provided"
     )
@@ -49,7 +50,7 @@ class DefaultsResponse(BaseModel):
 
 def _check_config_admin_enabled():
     """Check if config admin endpoints are enabled.
-    
+
     Raises:
         HTTPException: 403 if endpoints are disabled
     """
@@ -59,7 +60,7 @@ def _check_config_admin_enabled():
         log_warning(logger, "config_admin_endpoint_disabled_access_attempt")
         raise HTTPException(
             status_code=403,
-            detail="Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable."
+            detail="Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable.",
         )
 
 
@@ -96,15 +97,15 @@ def _check_config_admin_enabled():
                             "model": "gpt-5.1",
                             "system_prompt_id": "default",
                             "temperature": 0.1,
-                            "max_tokens": None
+                            "max_tokens": None,
                         },
                         "allowed_models": {
                             "openai": ["gpt-5", "gpt-5.1", "gpt-4o"],
-                            "anthropic": ["claude-sonnet-4.5", "claude-opus-4"]
-                        }
+                            "anthropic": ["claude-sonnet-4.5", "claude-opus-4"],
+                        },
                     }
                 }
-            }
+            },
         },
         403: {
             "description": "Config admin endpoints are disabled",
@@ -114,20 +115,20 @@ def _check_config_admin_enabled():
                         "detail": "Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable."
                     }
                 }
-            }
-        }
+            },
+        },
     },
 )
 def get_defaults() -> DefaultsResponse:
     """Get current default configuration and allowed models.
-    
+
     This admin-only endpoint returns the current global defaults for
     clarification configuration. It should only be accessible in trusted
     environments with proper access controls.
-    
+
     Returns:
         DefaultsResponse: Current defaults and allowed models
-        
+
     Raises:
         HTTPException: 403 if config admin endpoints are disabled
     """
@@ -178,13 +179,13 @@ def get_defaults() -> DefaultsResponse:
                                     "model": "gpt-5",
                                     "system_prompt_id": "default",
                                     "temperature": 0.1,
-                                    "max_tokens": 2000
+                                    "max_tokens": 2000,
                                 },
                                 "allowed_models": {
                                     "openai": ["gpt-5", "gpt-5.1", "gpt-4o"],
-                                    "anthropic": ["claude-sonnet-4.5", "claude-opus-4"]
-                                }
-                            }
+                                    "anthropic": ["claude-sonnet-4.5", "claude-opus-4"],
+                                },
+                            },
                         },
                         "anthropic": {
                             "summary": "Update to Anthropic Claude",
@@ -194,17 +195,17 @@ def get_defaults() -> DefaultsResponse:
                                     "model": "claude-sonnet-4.5",
                                     "system_prompt_id": "strict_json",
                                     "temperature": 0.2,
-                                    "max_tokens": 3000
+                                    "max_tokens": 3000,
                                 },
                                 "allowed_models": {
                                     "openai": ["gpt-5", "gpt-5.1", "gpt-4o"],
-                                    "anthropic": ["claude-sonnet-4.5", "claude-opus-4"]
-                                }
-                            }
-                        }
+                                    "anthropic": ["claude-sonnet-4.5", "claude-opus-4"],
+                                },
+                            },
+                        },
                     }
                 }
-            }
+            },
         },
         400: {
             "description": "Invalid configuration (validation failed)",
@@ -214,7 +215,7 @@ def get_defaults() -> DefaultsResponse:
                         "detail": "Model 'gpt-3.5-turbo' is not allowed for provider 'openai'. Allowed models: gpt-5, gpt-5.1, gpt-4o"
                     }
                 }
-            }
+            },
         },
         403: {
             "description": "Config admin endpoints are disabled",
@@ -224,7 +225,7 @@ def get_defaults() -> DefaultsResponse:
                         "detail": "Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable."
                     }
                 }
-            }
+            },
         },
         422: {
             "description": "Invalid request payload (wrong types or out of range values)",
@@ -235,30 +236,30 @@ def get_defaults() -> DefaultsResponse:
                             {
                                 "type": "literal_error",
                                 "loc": ["body", "provider"],
-                                "msg": "Input should be 'openai' or 'anthropic'"
+                                "msg": "Input should be 'openai' or 'anthropic'",
                             }
                         ]
                     }
                 }
-            }
-        }
+            },
+        },
     },
 )
 def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
     """Update the global default configuration.
-    
+
     This admin-only endpoint validates and sets a new default configuration.
     Changes are atomic and thread-safe but NOT persisted across restarts.
-    
+
     All fields in the config are required. The config is validated to ensure
     the provider/model combination is in allowed_models.
-    
+
     Args:
         config: New default ClarificationConfig to set
-        
+
     Returns:
         DefaultsResponse: Updated defaults and allowed models
-        
+
     Raises:
         HTTPException: 400 if validation fails (invalid provider/model)
         HTTPException: 403 if config admin endpoints are disabled
@@ -269,7 +270,7 @@ def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
         logger,
         "config_admin_update_defaults_accessed",
         provider=config.provider,
-        model=config.model
+        model=config.model,
     )
 
     try:
@@ -284,7 +285,7 @@ def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
             model=config.model,
             system_prompt_id=config.system_prompt_id,
             temperature=config.temperature,
-            max_tokens=config.max_tokens
+            max_tokens=config.max_tokens,
         )
 
         # Return the config that was just set to avoid race conditions

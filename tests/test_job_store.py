@@ -396,10 +396,9 @@ class TestCleanupExpiredJobs:
         # Manually update to make it old and completed
         with job_store._store_lock:
             old_time = datetime.now(UTC) - timedelta(hours=25)
-            job_store._job_store[old_job.id] = old_job.model_copy(update={
-                "status": JobStatus.SUCCESS,
-                "updated_at": old_time
-            })
+            job_store._job_store[old_job.id] = old_job.model_copy(
+                update={"status": JobStatus.SUCCESS, "updated_at": old_time}
+            )
 
         # Create recent completed job
         recent_job = create_job(request)
@@ -430,9 +429,9 @@ class TestCleanupExpiredJobs:
         # Manually make it old
         with job_store._store_lock:
             old_time = datetime.now(UTC) - timedelta(hours=25)
-            job_store._job_store[old_job.id] = job_store._job_store[old_job.id].model_copy(update={
-                "updated_at": old_time
-            })
+            job_store._job_store[old_job.id] = job_store._job_store[old_job.id].model_copy(
+                update={"updated_at": old_time}
+            )
 
         cleanup_count = cleanup_expired_jobs(ttl_seconds=24 * 60 * 60)
 
@@ -452,9 +451,9 @@ class TestCleanupExpiredJobs:
         # Manually make it old
         with job_store._store_lock:
             old_time = datetime.now(UTC) - timedelta(hours=25)
-            job_store._job_store[old_job.id] = job_store._job_store[old_job.id].model_copy(update={
-                "updated_at": old_time
-            })
+            job_store._job_store[old_job.id] = job_store._job_store[old_job.id].model_copy(
+                update={"updated_at": old_time}
+            )
 
         cleanup_count = cleanup_expired_jobs(ttl_seconds=24 * 60 * 60)
 
@@ -475,9 +474,9 @@ class TestCleanupExpiredJobs:
         # Manually make it old
         with job_store._store_lock:
             old_time = datetime.now(UTC) - timedelta(hours=25)
-            job_store._job_store[old_job.id] = job_store._job_store[old_job.id].model_copy(update={
-                "updated_at": old_time
-            })
+            job_store._job_store[old_job.id] = job_store._job_store[old_job.id].model_copy(
+                update={"updated_at": old_time}
+            )
 
         cleanup_count = cleanup_expired_jobs(ttl_seconds=24 * 60 * 60)
 
@@ -496,9 +495,9 @@ class TestCleanupExpiredJobs:
 
         with job_store._store_lock:
             old_time = datetime.now(UTC) - timedelta(hours=2)
-            job_store._job_store[job.id] = job_store._job_store[job.id].model_copy(update={
-                "updated_at": old_time
-            })
+            job_store._job_store[job.id] = job_store._job_store[job.id].model_copy(
+                update={"updated_at": old_time}
+            )
 
         # Cleanup with 1 hour TTL should remove it
         cleanup_count = cleanup_expired_jobs(ttl_seconds=60 * 60)
@@ -521,24 +520,21 @@ class TestCleanupExpiredJobs:
         old_pending = create_job(request)
         with job_store._store_lock:
             old_time = datetime.now(UTC) - timedelta(hours=48)
-            job_store._job_store[old_pending.id] = job_store._job_store[old_pending.id].model_copy(update={
-                "created_at": old_time,
-                "updated_at": old_time
-            })
+            job_store._job_store[old_pending.id] = job_store._job_store[old_pending.id].model_copy(
+                update={"created_at": old_time, "updated_at": old_time}
+            )
 
         # Create recent PENDING job (1 hour old)
         recent_pending = create_job(request)
         with job_store._store_lock:
             recent_time = datetime.now(UTC) - timedelta(hours=1)
-            job_store._job_store[recent_pending.id] = job_store._job_store[recent_pending.id].model_copy(update={
-                "created_at": recent_time,
-                "updated_at": recent_time
-            })
+            job_store._job_store[recent_pending.id] = job_store._job_store[
+                recent_pending.id
+            ].model_copy(update={"created_at": recent_time, "updated_at": recent_time})
 
         # Cleanup with stale_pending_ttl_seconds set to 24 hours
         cleanup_count = cleanup_expired_jobs(
-            ttl_seconds=24 * 60 * 60,
-            stale_pending_ttl_seconds=24 * 60 * 60
+            ttl_seconds=24 * 60 * 60, stale_pending_ttl_seconds=24 * 60 * 60
         )
 
         assert cleanup_count == 1
@@ -560,10 +556,9 @@ class TestCleanupExpiredJobs:
         old_pending = create_job(request)
         with job_store._store_lock:
             old_time = datetime.now(UTC) - timedelta(hours=100)
-            job_store._job_store[old_pending.id] = job_store._job_store[old_pending.id].model_copy(update={
-                "created_at": old_time,
-                "updated_at": old_time
-            })
+            job_store._job_store[old_pending.id] = job_store._job_store[old_pending.id].model_copy(
+                update={"created_at": old_time, "updated_at": old_time}
+            )
 
         # Cleanup without stale_pending_ttl_seconds
         cleanup_count = cleanup_expired_jobs(ttl_seconds=24 * 60 * 60)

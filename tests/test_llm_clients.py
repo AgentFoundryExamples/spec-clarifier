@@ -212,10 +212,7 @@ class TestClarificationLLMConfig:
     def test_config_with_all_fields(self):
         """Test creating config with all fields."""
         config = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=0.7,
-            max_tokens=1000
+            provider="openai", model="gpt-5.1", temperature=0.7, max_tokens=1000
         )
         assert config.provider == "openai"
         assert config.model == "gpt-5.1"
@@ -224,10 +221,7 @@ class TestClarificationLLMConfig:
 
     def test_config_with_minimal_fields(self):
         """Test creating config with only required fields."""
-        config = ClarificationLLMConfig(
-            provider="anthropic",
-            model="claude-sonnet-4.5"
-        )
+        config = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
         assert config.provider == "anthropic"
         assert config.model == "claude-sonnet-4.5"
         assert config.temperature == 0.1  # Default
@@ -273,52 +267,28 @@ class TestClarificationLLMConfig:
     def test_config_validates_temperature_range_min(self):
         """Test that temperature below 0.0 is rejected."""
         with pytest.raises(ValueError):
-            ClarificationLLMConfig(
-                provider="openai",
-                model="gpt-5.1",
-                temperature=-0.1
-            )
+            ClarificationLLMConfig(provider="openai", model="gpt-5.1", temperature=-0.1)
 
     def test_config_validates_temperature_range_max(self):
         """Test that temperature above 2.0 is rejected."""
         with pytest.raises(ValueError):
-            ClarificationLLMConfig(
-                provider="openai",
-                model="gpt-5.1",
-                temperature=2.1
-            )
+            ClarificationLLMConfig(provider="openai", model="gpt-5.1", temperature=2.1)
 
     def test_config_accepts_temperature_boundary_values(self):
         """Test that temperature boundary values (0.0, 2.0) are accepted."""
-        config_min = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=0.0
-        )
+        config_min = ClarificationLLMConfig(provider="openai", model="gpt-5.1", temperature=0.0)
         assert config_min.temperature == 0.0
 
-        config_max = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=2.0
-        )
+        config_max = ClarificationLLMConfig(provider="openai", model="gpt-5.1", temperature=2.0)
         assert config_max.temperature == 2.0
 
     def test_config_validates_max_tokens_positive(self):
         """Test that max_tokens must be positive."""
         with pytest.raises(ValueError):
-            ClarificationLLMConfig(
-                provider="openai",
-                model="gpt-5.1",
-                max_tokens=0
-            )
+            ClarificationLLMConfig(provider="openai", model="gpt-5.1", max_tokens=0)
 
         with pytest.raises(ValueError):
-            ClarificationLLMConfig(
-                provider="openai",
-                model="gpt-5.1",
-                max_tokens=-100
-            )
+            ClarificationLLMConfig(provider="openai", model="gpt-5.1", max_tokens=-100)
 
     def test_config_max_tokens_none_is_valid(self):
         """Test that max_tokens can be None."""
@@ -328,10 +298,7 @@ class TestClarificationLLMConfig:
     def test_config_serialization(self):
         """Test that config can be serialized to dict/JSON."""
         config = ClarificationLLMConfig(
-            provider="google",
-            model="gemini-3.0-pro",
-            temperature=0.5,
-            max_tokens=2000
+            provider="google", model="gemini-3.0-pro", temperature=0.5, max_tokens=2000
         )
         data = config.model_dump()
         assert data["provider"] == "google"
@@ -345,7 +312,7 @@ class TestClarificationLLMConfig:
             "provider": "anthropic",
             "model": "claude-opus-4",
             "temperature": 0.2,
-            "max_tokens": 1500
+            "max_tokens": 1500,
         }
         config = ClarificationLLMConfig(**data)
         assert config.provider == "anthropic"
@@ -361,9 +328,7 @@ class TestDummyLLMClient:
         """Test that DummyLLMClient returns default canned response."""
         client = DummyLLMClient()
         response = await client.complete(
-            system_prompt="You are a helpful assistant",
-            user_prompt="Hello",
-            model="test-model"
+            system_prompt="You are a helpful assistant", user_prompt="Hello", model="test-model"
         )
         assert response == '{"clarified": true}'
 
@@ -372,9 +337,7 @@ class TestDummyLLMClient:
         custom_response = '{"result": "custom clarification"}'
         client = DummyLLMClient(canned_response=custom_response)
         response = await client.complete(
-            system_prompt="System instruction",
-            user_prompt="User query",
-            model="test-model"
+            system_prompt="System instruction", user_prompt="User query", model="test-model"
         )
         assert response == custom_response
 
@@ -382,9 +345,7 @@ class TestDummyLLMClient:
         """Test DummyLLMClient echo_prompts mode."""
         client = DummyLLMClient(echo_prompts=True)
         response = await client.complete(
-            system_prompt="System instruction",
-            user_prompt="User query",
-            model="test-model"
+            system_prompt="System instruction", user_prompt="User query", model="test-model"
         )
         assert "System: System instruction" in response
         assert "User: User query" in response
@@ -392,15 +353,8 @@ class TestDummyLLMClient:
 
     async def test_dummy_client_canned_response_takes_precedence(self):
         """Test that canned_response overrides echo_prompts."""
-        client = DummyLLMClient(
-            canned_response="Custom response",
-            echo_prompts=True
-        )
-        response = await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="model"
-        )
+        client = DummyLLMClient(canned_response="Custom response", echo_prompts=True)
+        response = await client.complete(system_prompt="System", user_prompt="User", model="model")
         assert response == "Custom response"
         assert "System:" not in response
 
@@ -408,22 +362,14 @@ class TestDummyLLMClient:
         """Test that DummyLLMClient validates empty system_prompt."""
         client = DummyLLMClient()
         with pytest.raises(ValueError) as exc_info:
-            await client.complete(
-                system_prompt="",
-                user_prompt="User query",
-                model="test-model"
-            )
+            await client.complete(system_prompt="", user_prompt="User query", model="test-model")
         assert "system_prompt must not be empty or blank" in str(exc_info.value)
 
     async def test_dummy_client_validates_blank_system_prompt(self):
         """Test that DummyLLMClient validates blank system_prompt."""
         client = DummyLLMClient()
         with pytest.raises(ValueError) as exc_info:
-            await client.complete(
-                system_prompt="   ",
-                user_prompt="User query",
-                model="test-model"
-            )
+            await client.complete(system_prompt="   ", user_prompt="User query", model="test-model")
         assert "system_prompt must not be empty or blank" in str(exc_info.value)
 
     async def test_dummy_client_validates_empty_user_prompt(self):
@@ -431,9 +377,7 @@ class TestDummyLLMClient:
         client = DummyLLMClient()
         with pytest.raises(ValueError) as exc_info:
             await client.complete(
-                system_prompt="System instruction",
-                user_prompt="",
-                model="test-model"
+                system_prompt="System instruction", user_prompt="", model="test-model"
             )
         assert "user_prompt must not be empty or blank" in str(exc_info.value)
 
@@ -442,9 +386,7 @@ class TestDummyLLMClient:
         client = DummyLLMClient()
         with pytest.raises(ValueError) as exc_info:
             await client.complete(
-                system_prompt="System instruction",
-                user_prompt="   ",
-                model="test-model"
+                system_prompt="System instruction", user_prompt="   ", model="test-model"
             )
         assert "user_prompt must not be empty or blank" in str(exc_info.value)
 
@@ -453,9 +395,7 @@ class TestDummyLLMClient:
         client = DummyLLMClient()
         with pytest.raises(ValueError) as exc_info:
             await client.complete(
-                system_prompt="System instruction",
-                user_prompt="User query",
-                model=""
+                system_prompt="System instruction", user_prompt="User query", model=""
             )
         assert "model must not be empty or blank" in str(exc_info.value)
 
@@ -464,24 +404,15 @@ class TestDummyLLMClient:
         client = DummyLLMClient()
         with pytest.raises(ValueError) as exc_info:
             await client.complete(
-                system_prompt="System instruction",
-                user_prompt="User query",
-                model="   "
+                system_prompt="System instruction", user_prompt="User query", model="   "
             )
         assert "model must not be empty or blank" in str(exc_info.value)
 
     async def test_dummy_client_simulate_failure(self):
         """Test DummyLLMClient failure simulation."""
-        client = DummyLLMClient(
-            simulate_failure=True,
-            failure_message="Simulated API error"
-        )
+        client = DummyLLMClient(simulate_failure=True, failure_message="Simulated API error")
         with pytest.raises(LLMCallError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="model"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="model")
         assert "Simulated API error" in str(exc_info.value)
         assert exc_info.value.provider == "dummy"
 
@@ -490,14 +421,10 @@ class TestDummyLLMClient:
         client = DummyLLMClient(
             simulate_failure=True,
             failure_message="Connection timeout",
-            failure_type=LLMNetworkError
+            failure_type=LLMNetworkError,
         )
         with pytest.raises(LLMNetworkError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="model"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="model")
         assert "Connection timeout" in str(exc_info.value)
 
     async def test_dummy_client_simulate_auth_error(self):
@@ -505,14 +432,10 @@ class TestDummyLLMClient:
         client = DummyLLMClient(
             simulate_failure=True,
             failure_message="Invalid API key",
-            failure_type=LLMAuthenticationError
+            failure_type=LLMAuthenticationError,
         )
         with pytest.raises(LLMAuthenticationError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="model"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="model")
         assert "Invalid API key" in str(exc_info.value)
 
     async def test_dummy_client_simulate_rate_limit_error(self):
@@ -520,14 +443,10 @@ class TestDummyLLMClient:
         client = DummyLLMClient(
             simulate_failure=True,
             failure_message="Rate limit exceeded",
-            failure_type=LLMRateLimitError
+            failure_type=LLMRateLimitError,
         )
         with pytest.raises(LLMRateLimitError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="model"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="model")
         assert "Rate limit exceeded" in str(exc_info.value)
 
     async def test_dummy_client_simulate_validation_error(self):
@@ -535,14 +454,10 @@ class TestDummyLLMClient:
         client = DummyLLMClient(
             simulate_failure=True,
             failure_message="Invalid request format",
-            failure_type=LLMValidationError
+            failure_type=LLMValidationError,
         )
         with pytest.raises(LLMValidationError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="model"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="model")
         assert "Invalid request format" in str(exc_info.value)
 
     async def test_dummy_client_accepts_kwargs(self):
@@ -555,7 +470,7 @@ class TestDummyLLMClient:
             model="model",
             temperature=0.7,
             max_tokens=1000,
-            custom_param="value"
+            custom_param="value",
         )
         assert response is not None
 
@@ -586,8 +501,7 @@ class TestDummyLLMClient:
         # Should raise TypeError for non-LLMCallError types
         with pytest.raises(TypeError) as exc_info:
             DummyLLMClient(
-                simulate_failure=True,
-                failure_type=ValueError  # Not an LLMCallError subclass
+                simulate_failure=True, failure_type=ValueError  # Not an LLMCallError subclass
             )
         assert "failure_type must be a subclass of LLMCallError" in str(exc_info.value)
 
@@ -602,18 +516,14 @@ class TestDummyLLMClient:
             LLMValidationError,
         ]
         for failure_type in valid_types:
-            client = DummyLLMClient(
-                simulate_failure=True,
-                failure_type=failure_type
-            )
+            client = DummyLLMClient(simulate_failure=True, failure_type=failure_type)
             assert client.failure_type == failure_type
 
     def test_dummy_client_no_validation_when_not_simulating_failure(self):
         """Test that failure_type is not validated when simulate_failure=False."""
         # Should not raise even with invalid type when not simulating failure
         client = DummyLLMClient(
-            simulate_failure=False,
-            failure_type=ValueError  # Invalid but ignored
+            simulate_failure=False, failure_type=ValueError  # Invalid but ignored
         )
         assert client.simulate_failure is False
 
@@ -630,13 +540,9 @@ class TestLLMClientProtocol:
         assert callable(client.complete)
 
         # Test that it's async
-        result = client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="test-model"
-        )
+        result = client.complete(system_prompt="System", user_prompt="User", model="test-model")
         # Should return a coroutine
-        assert hasattr(result, '__await__')
+        assert hasattr(result, "__await__")
 
         # Consume the coroutine
         response = await result
@@ -645,11 +551,7 @@ class TestLLMClientProtocol:
     async def test_protocol_signature_returns_string(self):
         """Test that protocol requires string return type."""
         client = DummyLLMClient()
-        response = await client.complete(
-            system_prompt="Test",
-            user_prompt="Test",
-            model="model"
-        )
+        response = await client.complete(system_prompt="Test", user_prompt="Test", model="model")
         assert isinstance(response, str)
 
     async def test_protocol_signature_accepts_kwargs(self):
@@ -661,7 +563,7 @@ class TestLLMClientProtocol:
             user_prompt="Test",
             model="model",
             arbitrary_param=True,
-            another_param="value"
+            another_param="value",
         )
 
 
@@ -684,9 +586,7 @@ class TestEdgeCases:
         long_prompt = "X" * 100000  # 100k characters
 
         response = await client.complete(
-            system_prompt=long_prompt,
-            user_prompt=long_prompt,
-            model="model"
+            system_prompt=long_prompt, user_prompt=long_prompt, model="model"
         )
         assert long_prompt in response
 
@@ -694,9 +594,7 @@ class TestEdgeCases:
         """Test DummyLLMClient handles unicode in prompts."""
         client = DummyLLMClient(echo_prompts=True)
         response = await client.complete(
-            system_prompt="系统提示 🚀",
-            user_prompt="用户查询 ✨",
-            model="模型-1"
+            system_prompt="系统提示 🚀", user_prompt="用户查询 ✨", model="模型-1"
         )
         assert "系统提示 🚀" in response
         assert "用户查询 ✨" in response
@@ -705,28 +603,16 @@ class TestEdgeCases:
     def test_config_with_extreme_temperature_values(self):
         """Test config with boundary temperature values."""
         # Test minimum
-        config_min = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=0.0
-        )
+        config_min = ClarificationLLMConfig(provider="openai", model="gpt-5.1", temperature=0.0)
         assert config_min.temperature == 0.0
 
         # Test maximum
-        config_max = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=2.0
-        )
+        config_max = ClarificationLLMConfig(provider="openai", model="gpt-5.1", temperature=2.0)
         assert config_max.temperature == 2.0
 
     def test_config_with_very_large_max_tokens(self):
         """Test config accepts very large max_tokens values."""
-        config = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1",
-            max_tokens=1000000
-        )
+        config = ClarificationLLMConfig(provider="openai", model="gpt-5.1", max_tokens=1000000)
         assert config.max_tokens == 1000000
 
 
@@ -762,7 +648,7 @@ class TestOpenAIResponsesClient:
         response = await client.complete(
             system_prompt="You are a helpful assistant",
             user_prompt="Hello, world!",
-            model="gpt-5.1"
+            model="gpt-5.1",
         )
 
         assert response == "This is the AI response text."
@@ -799,7 +685,7 @@ class TestOpenAIResponsesClient:
             user_prompt="User",
             model="gpt-5.1",
             temperature=0.7,
-            max_tokens=500
+            max_tokens=500,
         )
 
         # Verify parameters were passed correctly
@@ -829,10 +715,9 @@ class TestOpenAIResponsesClient:
         class MockResponse:
             def __init__(self):
                 self.output = [
-                    MockOutputItem([
-                        MockContentPart("First part. "),
-                        MockContentPart("Second part.")
-                    ])
+                    MockOutputItem(
+                        [MockContentPart("First part. "), MockContentPart("Second part.")]
+                    )
                 ]
 
             @property
@@ -854,9 +739,7 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-test-key-12345")
 
         response = await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="gpt-5.1"
+            system_prompt="System", user_prompt="User", model="gpt-5.1"
         )
 
         assert response == "First part. Second part."
@@ -886,11 +769,13 @@ class TestOpenAIResponsesClient:
         class MockResponse:
             def __init__(self):
                 self.output = [
-                    MockOutputItem([
-                        MockTextPart("Text before tool. "),
-                        MockToolPart(),
-                        MockTextPart("Text after tool.")
-                    ])
+                    MockOutputItem(
+                        [
+                            MockTextPart("Text before tool. "),
+                            MockToolPart(),
+                            MockTextPart("Text after tool."),
+                        ]
+                    )
                 ]
 
             @property
@@ -912,9 +797,7 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-test-key-12345")
 
         response = await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="gpt-5.1"
+            system_prompt="System", user_prompt="User", model="gpt-5.1"
         )
 
         assert response == "Text before tool. Text after tool."
@@ -929,11 +812,7 @@ class TestOpenAIResponsesClient:
         client = OpenAIResponsesClient()
 
         with pytest.raises(LLMCallError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="gpt-5.1"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="gpt-5.1")
 
         assert "OPENAI_API_KEY" in str(exc_info.value)
         assert exc_info.value.provider == "openai"
@@ -946,13 +825,16 @@ class TestOpenAIResponsesClient:
 
         # Create proper httpx request and response
         request = httpx.Request("POST", "https://api.openai.com/v1/responses")
-        response = httpx.Response(401, json={"error": {"message": "Invalid API key"}}, request=request)
+        response = httpx.Response(
+            401, json={"error": {"message": "Invalid API key"}}, request=request
+        )
 
         # Mock AsyncOpenAI to raise AuthenticationError
         class MockAsyncOpenAI:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import AuthenticationError
+
                     raise AuthenticationError("Invalid API key", response=response, body=None)
 
             def __init__(self, api_key):
@@ -964,11 +846,7 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-invalid-key")
 
         with pytest.raises(LLMAuthenticationError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="gpt-5.1"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="gpt-5.1")
 
         assert "authentication failed" in str(exc_info.value).lower()
         assert exc_info.value.provider == "openai"
@@ -982,13 +860,16 @@ class TestOpenAIResponsesClient:
 
         # Create proper httpx request and response
         request = httpx.Request("POST", "https://api.openai.com/v1/responses")
-        response = httpx.Response(429, json={"error": {"message": "Rate limit exceeded"}}, request=request)
+        response = httpx.Response(
+            429, json={"error": {"message": "Rate limit exceeded"}}, request=request
+        )
 
         # Mock AsyncOpenAI to raise RateLimitError
         class MockAsyncOpenAI:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import RateLimitError
+
                     raise RateLimitError("Rate limit exceeded", response=response, body=None)
 
             def __init__(self, api_key):
@@ -1000,11 +881,7 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-test-key")
 
         with pytest.raises(LLMRateLimitError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="gpt-5.1"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="gpt-5.1")
 
         assert "rate limit" in str(exc_info.value).lower()
         assert exc_info.value.provider == "openai"
@@ -1017,13 +894,16 @@ class TestOpenAIResponsesClient:
 
         # Create proper httpx request and response
         request = httpx.Request("POST", "https://api.openai.com/v1/responses")
-        response = httpx.Response(400, json={"error": {"message": "Invalid request format"}}, request=request)
+        response = httpx.Response(
+            400, json={"error": {"message": "Invalid request format"}}, request=request
+        )
 
         # Mock AsyncOpenAI to raise BadRequestError
         class MockAsyncOpenAI:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import BadRequestError
+
                     raise BadRequestError("Invalid request format", response=response, body=None)
 
             def __init__(self, api_key):
@@ -1035,11 +915,7 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-test-key")
 
         with pytest.raises(LLMValidationError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="gpt-5.1"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="gpt-5.1")
 
         assert "validation failed" in str(exc_info.value).lower()
         assert exc_info.value.provider == "openai"
@@ -1058,6 +934,7 @@ class TestOpenAIResponsesClient:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import APIConnectionError
+
                     raise APIConnectionError(request=MockRequest())
 
             def __init__(self, api_key):
@@ -1069,11 +946,7 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-test-key")
 
         with pytest.raises(LLMNetworkError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="gpt-5.1"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="gpt-5.1")
 
         assert "network error" in str(exc_info.value).lower()
         assert exc_info.value.provider == "openai"
@@ -1092,6 +965,7 @@ class TestOpenAIResponsesClient:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import APITimeoutError
+
                     raise APITimeoutError(request=MockRequest())
 
             def __init__(self, api_key):
@@ -1103,11 +977,7 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-test-key")
 
         with pytest.raises(LLMNetworkError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="gpt-5.1"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="gpt-5.1")
 
         assert "network error" in str(exc_info.value).lower()
         assert exc_info.value.provider == "openai"
@@ -1129,6 +999,7 @@ class TestOpenAIResponsesClient:
             class MockResponses:
                 async def create(self, **kwargs):
                     from openai import APIError
+
                     raise APIError("Internal server error", request=None, body=None)
 
             def __init__(self, api_key):
@@ -1140,11 +1011,7 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-test-key")
 
         with pytest.raises(LLMCallError) as exc_info:
-            await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="gpt-5.1"
-            )
+            await client.complete(system_prompt="System", user_prompt="User", model="gpt-5.1")
 
         # Should not be a more specific error type
         assert type(exc_info.value).__name__ == "LLMCallError"
@@ -1159,11 +1026,7 @@ class TestOpenAIResponsesClient:
         client = OpenAIResponsesClient()
 
         with pytest.raises(ValueError) as exc_info:
-            await client.complete(
-                system_prompt="",
-                user_prompt="User query",
-                model="gpt-5.1"
-            )
+            await client.complete(system_prompt="", user_prompt="User query", model="gpt-5.1")
 
         assert "system_prompt must not be empty or blank" in str(exc_info.value)
 
@@ -1177,9 +1040,7 @@ class TestOpenAIResponsesClient:
 
         with pytest.raises(ValueError) as exc_info:
             await client.complete(
-                system_prompt="System instruction",
-                user_prompt="",
-                model="gpt-5.1"
+                system_prompt="System instruction", user_prompt="", model="gpt-5.1"
             )
 
         assert "user_prompt must not be empty or blank" in str(exc_info.value)
@@ -1194,9 +1055,7 @@ class TestOpenAIResponsesClient:
 
         with pytest.raises(ValueError) as exc_info:
             await client.complete(
-                system_prompt="System instruction",
-                user_prompt="User query",
-                model=""
+                system_prompt="System instruction", user_prompt="User query", model=""
             )
 
         assert "model must not be empty or blank" in str(exc_info.value)
@@ -1226,11 +1085,7 @@ class TestOpenAIResponsesClient:
 
         client._client = MockAsyncOpenAI(api_key="sk-test-key")
 
-        await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="gpt-5.1"
-        )
+        await client.complete(system_prompt="System", user_prompt="User", model="gpt-5.1")
 
         assert client._client is not None  # Now initialized
 
@@ -1260,9 +1115,7 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-custom-key-789")
 
         response = await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="gpt-5.1"
+            system_prompt="System", user_prompt="User", model="gpt-5.1"
         )
 
         assert response == "Response with custom key"
@@ -1296,12 +1149,8 @@ class TestOpenAIResponsesClient:
         client._client = MockAsyncOpenAI(api_key="sk-test-key")
 
         # Test that it's async and returns a string
-        result = client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="gpt-5.1"
-        )
-        assert hasattr(result, '__await__')
+        result = client.complete(system_prompt="System", user_prompt="User", model="gpt-5.1")
+        assert hasattr(result, "__await__")
 
         response = await result
         assert isinstance(response, str)
@@ -1317,7 +1166,9 @@ class TestOpenAIResponsesClient:
 
         # Verify the ImportError handling is present
         assert "except ImportError" in source, "Missing ImportError exception handler"
-        assert "OpenAI SDK not installed or accessible" in source, "Missing SDK not installed error message"
+        assert (
+            "OpenAI SDK not installed or accessible" in source
+        ), "Missing SDK not installed error message"
         assert "from openai import" in source, "Missing openai module import"
 
         # The code structure validates that if openai cannot be imported,
@@ -1361,7 +1212,7 @@ class TestAnthropicResponsesClient:
         response = await client.complete(
             system_prompt="You are a helpful assistant",
             user_prompt="Hello, world!",
-            model="claude-sonnet-4.5"
+            model="claude-sonnet-4.5",
         )
 
         assert response == "This is the AI response text."
@@ -1409,7 +1260,7 @@ class TestAnthropicResponsesClient:
             user_prompt="User",
             model="claude-opus-4",
             temperature=0.7,
-            max_tokens=500
+            max_tokens=500,
         )
 
         # Verify parameters were passed correctly
@@ -1449,11 +1300,7 @@ class TestAnthropicResponsesClient:
         client = AnthropicResponsesClient()
         client._client = MockAsyncAnthropic(api_key="sk-ant-test-key-12345")
 
-        await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="claude-sonnet-4.5"
-        )
+        await client.complete(system_prompt="System", user_prompt="User", model="claude-sonnet-4.5")
 
         # Verify default max_tokens was set
         assert captured_params["max_tokens"] == 4096
@@ -1471,10 +1318,7 @@ class TestAnthropicResponsesClient:
         # Mock response with multiple text blocks
         class MockMessage:
             def __init__(self):
-                self.content = [
-                    MockTextBlock("First part. "),
-                    MockTextBlock("Second part.")
-                ]
+                self.content = [MockTextBlock("First part. "), MockTextBlock("Second part.")]
 
         class MockAsyncAnthropic:
             class MockMessages:
@@ -1490,9 +1334,7 @@ class TestAnthropicResponsesClient:
         client._client = MockAsyncAnthropic(api_key="sk-ant-test-key-12345")
 
         response = await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="claude-sonnet-4.5"
+            system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
         )
 
         assert response == "First part. Second part."
@@ -1518,7 +1360,7 @@ class TestAnthropicResponsesClient:
                 self.content = [
                     MockTextBlock("Text before tool. "),
                     MockToolUseBlock(),
-                    MockTextBlock("Text after tool.")
+                    MockTextBlock("Text after tool."),
                 ]
 
         class MockAsyncAnthropic:
@@ -1535,9 +1377,7 @@ class TestAnthropicResponsesClient:
         client._client = MockAsyncAnthropic(api_key="sk-ant-test-key-12345")
 
         response = await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="claude-sonnet-4.5"
+            system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
         )
 
         # Only text blocks should be extracted
@@ -1554,9 +1394,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(LLMCallError) as exc_info:
             await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="claude-sonnet-4.5"
+                system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
             )
 
         assert "ANTHROPIC_API_KEY" in str(exc_info.value)
@@ -1570,13 +1408,16 @@ class TestAnthropicResponsesClient:
 
         # Create proper httpx request and response for Anthropic error
         request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-        response = httpx.Response(401, json={"error": {"message": "Invalid API key"}}, request=request)
+        response = httpx.Response(
+            401, json={"error": {"message": "Invalid API key"}}, request=request
+        )
 
         # Mock AsyncAnthropic to raise AuthenticationError
         class MockAsyncAnthropic:
             class MockMessages:
                 async def create(self, **kwargs):
                     from anthropic import AuthenticationError
+
                     raise AuthenticationError("Invalid API key", response=response, body=None)
 
             def __init__(self, api_key):
@@ -1589,9 +1430,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(LLMAuthenticationError) as exc_info:
             await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="claude-sonnet-4.5"
+                system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
             )
 
         assert "authentication failed" in str(exc_info.value).lower()
@@ -1606,13 +1445,16 @@ class TestAnthropicResponsesClient:
 
         # Create proper httpx request and response
         request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-        response = httpx.Response(429, json={"error": {"message": "Rate limit exceeded"}}, request=request)
+        response = httpx.Response(
+            429, json={"error": {"message": "Rate limit exceeded"}}, request=request
+        )
 
         # Mock AsyncAnthropic to raise RateLimitError
         class MockAsyncAnthropic:
             class MockMessages:
                 async def create(self, **kwargs):
                     from anthropic import RateLimitError
+
                     raise RateLimitError("Rate limit exceeded", response=response, body=None)
 
             def __init__(self, api_key):
@@ -1625,9 +1467,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(LLMRateLimitError) as exc_info:
             await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="claude-sonnet-4.5"
+                system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
             )
 
         assert "rate limit" in str(exc_info.value).lower()
@@ -1641,13 +1481,16 @@ class TestAnthropicResponsesClient:
 
         # Create proper httpx request and response
         request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-        response = httpx.Response(400, json={"error": {"message": "Invalid request format"}}, request=request)
+        response = httpx.Response(
+            400, json={"error": {"message": "Invalid request format"}}, request=request
+        )
 
         # Mock AsyncAnthropic to raise BadRequestError
         class MockAsyncAnthropic:
             class MockMessages:
                 async def create(self, **kwargs):
                     from anthropic import BadRequestError
+
                     raise BadRequestError("Invalid request format", response=response, body=None)
 
             def __init__(self, api_key):
@@ -1660,9 +1503,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(LLMValidationError) as exc_info:
             await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="claude-sonnet-4.5"
+                system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
             )
 
         assert "validation failed" in str(exc_info.value).lower()
@@ -1676,14 +1517,19 @@ class TestAnthropicResponsesClient:
 
         # Create proper httpx request and response
         request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-        response = httpx.Response(422, json={"error": {"message": "Invalid parameter"}}, request=request)
+        response = httpx.Response(
+            422, json={"error": {"message": "Invalid parameter"}}, request=request
+        )
 
         # Mock AsyncAnthropic to raise UnprocessableEntityError
         class MockAsyncAnthropic:
             class MockMessages:
                 async def create(self, **kwargs):
                     from anthropic import UnprocessableEntityError
-                    raise UnprocessableEntityError("Invalid parameter", response=response, body=None)
+
+                    raise UnprocessableEntityError(
+                        "Invalid parameter", response=response, body=None
+                    )
 
             def __init__(self, api_key):
                 self.messages = self.MockMessages()
@@ -1695,9 +1541,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(LLMValidationError) as exc_info:
             await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="claude-sonnet-4.5"
+                system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
             )
 
         assert "validation failed" in str(exc_info.value).lower()
@@ -1717,6 +1561,7 @@ class TestAnthropicResponsesClient:
             class MockMessages:
                 async def create(self, **kwargs):
                     from anthropic import APIConnectionError
+
                     raise APIConnectionError(request=MockRequest())
 
             def __init__(self, api_key):
@@ -1729,9 +1574,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(LLMNetworkError) as exc_info:
             await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="claude-sonnet-4.5"
+                system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
             )
 
         assert "network error" in str(exc_info.value).lower()
@@ -1751,6 +1594,7 @@ class TestAnthropicResponsesClient:
             class MockMessages:
                 async def create(self, **kwargs):
                     from anthropic import APITimeoutError
+
                     raise APITimeoutError(request=MockRequest())
 
             def __init__(self, api_key):
@@ -1763,9 +1607,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(LLMNetworkError) as exc_info:
             await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="claude-sonnet-4.5"
+                system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
             )
 
         assert "network error" in str(exc_info.value).lower()
@@ -1780,6 +1622,7 @@ class TestAnthropicResponsesClient:
             class MockMessages:
                 async def create(self, **kwargs):
                     from anthropic import APIError
+
                     raise APIError("Internal server error", request=None, body=None)
 
             def __init__(self, api_key):
@@ -1792,9 +1635,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(LLMCallError) as exc_info:
             await client.complete(
-                system_prompt="System",
-                user_prompt="User",
-                model="claude-sonnet-4.5"
+                system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
             )
 
         # Should not be a more specific error type
@@ -1811,9 +1652,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(ValueError) as exc_info:
             await client.complete(
-                system_prompt="",
-                user_prompt="User query",
-                model="claude-sonnet-4.5"
+                system_prompt="", user_prompt="User query", model="claude-sonnet-4.5"
             )
 
         assert "system_prompt must not be empty or blank" in str(exc_info.value)
@@ -1828,9 +1667,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(ValueError) as exc_info:
             await client.complete(
-                system_prompt="System instruction",
-                user_prompt="",
-                model="claude-sonnet-4.5"
+                system_prompt="System instruction", user_prompt="", model="claude-sonnet-4.5"
             )
 
         assert "user_prompt must not be empty or blank" in str(exc_info.value)
@@ -1845,9 +1682,7 @@ class TestAnthropicResponsesClient:
 
         with pytest.raises(ValueError) as exc_info:
             await client.complete(
-                system_prompt="System instruction",
-                user_prompt="User query",
-                model=""
+                system_prompt="System instruction", user_prompt="User query", model=""
             )
 
         assert "model must not be empty or blank" in str(exc_info.value)
@@ -1881,11 +1716,7 @@ class TestAnthropicResponsesClient:
 
         client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
 
-        await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="claude-sonnet-4.5"
-        )
+        await client.complete(system_prompt="System", user_prompt="User", model="claude-sonnet-4.5")
 
         assert client._client is not None  # Now initialized
 
@@ -1919,9 +1750,7 @@ class TestAnthropicResponsesClient:
         client._client = MockAsyncAnthropic(api_key="sk-ant-custom-key-789")
 
         response = await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="claude-sonnet-4.5"
+            system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
         )
 
         assert response == "Response with custom key"
@@ -1960,11 +1789,9 @@ class TestAnthropicResponsesClient:
 
         # Test that it's async and returns a string
         result = client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="claude-sonnet-4.5"
+            system_prompt="System", user_prompt="User", model="claude-sonnet-4.5"
         )
-        assert hasattr(result, '__await__')
+        assert hasattr(result, "__await__")
 
         response = await result
         assert isinstance(response, str)
@@ -2000,9 +1827,7 @@ class TestAnthropicResponsesClient:
         client._client = MockAsyncAnthropic(api_key="sk-ant-test-key")
 
         response = await client.complete(
-            system_prompt="System",
-            user_prompt="User",
-            model="claude-opus-4"
+            system_prompt="System", user_prompt="User", model="claude-opus-4"
         )
 
         # Verify Opus model was passed correctly
@@ -2020,7 +1845,9 @@ class TestAnthropicResponsesClient:
 
         # Verify the ImportError handling is present
         assert "except ImportError" in source, "Missing ImportError exception handler"
-        assert "Anthropic SDK not installed or accessible" in source, "Missing SDK not installed error message"
+        assert (
+            "Anthropic SDK not installed or accessible" in source
+        ), "Missing SDK not installed error message"
         assert "from anthropic import" in source, "Missing anthropic module import"
 
         # The code structure validates that if anthropic cannot be imported,
@@ -2051,7 +1878,9 @@ class TestGetLLMClientFactory:
     def test_factory_creates_dummy_client_for_testing(self):
         """Test that factory creates DummyLLMClient for 'dummy' provider."""
         # Note: 'dummy' is not in SUPPORTED_PROVIDERS but is handled specially
-        config = ClarificationLLMConfig(provider="openai", model="test-model")  # Config provider doesn't matter
+        config = ClarificationLLMConfig(
+            provider="openai", model="test-model"
+        )  # Config provider doesn't matter
         client = get_llm_client("dummy", config)
         assert isinstance(client, DummyLLMClient)
 
@@ -2149,7 +1978,9 @@ class TestGetLLMClientFactory:
 
         # Create a config for a different provider than the one being requested
         # to prove the factory currently ignores the config's provider.
-        config_for_anthropic = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
+        config_for_anthropic = ClarificationLLMConfig(
+            provider="anthropic", model="claude-sonnet-4.5"
+        )
 
         # Request an OpenAI client but pass an Anthropic config
         client = get_llm_client("openai", config_for_anthropic)
@@ -2201,7 +2032,9 @@ class TestGetLLMClientFactory:
 
             client = get_llm_client(provider, config)
             # All clients should have the 'complete' method
-            assert hasattr(client, "complete"), f"Client for '{provider}' is missing 'complete' method"
+            assert hasattr(
+                client, "complete"
+            ), f"Client for '{provider}' is missing 'complete' method"
             assert callable(client.complete), f"'complete' method for '{provider}' is not callable"
 
     def test_factory_with_special_characters_in_provider(self):

@@ -54,9 +54,7 @@ class TestDummyProviderSupport:
 
         # Should not raise validation error
         config = ClarificationConfig(
-            provider="dummy",
-            model="test-model",
-            system_prompt_id="default"
+            provider="dummy", model="test-model", system_prompt_id="default"
         )
         assert config.provider == "dummy"
         assert config.model == "test-model"
@@ -64,10 +62,7 @@ class TestDummyProviderSupport:
     def test_clarification_llm_config_accepts_dummy_provider(self):
         """Test that ClarificationLLMConfig accepts 'dummy' as a provider."""
         # Should not raise validation error
-        config = ClarificationLLMConfig(
-            provider="dummy",
-            model="test-model"
-        )
+        config = ClarificationLLMConfig(provider="dummy", model="test-model")
         assert config.provider == "dummy"
         assert config.model == "test-model"
 
@@ -179,7 +174,7 @@ class TestDummyClientBehavior:
         response = await client.complete(
             system_prompt="You are a test assistant",
             user_prompt="Hello, world!",
-            model="test-model"
+            model="test-model",
         )
 
         # Should return deterministic response
@@ -190,9 +185,7 @@ class TestDummyClientBehavior:
         client = DummyLLMClient(canned_response='{"result": "success"}')
 
         response = await client.complete(
-            system_prompt="Test prompt",
-            user_prompt="Test query",
-            model="test-model"
+            system_prompt="Test prompt", user_prompt="Test query", model="test-model"
         )
 
         assert response == '{"result": "success"}'
@@ -202,9 +195,7 @@ class TestDummyClientBehavior:
         client = DummyLLMClient(echo_prompts=True)
 
         response = await client.complete(
-            system_prompt="System instructions",
-            user_prompt="User query",
-            model="test-model"
+            system_prompt="System instructions", user_prompt="User query", model="test-model"
         )
 
         assert "System: System instructions" in response

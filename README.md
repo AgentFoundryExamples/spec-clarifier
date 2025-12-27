@@ -1,6 +1,58 @@
 # Spec Clarifier
 
-A FastAPI service for clarifying specifications.
+A FastAPI service for clarifying specifications using Large Language Models (LLMs). The service accepts specifications with open questions, processes them through configurable LLM providers, and returns clarified specifications with questions resolved.
+
+## Architecture Overview
+
+The spec-clarifier follows a clean, layered architecture designed for async job processing:
+
+```mermaid
+graph TB
+    Client[Client Application]
+    API[FastAPI Endpoints]
+    JobStore[In-Memory Job Store]
+    ClarificationService[Clarification Service]
+    LLMAbstraction[LLM Client Abstraction]
+    Dispatcher[Downstream Dispatcher]
+    
+    Client -->|POST /v1/clarifications| API
+    API -->|Create Job| JobStore
+    API -->|Return job_id| Client
+    Client -->|Poll GET /v1/clarifications/:id| API
+    API -->|Get Status| JobStore
+    
+    JobStore -->|Process Job| ClarificationService
+    ClarificationService -->|Call LLM| LLMAbstraction
+    LLMAbstraction -->|OpenAI/Anthropic/Dummy| LLMProviders[LLM Providers]
+    ClarificationService -->|Update Result| JobStore
+    ClarificationService -->|Dispatch Plan| Dispatcher
+    Dispatcher -->|Forward Results| Downstream[Downstream Systems]
+    
+    style API fill:#e1f5ff
+    style JobStore fill:#fff4e1
+    style ClarificationService fill:#e8f5e9
+    style LLMAbstraction fill:#f3e5f5
+    style Dispatcher fill:#ffe0b2
+```
+
+### Core Components
+
+1. **FastAPI Endpoints** (`app/api/`) - REST API for job creation, status polling, and admin configuration
+2. **Async Job Store** (`app/services/job_store.py`) - Thread-safe in-memory store with TTL cleanup for managing job lifecycle
+3. **Clarification Service** (`app/services/clarification.py`) - Core business logic for processing specifications through LLMs
+4. **LLM Client Abstraction** (`app/services/llm_clients.py`) - Provider-agnostic interface supporting OpenAI, Anthropic, and Dummy modes
+5. **Downstream Dispatcher** (`app/services/downstream.py`) - Extension point for forwarding clarified plans to downstream systems
+
+### Data Flow
+
+1. **Client submits** a `ClarificationRequest` (plan + answers) to `POST /v1/clarifications`
+2. **API creates** a job in PENDING status and returns `job_id` (202 Accepted)
+3. **Background worker** picks up PENDING jobs and transitions them to RUNNING
+4. **Clarification service** invokes the configured LLM provider with prompt and specifications
+5. **LLM response** is parsed and validated into a `ClarifiedPlan` (6 fields per spec, no open_questions)
+6. **Job status** is updated to SUCCESS or FAILED with results stored
+7. **Downstream dispatcher** is invoked to forward the clarified plan (if SUCCESS)
+8. **Client polls** `GET /v1/clarifications/{job_id}` to check status and retrieve metadata
 
 ## Features
 
@@ -25,7 +77,11 @@ A FastAPI service for clarifying specifications.
 - Python 3.11 or higher
 - pip (Python package installer)
 
+**Platform Support**: The service runs on Linux, macOS, and Windows. Commands shown use Unix/macOS syntax; Windows users should adjust paths and commands accordingly (see notes below).
+
 ## Installation
+
+### Cross-Platform Setup
 
 1. Clone the repository:
 ```bash
@@ -35,8 +91,17 @@ cd spec-clarifier
 
 2. Create a virtual environment (recommended):
 ```bash
+# Linux/macOS
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
+
+# Windows (Command Prompt)
+python -m venv venv
+venv\Scripts\activate.bat
+
+# Windows (PowerShell)
+python -m venv venv
+venv\Scripts\Activate.ps1
 ```
 
 3. Install dependencies:
@@ -46,12 +111,23 @@ pip install -r requirements.txt
 
 4. Configure environment (optional):
 ```bash
-# Copy the example environment file
+# Linux/macOS
 cp .env.example .env
+
+# Windows (Command Prompt)
+copy .env.example .env
+
+# Windows (PowerShell)
+Copy-Item .env.example .env
 
 # Edit .env to customize your configuration (optional)
 # By default, the service runs in dummy mode with no API keys required
 ```
+
+**Windows Notes**:
+- PowerShell execution policy may need to be adjusted: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+- Use backslashes (`\`) for paths or forward slashes (`/`) work in most contexts
+- Some Makefile commands may require WSL (Windows Subsystem for Linux) or Git Bash
 
 The `.env.example` file contains all available configuration options with safe defaults. For local development and testing, you can run the service without creating a `.env` file - it will use dummy mode by default.
 
@@ -305,6 +381,116 @@ uvicorn app.main:app --reload
 ```
 
 **Note:** For production deployments, configure CORS origins to specific domains instead of using wildcards.
+
+## Data Models
+
+The service uses strongly-typed Pydantic models for all API interactions. Understanding these models is essential for integrating with the service.
+
+### Input Models
+
+#### SpecInput
+Represents a single specification with open questions that need clarification:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `purpose` | string | ✓ | The purpose of the specification |
+| `vision` | string | ✓ | The vision statement |
+| `must` | string[] | | List of must-have requirements (default: []) |
+| `dont` | string[] | | List of things to avoid (default: []) |
+| `nice` | string[] | | List of nice-to-have features (default: []) |
+| `open_questions` | string[] | | List of questions needing clarification (default: []) |
+| `assumptions` | string[] | | List of assumptions made (default: []) |
+
+**Note**: `open_questions` is **allowed in input** but will **NOT appear in output**.
+
+#### PlanInput
+Container for one or more specifications:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `specs` | SpecInput[] | ✓ | List of specifications to clarify |
+
+#### QuestionAnswer
+Represents an answer to a specific question in a specification:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec_index` | integer | ✓ | Index of the spec containing the question (>= 0) |
+| `question_index` | integer | ✓ | Index of the question within the spec (>= 0) |
+| `question` | string | ✓ | The question text |
+| `answer` | string | ✓ | The answer provided |
+
+#### ClarificationRequest
+The top-level request payload:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `plan` | PlanInput | ✓ | The plan with specifications to clarify |
+| `answers` | QuestionAnswer[] | | Answers to open questions (default: []) |
+
+### Output Models
+
+#### ClarifiedSpec
+**⚠️ IMPORTANT**: Contains exactly **six fields** - `open_questions` is intentionally excluded:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `purpose` | string | ✓ | The purpose of the specification |
+| `vision` | string | ✓ | The vision statement |
+| `must` | string[] | ✓ | List of must-have requirements |
+| `dont` | string[] | ✓ | List of things to avoid |
+| `nice` | string[] | ✓ | List of nice-to-have features |
+| `assumptions` | string[] | ✓ | List of assumptions made |
+
+**Field Exclusion**: The `open_questions` field from `SpecInput` is **NOT** present in `ClarifiedSpec`. Questions are resolved and integrated into the appropriate fields (`must`, `dont`, `nice`, `assumptions`) during clarification.
+
+#### ClarifiedPlan
+Container for clarified specifications:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `specs` | ClarifiedSpec[] | ✓ | List of clarified specifications (6 fields each) |
+
+### Job Models
+
+#### ClarificationJob
+Internal model for tracking job lifecycle:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID | Unique job identifier |
+| `status` | JobStatus | PENDING → RUNNING → SUCCESS/FAILED |
+| `created_at` | datetime | UTC timestamp when job was created |
+| `updated_at` | datetime | UTC timestamp of last update |
+| `last_error` | string \| null | Error message if FAILED |
+| `request` | ClarificationRequest | Original input request |
+| `result` | ClarifiedPlan \| null | Clarified plan when SUCCESS |
+| `config` | dict \| null | Optional job configuration |
+
+#### JobSummaryResponse
+Lightweight response for POST endpoints (202 Accepted):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID | Unique job identifier |
+| `status` | JobStatus | Current job status |
+| `created_at` | datetime | UTC timestamp when job was created |
+| `updated_at` | datetime | UTC timestamp of last update |
+| `last_error` | string \| null | Error message if FAILED |
+
+#### JobStatusResponse
+Full response for GET endpoints with conditional result:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID | Unique job identifier |
+| `status` | JobStatus | Current job status |
+| `created_at` | datetime | UTC timestamp when job was created |
+| `updated_at` | datetime | UTC timestamp of last update |
+| `last_error` | string \| null | Error message if FAILED |
+| `result` | ClarifiedPlan \| null | **null** in production mode, populated in dev mode when SUCCESS |
+
+**Production vs Development**: By default (`APP_SHOW_JOB_RESULT=false`), the `result` field is always `null`. Set `APP_SHOW_JOB_RESULT=true` for development to see results in GET responses. In production, use the **DownstreamDispatcher** to receive clarified plans.
 
 ## API Endpoints
 
@@ -1457,6 +1643,36 @@ The service uses Python's standard logging module with the following format:
 All sensitive data is intentionally excluded from log messages to prevent accidental exposure through log aggregation systems, SIEM tools, or log files.
 
 ## Development
+
+### Local Development Workflow
+
+**⚠️ Dummy Mode Prevents Accidental Billing**: By default, the service uses `LLM_PROVIDER=dummy`, which returns mock responses without calling any external LLM APIs. This prevents accidental billing during local development and testing. The dummy provider:
+- Requires **no API keys**
+- Makes **no external API calls**
+- Returns deterministic, valid `ClarifiedPlan` responses
+- Is perfect for CI/CD pipelines and integration tests
+- Allows full testing of async job lifecycle without cost
+
+To run in dummy mode (default):
+```bash
+# No environment variables needed - dummy mode is the default
+uvicorn app.main:app --reload
+```
+
+To test with real LLM providers (requires API keys):
+```bash
+# OpenAI
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=sk-your-actual-key
+uvicorn app.main:app --reload
+
+# Anthropic
+export LLM_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=sk-ant-your-actual-key
+uvicorn app.main:app --reload
+```
+
+**Important**: Always verify `LLM_PROVIDER=dummy` before running tests to avoid unexpected API charges.
 
 ### Setup
 

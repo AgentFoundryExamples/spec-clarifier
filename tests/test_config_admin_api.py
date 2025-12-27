@@ -33,6 +33,7 @@ def disabled_config_client(monkeypatch):
     """Create a test client with config admin endpoints disabled."""
     monkeypatch.setenv("APP_ENABLE_CONFIG_ADMIN_ENDPOINTS", "false")
     from app.config import get_settings
+
     get_settings.cache_clear()
     app = create_app()
     client = TestClient(app)
@@ -50,7 +51,7 @@ def reset_config():
         model="gpt-5.1",
         system_prompt_id="default",
         temperature=0.1,
-        max_tokens=None
+        max_tokens=None,
     )
     set_default_config(default)
     yield
@@ -97,7 +98,7 @@ class TestGetDefaultsEndpoint:
             "model": "claude-sonnet-4.5",
             "system_prompt_id": "strict_json",
             "temperature": 0.2,
-            "max_tokens": 3000
+            "max_tokens": 3000,
         }
 
         put_response = client.put("/v1/config/defaults", json=new_config)
@@ -133,7 +134,7 @@ class TestPutDefaultsEndpoint:
             "model": "gpt-4o",
             "system_prompt_id": "verbose_explanation",
             "temperature": 0.3,
-            "max_tokens": 2500
+            "max_tokens": 2500,
         }
 
         response = client.put("/v1/config/defaults", json=new_config)
@@ -162,7 +163,7 @@ class TestPutDefaultsEndpoint:
             "model": "claude-opus-4",
             "system_prompt_id": "default",
             "temperature": 0.0,
-            "max_tokens": None
+            "max_tokens": None,
         }
 
         response = client.put("/v1/config/defaults", json=new_config)
@@ -181,7 +182,7 @@ class TestPutDefaultsEndpoint:
             "model": "gemini-pro",
             "system_prompt_id": "default",
             "temperature": 0.1,
-            "max_tokens": None
+            "max_tokens": None,
         }
 
         response = client.put("/v1/config/defaults", json=new_config)
@@ -198,7 +199,7 @@ class TestPutDefaultsEndpoint:
             "model": "gpt-3.5-turbo",  # Not in allowed list for openai
             "system_prompt_id": "default",
             "temperature": 0.1,
-            "max_tokens": None
+            "max_tokens": None,
         }
 
         response = client.put("/v1/config/defaults", json=new_config)
@@ -232,7 +233,7 @@ class TestPutDefaultsEndpoint:
             "model": "gpt-5.1",
             "system_prompt_id": "default",
             "temperature": 3.0,  # Must be <= 2.0
-            "max_tokens": None
+            "max_tokens": None,
         }
 
         response = client.put("/v1/config/defaults", json=new_config)
@@ -246,7 +247,7 @@ class TestPutDefaultsEndpoint:
             "model": "gpt-5.1",
             "system_prompt_id": "default",
             "temperature": 0.1,
-            "max_tokens": -100
+            "max_tokens": -100,
         }
 
         response = client.put("/v1/config/defaults", json=new_config)
@@ -262,7 +263,7 @@ class TestPutDefaultsEndpoint:
             "model": "gpt-5.1",
             "system_prompt_id": "nonexistent_prompt",
             "temperature": 0.1,
-            "max_tokens": None
+            "max_tokens": None,
         }
 
         response = client.put("/v1/config/defaults", json=new_config)
@@ -280,7 +281,7 @@ class TestPutDefaultsEndpoint:
             "system_prompt_id": "default",
             "temperature": 0.1,
             "max_tokens": None,
-            "extra_field": "should_fail"
+            "extra_field": "should_fail",
         }
 
         response = client.put("/v1/config/defaults", json=new_config)
@@ -295,7 +296,7 @@ class TestPutDefaultsEndpoint:
             "model": "gpt-5.1",
             "system_prompt_id": "default",
             "temperature": 0.1,
-            "max_tokens": None
+            "max_tokens": None,
         }
 
         response = disabled_config_client.put("/v1/config/defaults", json=new_config)
@@ -315,7 +316,7 @@ class TestConfigAdminEndpointsIntegration:
             "model": "claude-sonnet-4.5",
             "system_prompt_id": "strict_json",
             "temperature": 0.2,
-            "max_tokens": 2000
+            "max_tokens": 2000,
         }
 
         put_response = client.put("/v1/config/defaults", json=new_config)
@@ -337,22 +338,22 @@ class TestConfigAdminEndpointsIntegration:
                 "model": "gpt-5",
                 "system_prompt_id": "default",
                 "temperature": 0.1,
-                "max_tokens": None
+                "max_tokens": None,
             },
             {
                 "provider": "anthropic",
                 "model": "claude-sonnet-4.5",
                 "system_prompt_id": "strict_json",
                 "temperature": 0.2,
-                "max_tokens": 2500
+                "max_tokens": 2500,
             },
             {
                 "provider": "openai",
                 "model": "gpt-4o",
                 "system_prompt_id": "verbose_explanation",
                 "temperature": 0.0,
-                "max_tokens": 1000
-            }
+                "max_tokens": 1000,
+            },
         ]
 
         for config in configs:
@@ -384,7 +385,7 @@ class TestConfigAdminThreadSafety:
                 "model": model,
                 "system_prompt_id": "default",
                 "temperature": 0.1,
-                "max_tokens": None
+                "max_tokens": None,
             }
             response = client.put("/v1/config/defaults", json=config)
             with lock:

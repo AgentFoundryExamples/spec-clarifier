@@ -23,14 +23,14 @@ from uuid import UUID
 
 def get_correlation_id(job_id: UUID | None = None) -> str:
     """Get or generate a correlation ID for tracing requests.
-    
+
     If a job_id is provided, it will be used as the correlation ID.
     Otherwise, a new UUID will be generated. This ensures every request
     can be traced even when job_id is missing (e.g., malformed requests).
-    
+
     Args:
         job_id: Optional job UUID to use as correlation ID
-        
+
     Returns:
         Correlation ID as a string
     """
@@ -41,38 +41,55 @@ def get_correlation_id(job_id: UUID | None = None) -> str:
 
 def redact_sensitive_data(message: str) -> str:
     """Redact sensitive data from log messages.
-    
+
     Removes API keys, tokens, prompts, and other sensitive information
     that might accidentally be included in log messages.
-    
+
     Args:
         message: Log message that may contain sensitive data
-        
+
     Returns:
         Sanitized message with sensitive data replaced with [REDACTED]
     """
     # Remove API keys (various formats)
-    message = re.sub(r'(api[_-]?key["\s:=]+)\S+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-    message = re.sub(r'(["\']api[_-]?key["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
+    message = re.sub(r'(api[_-]?key["\s:=]+)\S+', r"\1[REDACTED]", message, flags=re.IGNORECASE)
+    message = re.sub(
+        r'(["\']api[_-]?key["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])',
+        r"\1[REDACTED]\2",
+        message,
+        flags=re.IGNORECASE,
+    )
 
     # Remove bearer tokens
-    message = re.sub(r'(bearer\s+)\S+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+    message = re.sub(r"(bearer\s+)\S+", r"\1[REDACTED]", message, flags=re.IGNORECASE)
 
     # Remove tokens (various formats)
-    message = re.sub(r'(token["\s:=]+)\S+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-    message = re.sub(r'(["\']token["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
+    message = re.sub(r'(token["\s:=]+)\S+', r"\1[REDACTED]", message, flags=re.IGNORECASE)
+    message = re.sub(
+        r'(["\']token["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])',
+        r"\1[REDACTED]\2",
+        message,
+        flags=re.IGNORECASE,
+    )
 
     # Remove authorization headers
-    message = re.sub(r'(authorization["\s:]+)[^\r\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+    message = re.sub(
+        r'(authorization["\s:]+)[^\r\n]+', r"\1[REDACTED]", message, flags=re.IGNORECASE
+    )
 
     # Remove x-api-key headers
-    message = re.sub(r'(x-api-key["\s:]+)[^\r\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+    message = re.sub(r'(x-api-key["\s:]+)[^\r\n]+', r"\1[REDACTED]", message, flags=re.IGNORECASE)
 
     # Remove secrets in JSON format
-    message = re.sub(r'(["\'](?:secret|key|password|apikey)["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
+    message = re.sub(
+        r'(["\'](?:secret|key|password|apikey)["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])',
+        r"\1[REDACTED]\2",
+        message,
+        flags=re.IGNORECASE,
+    )
 
     # Remove prompts if explicitly labeled
-    message = re.sub(r'(prompt["\s:=]+)[^\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+    message = re.sub(r'(prompt["\s:=]+)[^\n]+', r"\1[REDACTED]", message, flags=re.IGNORECASE)
 
     return message
 
@@ -83,14 +100,14 @@ def log_structured(
     event: str,
     correlation_id: str | None = None,
     job_id: UUID | None = None,
-    **context: Any
+    **context: Any,
 ) -> None:
     """Log a structured message with consistent format.
-    
+
     Emits a log entry with structured key/value pairs in JSON-style format.
     Automatically injects correlation_id or job_id for request tracing.
     Sanitizes the message to prevent credential/prompt leakage.
-    
+
     Args:
         logger: Logger instance to use
         level: Log level (logging.INFO, logging.ERROR, etc.)
@@ -135,13 +152,10 @@ def log_structured(
 
 
 def log_info(
-    logger: logging.Logger,
-    event: str,
-    job_id: UUID | None = None,
-    **context: Any
+    logger: logging.Logger, event: str, job_id: UUID | None = None, **context: Any
 ) -> None:
     """Log an informational structured message.
-    
+
     Args:
         logger: Logger instance to use
         event: Event name describing what happened
@@ -152,13 +166,10 @@ def log_info(
 
 
 def log_warning(
-    logger: logging.Logger,
-    event: str,
-    job_id: UUID | None = None,
-    **context: Any
+    logger: logging.Logger, event: str, job_id: UUID | None = None, **context: Any
 ) -> None:
     """Log a warning structured message.
-    
+
     Args:
         logger: Logger instance to use
         event: Event name describing what happened
@@ -173,10 +184,10 @@ def log_error(
     event: str,
     job_id: UUID | None = None,
     error: Exception | None = None,
-    **context: Any
+    **context: Any,
 ) -> None:
     """Log an error structured message.
-    
+
     Args:
         logger: Logger instance to use
         event: Event name describing what happened

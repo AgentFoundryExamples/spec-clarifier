@@ -62,14 +62,16 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
 
     # CORS settings
-    cors_origins: str = "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
+    cors_origins: str = (
+        "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
+    )
     cors_allow_credentials: bool = True
     cors_allow_methods: str = "*"
     cors_allow_headers: str = "*"
 
     def get_cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string to list.
-        
+
         Returns:
             List of allowed CORS origins
         """
@@ -79,7 +81,7 @@ class Settings(BaseSettings):
 
     def get_cors_methods_list(self) -> list[str]:
         """Parse CORS methods from comma-separated string to list.
-        
+
         Returns:
             List of allowed CORS methods or ["*"] for wildcard
         """
@@ -89,7 +91,7 @@ class Settings(BaseSettings):
 
     def get_cors_headers_list(self) -> list[str]:
         """Parse CORS headers from comma-separated string to list.
-        
+
         Returns:
             List of allowed CORS headers or ["*"] for wildcard
         """
@@ -111,35 +113,36 @@ def get_settings() -> Settings:
 
 class ConfigValidationError(ValueError):
     """Exception raised when config validation fails.
-    
+
     This exception provides detailed error messages for configuration
     validation failures, including provider/model membership checks.
     """
+
     pass
 
 
 class GlobalDefaults:
     """Global defaults for ClarificationConfig with validation.
-    
+
     This class manages runtime defaults for clarification configuration,
     including allowed models per provider and the default configuration.
     It provides thread-safe access to defaults with validation to ensure
     provider/model membership constraints are satisfied.
-    
+
     Design principles:
     - Thread-safe reads and writes using threading.Lock
     - Single writer, multiple readers pattern
     - Validates provider/model membership before mutations
     - Falls back to built-in defaults if environment config is invalid
     - Does NOT persist outside process memory
-    
+
     Attributes:
         allowed_models: Dictionary mapping provider names to lists of allowed models
         default_config: Default ClarificationConfig to use when none is specified
-    
+
     The class uses module-level state protected by a lock to ensure thread safety.
     Access defaults through get_default_config() and mutate through set_default_config().
-    
+
     Example:
         >>> defaults = GlobalDefaults()
         >>> config = defaults.get_default_config()
@@ -150,12 +153,12 @@ class GlobalDefaults:
 
     def __init__(self):
         """Initialize GlobalDefaults with built-in safe defaults.
-        
+
         Built-in defaults:
         - OpenAI: gpt-5, gpt-5.1, gpt-4o
         - Anthropic: claude-sonnet-4.5, claude-opus-4
         - Default config: provider=openai, model=gpt-5.1, system_prompt_id=default, temperature=0.1
-        
+
         Environment variable overrides (if present and valid):
         - APP_ALLOWED_MODELS_OPENAI: Comma-separated list of OpenAI models
         - APP_ALLOWED_MODELS_ANTHROPIC: Comma-separated list of Anthropic models
@@ -179,17 +182,17 @@ class GlobalDefaults:
             model="test-model",
             system_prompt_id="default",
             temperature=0.1,
-            max_tokens=None
+            max_tokens=None,
         )
 
     def _seed_allowed_models_from_env(self) -> None:
         """Seed allowed models from environment variables if present.
-        
+
         Reads APP_ALLOWED_MODELS_OPENAI, APP_ALLOWED_MODELS_ANTHROPIC, and
         APP_ALLOWED_MODELS_DUMMY environment variables (comma-separated model
         lists) and updates allowed_models if valid. Falls back to built-in
         defaults on error.
-        
+
         This allows deployments to customize allowed models without code changes
         while maintaining safe defaults if environment config is invalid.
         """
@@ -217,9 +220,9 @@ class GlobalDefaults:
     @property
     def allowed_models(self) -> dict[str, list[str]]:
         """Get allowed models dictionary (thread-safe read).
-        
+
         Returns a copy to prevent external mutations from bypassing validation.
-        
+
         Returns:
             Dictionary mapping provider names to lists of allowed model names
         """
@@ -228,10 +231,10 @@ class GlobalDefaults:
 
     def get_default_config(self):
         """Get the default ClarificationConfig (thread-safe read).
-        
+
         Returns a copy of the default config to prevent external mutations
         from bypassing validation.
-        
+
         Returns:
             ClarificationConfig: Copy of the default configuration
         """
@@ -241,14 +244,14 @@ class GlobalDefaults:
 
     def set_default_config(self, config) -> None:
         """Set the default ClarificationConfig with validation (thread-safe write).
-        
+
         Validates that the config's provider and model are in allowed_models
         before accepting the mutation. This ensures consistency and prevents
         invalid configurations from becoming defaults.
-        
+
         Args:
             config: New default ClarificationConfig to set
-        
+
         Raises:
             ConfigValidationError: If provider is missing from allowed_models
             ConfigValidationError: If model is not in provider's allowed list
@@ -296,14 +299,14 @@ _global_defaults = GlobalDefaults()
 
 def get_default_config():
     """Get the current default ClarificationConfig.
-    
+
     This is a convenience function that delegates to the module-level
     GlobalDefaults singleton. It provides thread-safe read access to
     the default configuration.
-    
+
     Returns:
         ClarificationConfig: Copy of the current default configuration
-    
+
     Example:
         >>> config = get_default_config()
         >>> print(config.provider, config.model)
@@ -314,18 +317,18 @@ def get_default_config():
 
 def set_default_config(config) -> None:
     """Set the default ClarificationConfig with validation.
-    
+
     This is a convenience function that delegates to the module-level
     GlobalDefaults singleton. It provides thread-safe write access with
     validation to ensure provider/model membership constraints.
-    
+
     Args:
         config: New default ClarificationConfig to set
-    
+
     Raises:
         ConfigValidationError: If validation fails (invalid provider/model)
         TypeError: If config is not a ClarificationConfig instance
-    
+
     Example:
         >>> from app.models.specs import ClarificationConfig
         >>> new_config = ClarificationConfig(
@@ -340,13 +343,13 @@ def set_default_config(config) -> None:
 
 def get_allowed_models() -> dict[str, list[str]]:
     """Get the allowed models dictionary.
-    
+
     This is a convenience function that returns the allowed models
     configuration from the module-level GlobalDefaults singleton.
-    
+
     Returns:
         Dictionary mapping provider names to lists of allowed model names
-    
+
     Example:
         >>> models = get_allowed_models()
         >>> print(models["openai"])
@@ -357,21 +360,21 @@ def get_allowed_models() -> dict[str, list[str]]:
 
 def validate_provider_model(provider: str, model: str) -> None:
     """Validate that a provider/model combination is allowed.
-    
+
     This utility function provides a single source of truth for validating
     provider/model combinations against the allowed_models configuration.
     It is designed to be called by other layers (API, service) to enforce
     consistency.
-    
+
     Args:
         provider: LLM provider identifier (e.g., 'openai', 'anthropic')
         model: Model identifier (e.g., 'gpt-5.1', 'claude-sonnet-4.5')
-    
+
     Raises:
         ConfigValidationError: If provider is not in allowed_models
         ConfigValidationError: If model is not in provider's allowed list
         ConfigValidationError: If allowed model list is empty for provider
-    
+
     Example:
         >>> validate_provider_model("openai", "gpt-5.1")  # OK
         >>> validate_provider_model("openai", "invalid-model")  # Raises ConfigValidationError
@@ -390,8 +393,7 @@ def validate_provider_model(provider: str, model: str) -> None:
     allowed_for_provider = allowed[provider]
     if not allowed_for_provider:
         raise ConfigValidationError(
-            f"Provider '{provider}' has no allowed models configured. "
-            "Cannot validate model."
+            f"Provider '{provider}' has no allowed models configured. " "Cannot validate model."
         )
 
     # Check model is in provider's allowed list
@@ -406,33 +408,33 @@ def validate_and_merge_config(
     request_config: ClarificationConfig | None,
 ) -> ClarificationConfig:
     """Validate and merge request config with defaults.
-    
+
     Takes an optional per-request ClarificationConfig and merges it with the
     global default config. Request-provided fields override defaults, while
     missing fields inherit from the default. The merged config is validated
     to ensure provider/model membership constraints are satisfied.
-    
+
     This function implements defensive copying to prevent mutation of the
     process-wide default config.
-    
+
     Args:
         request_config: Optional config from request. If None, returns default config.
-    
+
     Returns:
         ClarificationConfig: Validated merged config with request overrides applied
-    
+
     Raises:
         ConfigValidationError: If provider/model combination is invalid
         TypeError: If request_config is not a ClarificationConfig or None
-    
+
     Example:
         >>> # No override - returns default
         >>> config = validate_and_merge_config(None)
-        >>> 
+        >>>
         >>> # Partial override - model only
         >>> request = ClarificationConfig(model="gpt-4o")
         >>> config = validate_and_merge_config(request)
-        >>> 
+        >>>
         >>> # Full override
         >>> request = ClarificationConfig(
         ...     provider="anthropic",
@@ -454,7 +456,11 @@ def validate_and_merge_config(
     # Build a dict with merged values using dict comprehension
     # Dynamically get fields from the model to avoid hardcoding field names
     merged_values = {
-        field: getattr(request_config, field) if getattr(request_config, field) is not None else getattr(default, field)
+        field: (
+            getattr(request_config, field)
+            if getattr(request_config, field) is not None
+            else getattr(default, field)
+        )
         for field in ClarificationConfig.model_fields.keys()
     }
 
@@ -465,4 +471,3 @@ def validate_and_merge_config(
     validate_provider_model(merged.provider, merged.model)
 
     return merged
-
