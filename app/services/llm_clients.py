@@ -53,6 +53,9 @@ from typing import Any, Optional, Protocol
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.utils.logging_helper import log_info, log_error
+from app.utils.metrics import get_metrics_collector
+
 
 # Provider constants
 PROVIDER_OPENAI = "openai"
@@ -556,12 +559,18 @@ class OpenAIResponsesClient:
         except (AuthenticationError, RateLimitError, BadRequestError, APIConnectionError, APITimeoutError, APIError) as e:
             # Calculate elapsed time for error logging
             elapsed_time = time.perf_counter() - start_time
+            metrics = get_metrics_collector()
+            metrics.increment("llm_errors")
             
             # Map OpenAI errors to our error hierarchy
             if isinstance(e, AuthenticationError):
-                self._logger.error(
-                    f"OpenAI authentication failed: provider={PROVIDER_OPENAI}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s"
+                log_error(
+                    self._logger,
+                    "llm_authentication_failed",
+                    provider=PROVIDER_OPENAI,
+                    model=model,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    error=e
                 )
                 raise LLMAuthenticationError(
                     "OpenAI authentication failed. Please check your API key.",
@@ -570,9 +579,13 @@ class OpenAIResponsesClient:
                 ) from e
             
             if isinstance(e, RateLimitError):
-                self._logger.warning(
-                    f"OpenAI rate limit exceeded: provider={PROVIDER_OPENAI}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s"
+                log_error(
+                    self._logger,
+                    "llm_rate_limit_exceeded",
+                    provider=PROVIDER_OPENAI,
+                    model=model,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    error=e
                 )
                 raise LLMRateLimitError(
                     "OpenAI rate limit exceeded. Please retry after a delay.",
@@ -581,10 +594,13 @@ class OpenAIResponsesClient:
                 ) from e
             
             if isinstance(e, BadRequestError):
-                self._logger.error(
-                    f"OpenAI request validation failed: provider={PROVIDER_OPENAI}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                    f"error={str(e)}"
+                log_error(
+                    self._logger,
+                    "llm_validation_failed",
+                    provider=PROVIDER_OPENAI,
+                    model=model,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    error=e
                 )
                 raise LLMValidationError(
                     f"OpenAI request validation failed: {str(e)}",
@@ -593,10 +609,13 @@ class OpenAIResponsesClient:
                 ) from e
             
             if isinstance(e, (APIConnectionError, APITimeoutError)):
-                self._logger.error(
-                    f"OpenAI network error: provider={PROVIDER_OPENAI}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                    f"error={type(e).__name__}"
+                log_error(
+                    self._logger,
+                    "llm_network_error",
+                    provider=PROVIDER_OPENAI,
+                    model=model,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    error=e
                 )
                 raise LLMNetworkError(
                     f"OpenAI network error: {type(e).__name__}",
@@ -605,10 +624,13 @@ class OpenAIResponsesClient:
                 ) from e
             
             # Fallback for other APIError subclasses
-            self._logger.error(
-                f"OpenAI API error: provider={PROVIDER_OPENAI}, "
-                f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                f"error={str(e)}"
+            log_error(
+                self._logger,
+                "llm_api_error",
+                provider=PROVIDER_OPENAI,
+                model=model,
+                elapsed_seconds=round(elapsed_time, 2),
+                error=e
             )
             raise LLMCallError(
                 f"OpenAI API error: {str(e)}",
@@ -635,16 +657,21 @@ class OpenAIResponsesClient:
         
         # Validate that we got some content
         if not text_content:
-            self._logger.warning(
-                f"OpenAI response contained no text content: provider={PROVIDER_OPENAI}, "
-                f"model={model}"
+            log_error(
+                self._logger,
+                "llm_empty_response",
+                provider=PROVIDER_OPENAI,
+                model=model
             )
         
         # Log success (provider, model, duration only)
         elapsed_time = time.perf_counter() - start_time
-        self._logger.info(
-            f"OpenAI completion successful: provider={PROVIDER_OPENAI}, "
-            f"model={model}, elapsed_time={elapsed_time:.2f}s"
+        log_info(
+            self._logger,
+            "llm_completion_success",
+            provider=PROVIDER_OPENAI,
+            model=model,
+            elapsed_seconds=round(elapsed_time, 2)
         )
         
         return text_content
@@ -921,12 +948,18 @@ class AnthropicResponsesClient:
                 APIConnectionError, APITimeoutError, APIError) as e:
             # Calculate elapsed time for error logging
             elapsed_time = time.perf_counter() - start_time
+            metrics = get_metrics_collector()
+            metrics.increment("llm_errors")
             
             # Map Anthropic errors to our error hierarchy
             if isinstance(e, AuthenticationError):
-                self._logger.error(
-                    f"Anthropic authentication failed: provider={PROVIDER_ANTHROPIC}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s"
+                log_error(
+                    self._logger,
+                    "llm_authentication_failed",
+                    provider=PROVIDER_ANTHROPIC,
+                    model=model,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    error=e
                 )
                 raise LLMAuthenticationError(
                     "Anthropic authentication failed. Please check your API key.",
@@ -935,9 +968,13 @@ class AnthropicResponsesClient:
                 ) from e
             
             elif isinstance(e, RateLimitError):
-                self._logger.warning(
-                    f"Anthropic rate limit exceeded: provider={PROVIDER_ANTHROPIC}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s"
+                log_error(
+                    self._logger,
+                    "llm_rate_limit_exceeded",
+                    provider=PROVIDER_ANTHROPIC,
+                    model=model,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    error=e
                 )
                 raise LLMRateLimitError(
                     "Anthropic rate limit exceeded. Please retry after a delay.",
@@ -946,10 +983,13 @@ class AnthropicResponsesClient:
                 ) from e
             
             elif isinstance(e, (BadRequestError, UnprocessableEntityError)):
-                self._logger.error(
-                    f"Anthropic request validation failed: provider={PROVIDER_ANTHROPIC}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                    f"error={str(e)}"
+                log_error(
+                    self._logger,
+                    "llm_validation_failed",
+                    provider=PROVIDER_ANTHROPIC,
+                    model=model,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    error=e
                 )
                 raise LLMValidationError(
                     f"Anthropic request validation failed: {str(e)}",
@@ -958,10 +998,13 @@ class AnthropicResponsesClient:
                 ) from e
             
             elif isinstance(e, (APIConnectionError, APITimeoutError)):
-                self._logger.error(
-                    f"Anthropic network error: provider={PROVIDER_ANTHROPIC}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                    f"error={type(e).__name__}"
+                log_error(
+                    self._logger,
+                    "llm_network_error",
+                    provider=PROVIDER_ANTHROPIC,
+                    model=model,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    error=e
                 )
                 raise LLMNetworkError(
                     f"Anthropic network error: {type(e).__name__}",
@@ -971,10 +1014,13 @@ class AnthropicResponsesClient:
             
             else:
                 # Fallback for other APIError subclasses
-                self._logger.error(
-                    f"Anthropic API error: provider={PROVIDER_ANTHROPIC}, "
-                    f"model={model}, elapsed_time={elapsed_time:.2f}s, "
-                    f"error={str(e)}"
+                log_error(
+                    self._logger,
+                    "llm_api_error",
+                    provider=PROVIDER_ANTHROPIC,
+                    model=model,
+                    elapsed_seconds=round(elapsed_time, 2),
+                    error=e
                 )
                 raise LLMCallError(
                     f"Anthropic API error: {str(e)}",
@@ -994,16 +1040,21 @@ class AnthropicResponsesClient:
         
         # Validate that we got some content
         if not text_content:
-            self._logger.warning(
-                f"Anthropic response contained no text content: provider={PROVIDER_ANTHROPIC}, "
-                f"model={model}"
+            log_error(
+                self._logger,
+                "llm_empty_response",
+                provider=PROVIDER_ANTHROPIC,
+                model=model
             )
         
         # Log success (provider, model, duration only)
         elapsed_time = time.perf_counter() - start_time
-        self._logger.info(
-            f"Anthropic completion successful: provider={PROVIDER_ANTHROPIC}, "
-            f"model={model}, elapsed_time={elapsed_time:.2f}s"
+        log_info(
+            self._logger,
+            "llm_completion_success",
+            provider=PROVIDER_ANTHROPIC,
+            model=model,
+            elapsed_seconds=round(elapsed_time, 2)
         )
         
         return text_content

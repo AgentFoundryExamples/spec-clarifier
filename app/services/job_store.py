@@ -13,12 +13,17 @@
 # limitations under the License.
 """Thread-safe in-memory storage for clarification jobs."""
 
+import logging
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
 from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan, JobStatus
+from app.utils.logging_helper import log_info, log_warning, log_error
+from app.utils.metrics import get_metrics_collector
+
+logger = logging.getLogger(__name__)
 
 
 # Module-level job store with thread-safe access
@@ -66,6 +71,21 @@ def create_job(
     
     with _store_lock:
         _job_store[job_id] = job
+    
+    # Update metrics
+    metrics = get_metrics_collector()
+    metrics.increment("jobs_queued")
+    metrics.increment("jobs_pending")
+    
+    # Log job creation
+    log_info(
+        logger,
+        "job_created",
+        job_id=job_id,
+        status=JobStatus.PENDING.value,
+        num_specs=len(request.plan.specs) if request.plan else 0,
+        num_answers=len(request.answers) if request.answers else 0
+    )
     
     return job
 
@@ -117,11 +137,15 @@ def update_job(
     Raises:
         JobNotFoundError: If the job does not exist in the store
     """
+    metrics = get_metrics_collector()
+    
     with _store_lock:
         job = _job_store.get(job_id)
         
         if job is None:
             raise JobNotFoundError(f"Job with id {job_id} not found")
+        
+        old_status = job.status
         
         # Create updated job with new timestamp
         update_dict = {"updated_at": datetime.now(timezone.utc)}
@@ -136,6 +160,44 @@ def update_job(
         updated_job = job.model_copy(update=update_dict)
         _job_store[job_id] = updated_job
         
+        new_status = updated_job.status
+    
+    # Update metrics based on status transitions (outside lock)
+    if status is not None and old_status != new_status:
+        # Decrement old status counter
+        if old_status == JobStatus.PENDING:
+            metrics.decrement("jobs_pending")
+        elif old_status == JobStatus.RUNNING:
+            metrics.decrement("jobs_running")
+        
+        # Increment new status counter
+        if new_status == JobStatus.PENDING:
+            metrics.increment("jobs_pending")
+        elif new_status == JobStatus.RUNNING:
+            metrics.increment("jobs_running")
+        elif new_status == JobStatus.SUCCESS:
+            metrics.increment("jobs_success")
+        elif new_status == JobStatus.FAILED:
+            metrics.increment("jobs_failed")
+        
+        # Log status transition
+        log_info(
+            logger,
+            "job_status_transition",
+            job_id=job_id,
+            old_status=old_status.value,
+            new_status=new_status.value
+        )
+    
+    # Log error if present
+    if last_error is not None:
+        log_error(
+            logger,
+            "job_error_recorded",
+            job_id=job_id,
+            error_message=last_error
+        )
+    
     return updated_job
 
 
@@ -180,11 +242,29 @@ def delete_job(job_id: UUID) -> None:
     Raises:
         JobNotFoundError: If the job does not exist in the store
     """
+    metrics = get_metrics_collector()
+    
     with _store_lock:
         if job_id not in _job_store:
             raise JobNotFoundError(f"Job with id {job_id} not found")
         
+        job = _job_store[job_id]
+        job_status = job.status
         del _job_store[job_id]
+    
+    # Update metrics based on deleted job status (outside lock)
+    if job_status == JobStatus.PENDING:
+        metrics.decrement("jobs_pending")
+    elif job_status == JobStatus.RUNNING:
+        metrics.decrement("jobs_running")
+    
+    # Log deletion
+    log_info(
+        logger,
+        "job_deleted",
+        job_id=job_id,
+        status=job_status.value
+    )
 
 
 def cleanup_expired_jobs(
@@ -211,26 +291,44 @@ def cleanup_expired_jobs(
     """
     now = datetime.now(timezone.utc)
     cutoff_time = now - timedelta(seconds=ttl_seconds)
-    cleanup_count = 0
+    metrics = get_metrics_collector()
     
+    jobs_to_remove = []
     with _store_lock:
-        job_ids_to_remove = []
-        
         for job_id, job in _job_store.items():
             # Clean up completed jobs (SUCCESS or FAILED)
             if job.status in (JobStatus.SUCCESS, JobStatus.FAILED):
                 if job.updated_at < cutoff_time:
-                    job_ids_to_remove.append(job_id)
+                    jobs_to_remove.append((job_id, job.status))
             # Optionally clean up stale PENDING jobs
             elif job.status == JobStatus.PENDING and stale_pending_ttl_seconds is not None:
                 stale_cutoff = now - timedelta(seconds=stale_pending_ttl_seconds)
                 if job.created_at < stale_cutoff:
-                    job_ids_to_remove.append(job_id)
+                    jobs_to_remove.append((job_id, job.status))
+    
+    if not jobs_to_remove:
+        return 0
         
-        # Remove expired jobs
-        for job_id in job_ids_to_remove:
-            del _job_store[job_id]
-            cleanup_count += 1
+    # Update metrics for jobs to be removed (outside lock)
+    for _, job_status in jobs_to_remove:
+        if job_status == JobStatus.PENDING:
+            metrics.decrement("jobs_pending")
+    
+    # Remove expired jobs
+    with _store_lock:
+        for job_id, _ in jobs_to_remove:
+            if job_id in _job_store:
+                del _job_store[job_id]
+    
+    cleanup_count = len(jobs_to_remove)
+    
+    # Log cleanup summary (outside lock)
+    log_info(
+        logger,
+        "jobs_cleanup_completed",
+        jobs_removed=cleanup_count,
+        ttl_seconds=ttl_seconds
+    )
     
     return cleanup_count
 
