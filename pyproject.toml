@@ -21,9 +21,6 @@ dependencies = [
     "anthropic==0.75.0",
 ]
 
-[project.scripts]
-spec-clarifier = "app.main:app"
-
 [project.optional-dependencies]
 dev = [
     "pytest==8.3.4",
@@ -84,8 +81,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
-"tests/*" = ["B008"]      # Allow function calls in test defaults
+"__init__.py" = ["F401"]
+"tests/conftest.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.11"
