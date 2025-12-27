@@ -44,6 +44,7 @@
   ├── test_llm_integration.py
   ├── test_main.py
   ├── test_models.py
+  ├── test_openapi_metadata.py
   └── test_prompt_builder.py
 ├── .dockerignore
 ├── .gitignore

@@ -8,8 +8,8 @@ Includes classification of external dependencies as stdlib vs third-party.
 
 ## Statistics
 
-- **Total files**: 27
-- **Intra-repo dependencies**: 54
+- **Total files**: 28
+- **Intra-repo dependencies**: 55
 - **External stdlib dependencies**: 29
 - **External third-party dependencies**: 35
 
@@ -75,7 +75,7 @@ Total: 35 unique packages
 - `app/services/llm_clients.py` (7 dependents)
 - `app/models/config_models.py` (7 dependents)
 - `app/services/clarification.py` (6 dependents)
-- `app/main.py` (4 dependents)
+- `app/main.py` (5 dependents)
 - `app/api/routes_health.py` (1 dependents)
 - `app/api/routes_clarifications.py` (1 dependents)
 - `app/api/routes_config.py` (1 dependents)

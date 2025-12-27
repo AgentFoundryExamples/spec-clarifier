@@ -429,6 +429,20 @@
       }
     },
     {
+      "id": "tests/test_openapi_metadata.py",
+      "path": "tests/test_openapi_metadata.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "uuid.UUID"
+        ],
+        "third-party": [
+          "fastapi.testclient.TestClient",
+          "pytest"
+        ]
+      }
+    },
+    {
       "id": "tests/test_prompt_builder.py",
       "path": "tests/test_prompt_builder.py",
       "type": "file",
@@ -651,6 +665,10 @@
     {
       "source": "tests/test_models.py",
       "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_openapi_metadata.py",
+      "target": "app/main.py"
     },
     {
       "source": "tests/test_prompt_builder.py",
