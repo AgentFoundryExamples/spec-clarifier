@@ -38,13 +38,12 @@ def test_create_app():
 
 
 def test_app_metadata():
-    """Test that the app has correct metadata from settings."""
-    settings = get_settings()
+    """Test that the app has correct metadata."""
     app = create_app()
     
-    assert app.title == settings.app_name
-    assert app.version == settings.app_version
-    assert app.description == settings.app_description
+    assert app.title == "Agent Foundry Clarification Service"
+    assert app.version == "0.1.0"
+    assert "asynchronously clarifying specifications" in app.description
 
 
 def test_app_has_openapi_endpoints():
@@ -59,7 +58,7 @@ def test_app_has_openapi_endpoints():
     # Test /openapi.json endpoint exists
     response = client.get("/openapi.json")
     assert response.status_code == 200
-    assert response.json()["info"]["title"] == get_settings().app_name
+    assert response.json()["info"]["title"] == "Agent Foundry Clarification Service"
 
 
 def test_unknown_route_returns_404():

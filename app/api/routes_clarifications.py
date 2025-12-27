@@ -78,18 +78,66 @@ def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
     status_code=202,
     summary="Start async clarification job",
     description=(
+        "**ASYNCHRONOUS PROCESSING - Returns immediately with job ID**\n\n"
         "Creates an asynchronous clarification job and returns immediately with "
         "lightweight job details (id, status, timestamps). The job is initially in "
         "PENDING status and will be processed in the background.\n\n"
+        "**Important:** This endpoint returns a job_id, not the clarified plan. "
+        "Processing happens asynchronously. Poll GET /v1/clarifications/{job_id} "
+        "to check status and retrieve results when complete.\n\n"
         "Accepts an optional 'config' field to override default LLM configuration "
         "(provider, model, system_prompt_id, temperature, max_tokens). Config is "
         "validated and merged with defaults before processing. Invalid provider/model "
         "combinations return 400 Bad Request.\n\n"
         "Returns HTTP 202 Accepted with minimal job metadata. The response does NOT "
         "include the full request payload or result to keep responses lightweight.\n\n"
-        "Use GET /v1/clarifications/{job_id} to poll for job status and retrieve "
-        "results when complete."
+        "**Async Workflow:**\n"
+        "1. POST /v1/clarifications → receive job_id\n"
+        "2. Poll GET /v1/clarifications/{job_id} → check status (PENDING/RUNNING/SUCCESS/FAILED)\n"
+        "3. When status is SUCCESS → processing complete"
     ),
+    responses={
+        202: {
+            "description": "Job created successfully and queued for processing",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "status": "PENDING",
+                        "created_at": "2025-12-27T03:00:00.000000Z",
+                        "updated_at": "2025-12-27T03:00:00.000000Z",
+                        "last_error": None
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Invalid configuration (provider/model combination not allowed)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Model 'invalid-model' is not allowed for provider 'openai'. Allowed models: gpt-5, gpt-5.1, gpt-4o"
+                    }
+                }
+            }
+        },
+        422: {
+            "description": "Invalid request payload (missing required fields or wrong types)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": [
+                            {
+                                "type": "missing",
+                                "loc": ["body", "plan", "specs", 0, "vision"],
+                                "msg": "Field required"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    },
 )
 def create_clarification_job(
     request: ClarificationRequestWithConfig,
@@ -160,11 +208,98 @@ def create_clarification_job(
     description=(
         "Retrieves the current status and details of a clarification job by its ID. "
         "Use this endpoint to poll for job completion after creating an async job.\n\n"
-        "When status is SUCCESS, the result field will contain the clarified plan "
-        "(only if APP_SHOW_JOB_RESULT development flag is enabled).\n\n"
+        "**Important:** This endpoint returns only job metadata and status. The result "
+        "field is null by default (production mode) to keep responses lightweight. "
+        "To view results during development, set APP_SHOW_JOB_RESULT=true.\n\n"
+        "**Status Values:**\n"
+        "- PENDING: Job queued, not yet started\n"
+        "- RUNNING: Job actively processing\n"
+        "- SUCCESS: Job completed successfully\n"
+        "- FAILED: Job encountered an error (see last_error field)\n\n"
         "When status is FAILED, the last_error field will contain the error message.\n\n"
         "Returns 404 if the job ID is not found. Invalid UUIDs return 422 validation errors."
     ),
+    responses={
+        200: {
+            "description": "Job status retrieved successfully",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "pending": {
+                            "summary": "Job pending (queued, not yet started)",
+                            "value": {
+                                "id": "550e8400-e29b-41d4-a716-446655440000",
+                                "status": "PENDING",
+                                "created_at": "2025-12-27T03:00:00.000000Z",
+                                "updated_at": "2025-12-27T03:00:00.000000Z",
+                                "last_error": None,
+                                "result": None
+                            }
+                        },
+                        "running": {
+                            "summary": "Job running (actively processing)",
+                            "value": {
+                                "id": "550e8400-e29b-41d4-a716-446655440000",
+                                "status": "RUNNING",
+                                "created_at": "2025-12-27T03:00:00.000000Z",
+                                "updated_at": "2025-12-27T03:00:01.500000Z",
+                                "last_error": None,
+                                "result": None
+                            }
+                        },
+                        "success": {
+                            "summary": "Job completed successfully (production mode - result is null)",
+                            "value": {
+                                "id": "550e8400-e29b-41d4-a716-446655440000",
+                                "status": "SUCCESS",
+                                "created_at": "2025-12-27T03:00:00.000000Z",
+                                "updated_at": "2025-12-27T03:00:03.250000Z",
+                                "last_error": None,
+                                "result": None
+                            }
+                        },
+                        "failed": {
+                            "summary": "Job failed (with error message)",
+                            "value": {
+                                "id": "550e8400-e29b-41d4-a716-446655440000",
+                                "status": "FAILED",
+                                "created_at": "2025-12-27T03:00:00.000000Z",
+                                "updated_at": "2025-12-27T03:00:02.100000Z",
+                                "last_error": "ValueError: Invalid specification format",
+                                "result": None
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Job not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Job 550e8400-e29b-41d4-a716-446655440000 not found"
+                    }
+                }
+            }
+        },
+        422: {
+            "description": "Invalid UUID format",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": [
+                            {
+                                "type": "uuid_parsing",
+                                "loc": ["path", "job_id"],
+                                "msg": "Input should be a valid UUID"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    },
 )
 def get_clarification_job(job_id: UUID) -> JobStatusResponse:
     """Get the status and details of a clarification job.

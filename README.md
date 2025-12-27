@@ -86,6 +86,49 @@ docker run -p 8000:8000 \
 
 The service will be available at the same URLs as the Python option above.
 
+## OpenAPI Documentation
+
+The Agent Foundry Clarification Service provides comprehensive OpenAPI documentation with detailed endpoint descriptions, request/response examples, and schema definitions.
+
+### Accessing the Documentation
+
+**Interactive Swagger UI:**
+```bash
+http://localhost:8000/docs
+```
+The Swagger UI provides an interactive interface to explore and test all API endpoints with live examples.
+
+**ReDoc Documentation:**
+```bash
+http://localhost:8000/redoc
+```
+ReDoc offers an alternative, clean documentation interface with a focus on readability.
+
+**OpenAPI Schema (JSON):**
+```bash
+curl http://localhost:8000/openapi.json > openapi.json
+```
+Download the complete OpenAPI 3.1 specification for integration with API clients, code generators, or testing tools.
+
+### Key OpenAPI Features
+
+- **Service Metadata**: Clear title "Agent Foundry Clarification Service" with semantic versioning
+- **Organized Tags**: Endpoints grouped by Clarifications, Configuration, and Health categories
+- **Request Examples**: Realistic payloads for all POST/PUT operations showing required fields
+- **Response Examples**: Multiple examples per endpoint demonstrating success, error, and edge cases
+- **Async Workflow Documentation**: Explicit descriptions emphasizing asynchronous processing semantics
+- **Valid UUIDs**: All job_id examples use valid UUID format (36 characters)
+
+### Asynchronous Processing Semantics
+
+**Important:** The `/v1/clarifications` endpoint implements an asynchronous workflow:
+
+1. **POST /v1/clarifications** - Returns immediately with a `job_id` and `202 Accepted` status
+2. **GET /v1/clarifications/{job_id}** - Poll this endpoint to check job status (PENDING → RUNNING → SUCCESS/FAILED)
+3. **Result Retrieval** - When status is SUCCESS, processing is complete (result field is null in production mode)
+
+The service does **NOT** return clarified specifications inline in POST responses. Always poll the GET endpoint to monitor job progress.
+
 ### Configuration
 
 The application can be configured via environment variables with the `APP_` prefix:
