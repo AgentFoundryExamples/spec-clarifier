@@ -944,7 +944,7 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         # PERSIST RESULT
         # ====================================================================
         # Mark as SUCCESS with result (updated_at will be refreshed automatically)
-        job_store.update_job(job_id, status=JobStatus.SUCCESS, result=result)
+        successful_job = job_store.update_job(job_id, status=JobStatus.SUCCESS, result=result)
         
         log_info(
             logger,
@@ -968,8 +968,7 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
                 job_id=job_id
             )
             
-            # Reload job to get the updated job with SUCCESS status and result
-            successful_job = job_store.get_job(job_id)
+            # Use the updated job object with SUCCESS status and result
             await dispatcher.dispatch(successful_job, result)
             
             log_info(
@@ -981,14 +980,11 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         except Exception as dispatch_error:
             # Capture dispatcher exceptions without affecting job status
             # The job is already marked SUCCESS and should remain that way
-            error_message = f"{type(dispatch_error).__name__}: {str(dispatch_error)}"
-            
             log_error(
                 logger,
                 "downstream_dispatch_failed",
                 job_id=job_id,
-                error=dispatch_error,
-                error_message=error_message
+                error=dispatch_error
             )
             
             # Note: We deliberately do NOT update job status here

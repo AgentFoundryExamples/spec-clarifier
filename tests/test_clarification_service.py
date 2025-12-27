@@ -1390,13 +1390,7 @@ class TestDownstreamDispatcherIntegration:
         # Mock dispatcher to capture arguments
         from unittest.mock import patch, AsyncMock
         
-        captured_args = []
-        
-        async def capture_dispatch(job, plan):
-            captured_args.append((job, plan))
-        
         mock_dispatcher = AsyncMock()
-        mock_dispatcher.dispatch = capture_dispatch
         
         job = start_clarification_job(request, background_tasks)
         
@@ -1405,9 +1399,11 @@ class TestDownstreamDispatcherIntegration:
         with patch('app.services.clarification.get_downstream_dispatcher', return_value=mock_dispatcher):
             await process_clarification_job(job.id, llm_client=dummy_client)
         
+        # Verify dispatcher was called once
+        mock_dispatcher.dispatch.assert_awaited_once()
+        
         # Verify dispatcher was called with correct arguments
-        assert len(captured_args) == 1
-        dispatched_job, dispatched_plan = captured_args[0]
+        dispatched_job, dispatched_plan = mock_dispatcher.dispatch.call_args.args
         
         # Check job
         assert dispatched_job.id == job.id
