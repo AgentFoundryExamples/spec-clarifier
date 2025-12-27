@@ -60,7 +60,27 @@ class ClarificationConfig(BaseModel):
         >>> config = ClarificationConfig(model="gpt-4o")
     """
     
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-5.1",
+                    "system_prompt_id": "default",
+                    "temperature": 0.1,
+                    "max_tokens": 2000
+                },
+                {
+                    "provider": "anthropic",
+                    "model": "claude-sonnet-4.5",
+                    "system_prompt_id": "strict_json",
+                    "temperature": 0.2,
+                    "max_tokens": 3000
+                }
+            ]
+        }
+    )
     
     provider: Optional[Literal["openai", "anthropic"]] = Field(
         default=None,

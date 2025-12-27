@@ -85,6 +85,38 @@ def _check_config_admin_enabled():
         "This endpoint can be disabled by setting APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=false, "
         "which will return 403 Forbidden."
     ),
+    responses={
+        200: {
+            "description": "Current default configuration retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "default_config": {
+                            "provider": "openai",
+                            "model": "gpt-5.1",
+                            "system_prompt_id": "default",
+                            "temperature": 0.1,
+                            "max_tokens": None
+                        },
+                        "allowed_models": {
+                            "openai": ["gpt-5", "gpt-5.1", "gpt-4o"],
+                            "anthropic": ["claude-sonnet-4.5", "claude-opus-4"]
+                        }
+                    }
+                }
+            }
+        },
+        403: {
+            "description": "Config admin endpoints are disabled",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable."
+                    }
+                }
+            }
+        }
+    },
 )
 def get_defaults() -> DefaultsResponse:
     """Get current default configuration and allowed models.
@@ -132,6 +164,85 @@ def get_defaults() -> DefaultsResponse:
         "**Thread Safety:** Updates are atomic and protected by a lock to handle concurrent "
         "PUT requests safely."
     ),
+    responses={
+        200: {
+            "description": "Configuration updated successfully",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "openai": {
+                            "summary": "Update to OpenAI GPT-5",
+                            "value": {
+                                "default_config": {
+                                    "provider": "openai",
+                                    "model": "gpt-5",
+                                    "system_prompt_id": "default",
+                                    "temperature": 0.1,
+                                    "max_tokens": 2000
+                                },
+                                "allowed_models": {
+                                    "openai": ["gpt-5", "gpt-5.1", "gpt-4o"],
+                                    "anthropic": ["claude-sonnet-4.5", "claude-opus-4"]
+                                }
+                            }
+                        },
+                        "anthropic": {
+                            "summary": "Update to Anthropic Claude",
+                            "value": {
+                                "default_config": {
+                                    "provider": "anthropic",
+                                    "model": "claude-sonnet-4.5",
+                                    "system_prompt_id": "strict_json",
+                                    "temperature": 0.2,
+                                    "max_tokens": 3000
+                                },
+                                "allowed_models": {
+                                    "openai": ["gpt-5", "gpt-5.1", "gpt-4o"],
+                                    "anthropic": ["claude-sonnet-4.5", "claude-opus-4"]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Invalid configuration (validation failed)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Model 'gpt-3.5-turbo' is not allowed for provider 'openai'. Allowed models: gpt-5, gpt-5.1, gpt-4o"
+                    }
+                }
+            }
+        },
+        403: {
+            "description": "Config admin endpoints are disabled",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable."
+                    }
+                }
+            }
+        },
+        422: {
+            "description": "Invalid request payload (wrong types or out of range values)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": [
+                            {
+                                "type": "literal_error",
+                                "loc": ["body", "provider"],
+                                "msg": "Input should be 'openai' or 'anthropic'"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    },
 )
 def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
     """Update the global default configuration.

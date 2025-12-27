@@ -155,7 +155,45 @@ class ClarificationRequestWithConfig(BaseModel):
         config: Optional ClarificationConfig to override defaults for this request
     """
     
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "plan": {
+                        "specs": [
+                            {
+                                "purpose": "Build a user authentication system",
+                                "vision": "A secure, scalable authentication system supporting multiple providers",
+                                "must": [
+                                    "Support OAuth 2.0",
+                                    "Implement JWT tokens",
+                                    "Store passwords securely with bcrypt"
+                                ],
+                                "dont": [
+                                    "Store passwords in plain text",
+                                    "Use deprecated authentication methods"
+                                ],
+                                "nice": [
+                                    "Support biometric authentication",
+                                    "Multi-factor authentication"
+                                ],
+                                "open_questions": [
+                                    "Which OAuth providers should be supported?",
+                                    "What is the token expiration policy?"
+                                ],
+                                "assumptions": [
+                                    "Users have valid email addresses",
+                                    "System will be deployed on HTTPS"
+                                ]
+                            }
+                        ]
+                    },
+                    "answers": []
+                }
+            ]
+        }
+    )
     
     plan: PlanInput = Field(..., description="The plan input with specifications")
     answers: List[QuestionAnswer] = Field(default_factory=list, description="List of answers to open questions")
