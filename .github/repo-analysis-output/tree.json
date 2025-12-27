@@ -208,6 +208,10 @@
         },
         {
           "type": "file",
+          "name": "test_dummy_mode.py"
+        },
+        {
+          "type": "file",
           "name": "test_health.py"
         },
         {
@@ -251,6 +255,10 @@
     {
       "type": "file",
       "name": ".dockerignore"
+    },
+    {
+      "type": "file",
+      "name": ".env.example"
     },
     {
       "type": "file",

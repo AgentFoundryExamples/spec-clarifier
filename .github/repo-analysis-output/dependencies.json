@@ -40,9 +40,7 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "logging",
-          "typing.Dict",
-          "typing.List"
+          "logging"
         ],
         "third-party": [
           "fastapi.APIRouter",
@@ -71,12 +69,10 @@
         "stdlib": [
           "functools.lru_cache",
           "os",
-          "threading",
-          "typing.Dict",
-          "typing.List",
-          "typing.Optional"
+          "threading"
         ],
         "third-party": [
+          "pydantic.Field",
           "pydantic_settings.BaseSettings",
           "pydantic_settings.SettingsConfigDict"
         ]
@@ -113,8 +109,7 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "typing.Literal",
-          "typing.Optional"
+          "typing.Literal"
         ],
         "third-party": [
           "pydantic.BaseModel",
@@ -131,8 +126,6 @@
         "stdlib": [
           "datetime.datetime",
           "enum.Enum",
-          "typing.List",
-          "typing.Optional",
           "uuid.UUID"
         ],
         "third-party": [
@@ -157,15 +150,12 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "asyncio",
           "copy",
           "json",
           "logging",
           "re",
           "time",
           "typing.Any",
-          "typing.Optional",
-          "typing.Tuple",
           "uuid.UUID"
         ],
         "third-party": [
@@ -193,14 +183,11 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
+          "datetime.UTC",
           "datetime.datetime",
           "datetime.timedelta",
-          "datetime.timezone",
           "logging",
           "threading",
-          "typing.Dict",
-          "typing.List",
-          "typing.Optional",
           "uuid.UUID",
           "uuid.uuid4"
         ],
@@ -213,14 +200,11 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "abc.ABC",
-          "abc.abstractmethod",
           "logging",
           "os",
           "re",
           "time",
           "typing.Any",
-          "typing.Optional",
           "typing.Protocol"
         ],
         "third-party": [
@@ -266,7 +250,6 @@
           "logging",
           "re",
           "typing.Any",
-          "typing.Optional",
           "uuid",
           "uuid.UUID"
         ],
@@ -280,8 +263,7 @@
       "external_dependencies": {
         "stdlib": [
           "logging",
-          "threading",
-          "typing.Dict"
+          "threading"
         ],
         "third-party": []
       }
@@ -303,7 +285,6 @@
         "stdlib": [
           "json",
           "unittest.mock.MagicMock",
-          "unittest.mock.Mock",
           "unittest.mock.patch",
           "uuid.uuid4"
         ],
@@ -353,7 +334,6 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
-          "os",
           "threading"
         ],
         "third-party": [
@@ -384,10 +364,19 @@
       "external_dependencies": {
         "stdlib": [
           "logging",
-          "unittest.mock.MagicMock",
-          "unittest.mock.patch",
-          "uuid.uuid4"
+          "unittest.mock.patch"
         ],
+        "third-party": [
+          "pytest"
+        ]
+      }
+    },
+    {
+      "id": "tests/test_dummy_mode.py",
+      "path": "tests/test_dummy_mode.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [],
         "third-party": [
           "pytest"
         ]
@@ -411,9 +400,9 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
+          "datetime.UTC",
           "datetime.datetime",
           "datetime.timedelta",
-          "datetime.timezone",
           "threading",
           "time",
           "uuid.uuid4"
@@ -477,9 +466,7 @@
           "uuid",
           "uuid.UUID"
         ],
-        "third-party": [
-          "pytest"
-        ]
+        "third-party": []
       }
     },
     {
@@ -489,7 +476,8 @@
       "external_dependencies": {
         "stdlib": [
           "os",
-          "unittest.mock.patch"
+          "unittest.mock.patch",
+          "uuid"
         ],
         "third-party": [
           "fastapi.FastAPI",
@@ -519,8 +507,8 @@
       "type": "file",
       "external_dependencies": {
         "stdlib": [
+          "datetime.UTC",
           "datetime.datetime",
-          "datetime.timezone",
           "uuid.uuid4"
         ],
         "third-party": [
@@ -577,6 +565,10 @@
     },
     {
       "source": "app/api/routes_clarifications.py",
+      "target": "app/utils/logging_helper.py"
+    },
+    {
+      "source": "app/api/routes_clarifications.py",
       "target": "app/services/llm_clients.py"
     },
     {
@@ -588,6 +580,10 @@
       "target": "app/models/config_models.py"
     },
     {
+      "source": "app/api/routes_config.py",
+      "target": "app/utils/logging_helper.py"
+    },
+    {
       "source": "app/api/routes_health.py",
       "target": "app/utils/metrics.py"
     },
@@ -597,7 +593,11 @@
     },
     {
       "source": "app/main.py",
-      "target": "app/config.py"
+      "target": "app/api/routes_clarifications.py"
+    },
+    {
+      "source": "app/main.py",
+      "target": "app/api/routes_config.py"
     },
     {
       "source": "app/main.py",
@@ -605,11 +605,11 @@
     },
     {
       "source": "app/main.py",
-      "target": "app/api/routes_clarifications.py"
+      "target": "app/config.py"
     },
     {
       "source": "app/main.py",
-      "target": "app/api/routes_config.py"
+      "target": "app/utils/logging_helper.py"
     },
     {
       "source": "app/models/__init__.py",
@@ -753,11 +753,11 @@
     },
     {
       "source": "tests/test_config_admin_api.py",
-      "target": "app/main.py"
+      "target": "app/config.py"
     },
     {
       "source": "tests/test_config_admin_api.py",
-      "target": "app/config.py"
+      "target": "app/main.py"
     },
     {
       "source": "tests/test_config_admin_api.py",
@@ -774,6 +774,18 @@
     {
       "source": "tests/test_downstream.py",
       "target": "app/services/job_store.py"
+    },
+    {
+      "source": "tests/test_dummy_mode.py",
+      "target": "app/config.py"
+    },
+    {
+      "source": "tests/test_dummy_mode.py",
+      "target": "app/services/llm_clients.py"
+    },
+    {
+      "source": "tests/test_dummy_mode.py",
+      "target": "app/models/config_models.py"
     },
     {
       "source": "tests/test_health.py",
@@ -821,11 +833,11 @@
     },
     {
       "source": "tests/test_main.py",
-      "target": "app/main.py"
+      "target": "app/config.py"
     },
     {
       "source": "tests/test_main.py",
-      "target": "app/config.py"
+      "target": "app/main.py"
     },
     {
       "source": "tests/test_metrics.py",
@@ -858,14 +870,11 @@
   ],
   "external_dependencies_summary": {
     "stdlib": [
-      "abc.ABC",
-      "abc.abstractmethod",
-      "asyncio",
       "concurrent.futures",
       "copy",
+      "datetime.UTC",
       "datetime.datetime",
       "datetime.timedelta",
-      "datetime.timezone",
       "enum.Enum",
       "functools.lru_cache",
       "inspect",
@@ -876,15 +885,10 @@
       "threading",
       "time",
       "typing.Any",
-      "typing.Dict",
-      "typing.List",
       "typing.Literal",
-      "typing.Optional",
       "typing.Protocol",
-      "typing.Tuple",
       "unittest.mock.AsyncMock",
       "unittest.mock.MagicMock",
-      "unittest.mock.Mock",
       "unittest.mock.patch",
       "uuid",
       "uuid.UUID",
@@ -927,7 +931,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 31,
+    "stdlib_count": 23,
     "third-party_count": 35
   }
 }

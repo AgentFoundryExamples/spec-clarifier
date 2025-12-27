@@ -8,25 +8,22 @@ Includes classification of external dependencies as stdlib vs third-party.
 
 ## Statistics
 
-- **Total files**: 35
-- **Intra-repo dependencies**: 74
-- **External stdlib dependencies**: 31
+- **Total files**: 36
+- **Intra-repo dependencies**: 80
+- **External stdlib dependencies**: 23
 - **External third-party dependencies**: 35
 
 ## External Dependencies
 
 ### Standard Library / Core Modules
 
-Total: 31 unique modules
+Total: 23 unique modules
 
-- `abc.ABC`
-- `abc.abstractmethod`
-- `asyncio`
 - `concurrent.futures`
 - `copy`
+- `datetime.UTC`
 - `datetime.datetime`
 - `datetime.timedelta`
-- `datetime.timezone`
 - `enum.Enum`
 - `functools.lru_cache`
 - `inspect`
@@ -37,9 +34,12 @@ Total: 31 unique modules
 - `threading`
 - `time`
 - `typing.Any`
-- `typing.Dict`
-- `typing.List`
-- ... and 11 more (see JSON for full list)
+- `typing.Literal`
+- `typing.Protocol`
+- `unittest.mock.AsyncMock`
+- `unittest.mock.MagicMock`
+- `unittest.mock.patch`
+- ... and 3 more (see JSON for full list)
 
 ### Third-Party Packages
 
@@ -71,24 +71,24 @@ Total: 35 unique packages
 
 - `app/models/specs.py` (15 dependents)
 - `app/services/job_store.py` (9 dependents)
-- `app/config.py` (7 dependents)
-- `app/services/llm_clients.py` (7 dependents)
-- `app/models/config_models.py` (7 dependents)
+- `app/utils/logging_helper.py` (9 dependents)
+- `app/config.py` (8 dependents)
+- `app/services/llm_clients.py` (8 dependents)
+- `app/models/config_models.py` (8 dependents)
 - `app/services/clarification.py` (6 dependents)
 - `app/utils/metrics.py` (6 dependents)
-- `app/utils/logging_helper.py` (6 dependents)
 - `app/main.py` (6 dependents)
 - `app/services/downstream.py` (2 dependents)
 
 ## Files with Most Dependencies (Intra-Repo)
 
 - `app/services/clarification.py` (7 dependencies)
-- `app/api/routes_clarifications.py` (5 dependencies)
+- `app/api/routes_clarifications.py` (6 dependencies)
+- `app/main.py` (5 dependencies)
 - `tests/test_clarifications_api.py` (5 dependencies)
 - `tests/test_llm_integration.py` (5 dependencies)
-- `app/main.py` (4 dependencies)
 - `tests/test_async_job_lifecycle.py` (4 dependencies)
 - `tests/test_clarification_service.py` (4 dependencies)
+- `app/api/routes_config.py` (3 dependencies)
 - `app/services/job_store.py` (3 dependencies)
 - `tests/test_config.py` (3 dependencies)
-- `tests/test_config_admin_api.py` (3 dependencies)

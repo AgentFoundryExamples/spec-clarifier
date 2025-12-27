@@ -46,6 +46,7 @@
   ├── test_config.py
   ├── test_config_admin_api.py
   ├── test_downstream.py
+  ├── test_dummy_mode.py
   ├── test_health.py
   ├── test_job_store.py
   ├── test_llm_clients.py
@@ -57,6 +58,7 @@
   ├── test_openapi_metadata.py
   └── test_prompt_builder.py
 ├── .dockerignore
+├── .env.example
 ├── .gitignore
 ├── Dockerfile
 ├── LICENSE
