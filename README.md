@@ -1081,7 +1081,7 @@ The service currently ships with a **placeholder implementation** that logs clar
 2. A clear hook point for future integrations (marked with TODO comments)
 3. A debugging aid for operators to verify successful clarification
 
-**TODO Marker**: The placeholder class includes a comprehensive TODO comment (lines 72-79 in `app/services/downstream.py`) listing integration tasks:
+**TODO Marker**: The placeholder class includes a comprehensive TODO comment (located within the `PlaceholderDownstreamDispatcher` class docstring around lines 72-79 in `app/services/downstream.py`) listing integration tasks:
 - Determine target downstream system (HTTP endpoint, message queue, storage, etc.)
 - Implement error handling for network failures and timeouts
 - Add retry logic with exponential backoff for transient failures
