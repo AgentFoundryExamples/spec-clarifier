@@ -270,6 +270,10 @@
     },
     {
       "type": "file",
+      "name": "Makefile"
+    },
+    {
+      "type": "file",
       "name": "pyproject.toml"
     },
     {
