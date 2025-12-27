@@ -1395,17 +1395,149 @@ All sensitive data is intentionally excluded from log messages to prevent accide
 
 ## Development
 
-### Running Tests
+### Setup
 
 Install development dependencies:
 ```bash
 pip install -e ".[dev]"
 ```
 
-Run tests:
+This installs the project in editable mode along with development tools:
+- **pytest** and **pytest-asyncio** for testing
+- **black** for code formatting
+- **ruff** for linting
+- **mypy** for type checking
+- **httpx** for HTTP testing
+
+### Development Tools
+
+The project includes a Makefile with convenient commands for common development tasks:
+
 ```bash
-pytest
+# View all available commands
+make help
+
+# Install runtime dependencies only
+make install
+
+# Install development dependencies
+make install-dev
+
+# Format code with black (modifies files)
+make format
+
+# Lint code with ruff
+make lint
+
+# Type check with mypy
+make type-check
+
+# Run tests
+make test
+
+# Run tests with verbose output
+make test-verbose
+
+# Clean build artifacts and caches
+make clean
 ```
+
+#### Code Formatting with Black
+
+Black formats Python code to a consistent style:
+
+```bash
+# Format all code (app/ and tests/)
+black app/ tests/
+
+# Check formatting without modifying files
+black --check app/ tests/
+
+# Or use the Makefile
+make format
+```
+
+Configuration is in `pyproject.toml` under `[tool.black]`.
+
+#### Linting with Ruff
+
+Ruff is a fast Python linter that checks for errors and code quality issues:
+
+```bash
+# Lint all code
+ruff check app/ tests/
+
+# Auto-fix issues where possible
+ruff check --fix app/ tests/
+
+# Or use the Makefile
+make lint
+```
+
+Configuration is in `pyproject.toml` under `[tool.ruff]`.
+
+#### Type Checking with Mypy
+
+Mypy performs static type checking:
+
+```bash
+# Type check the app code
+mypy app/
+
+# Or use the Makefile
+make type-check
+```
+
+Configuration is in `pyproject.toml` under `[tool.mypy]`.
+
+#### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run tests with verbose output
+pytest -v
+
+# Run a specific test file
+pytest tests/test_health.py
+
+# Run tests matching a pattern
+pytest -k "test_health"
+
+# Or use the Makefile
+make test          # normal output
+make test-verbose  # verbose output
+```
+
+Configuration is in `pyproject.toml` under `[tool.pytest.ini_options]`.
+
+### Project Structure
+
+```
+spec-clarifier/
+├── app/              # Application source code
+│   ├── api/          # API route handlers
+│   ├── models/       # Pydantic models and schemas
+│   ├── services/     # Business logic and services
+│   └── utils/        # Utility functions
+├── tests/            # Test suite
+├── pyproject.toml    # Project metadata and tool configuration
+├── requirements.txt  # Runtime dependencies (mirrors pyproject.toml)
+├── Makefile          # Development commands
+└── README.md         # This file
+```
+
+### Configuration Files
+
+All tool configurations are centralized in `pyproject.toml`:
+
+- **[project]** - Project metadata, dependencies, and Python version (>=3.11)
+- **[project.optional-dependencies]** - Development dependencies
+- **[tool.pytest.ini_options]** - Pytest configuration (test paths, asyncio mode)
+- **[tool.black]** - Black formatter settings (line length 100, Python 3.11+)
+- **[tool.ruff]** - Ruff linter rules and ignores
+- **[tool.mypy]** - Mypy type checker settings (non-strict mode with warnings)
 
 
 
