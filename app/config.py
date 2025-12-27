@@ -46,9 +46,11 @@ class Settings(BaseSettings):
     # Config admin endpoints flag (on by default, can be disabled for security)
     enable_config_admin_endpoints: bool = True
 
-    # LLM configuration defaults
-    llm_default_provider: str = "openai"
-    llm_default_model: str = "gpt-5"
+    # LLM configuration defaults (legacy, not currently used by the application)
+    # The actual defaults are managed by GlobalDefaults class
+    # These exist for backward compatibility with configuration documentation
+    llm_default_provider: str = "dummy"
+    llm_default_model: str = "test-model"
 
     # LLM provider selection (defaults to "dummy" for testing without API keys)
     # Can be set via LLM_PROVIDER env var (no APP_ prefix)

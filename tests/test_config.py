@@ -36,8 +36,9 @@ def test_settings_defaults():
     assert settings.debug is False
     assert settings.show_job_result is False
     assert settings.enable_debug_endpoint is False
-    assert settings.llm_default_provider == "openai"
-    assert settings.llm_default_model == "gpt-5"
+    # Updated to reflect dummy-first defaults
+    assert settings.llm_default_provider == "dummy"
+    assert settings.llm_default_model == "test-model"
     assert settings.cors_origins == "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
     assert settings.cors_allow_credentials is True
     assert settings.cors_allow_methods == "*"
@@ -235,10 +236,11 @@ def test_enable_debug_endpoint_false_from_environment(monkeypatch):
 
 
 def test_llm_default_provider_default():
-    """Test that llm_default_provider has correct default."""
+    """Test that llm_default_provider has correct default (dummy for consistency)."""
     settings = get_settings()
 
-    assert settings.llm_default_provider == "openai"
+    # Now defaults to "dummy" to match GlobalDefaults and documented behavior
+    assert settings.llm_default_provider == "dummy"
 
 
 def test_llm_default_provider_from_environment(monkeypatch):
@@ -252,10 +254,11 @@ def test_llm_default_provider_from_environment(monkeypatch):
 
 
 def test_llm_default_model_default():
-    """Test that llm_default_model has correct default."""
+    """Test that llm_default_model has correct default (test-model for consistency)."""
     settings = get_settings()
 
-    assert settings.llm_default_model == "gpt-5"
+    # Now defaults to "test-model" to match GlobalDefaults and documented behavior
+    assert settings.llm_default_model == "test-model"
 
 
 def test_llm_default_model_from_environment(monkeypatch):
