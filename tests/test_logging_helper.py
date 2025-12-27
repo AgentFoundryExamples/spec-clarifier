@@ -185,6 +185,29 @@ class TestLogStructured:
         
         assert "sk-secret123" not in log_message
         assert "[REDACTED]" in log_message
+    
+    def test_fallback_redacts_sensitive_data(self, caplog):
+        """Test that sensitive data is redacted in fallback format."""
+        logger = logging.getLogger("test")
+        
+        # Create an object that can't be JSON serialized to trigger fallback
+        class UnserializableObject:
+            def __str__(self):
+                return "api_key=sk-test123"
+        
+        with caplog.at_level(logging.INFO):
+            log_structured(
+                logger,
+                logging.INFO,
+                "test_event",
+                unserializable=UnserializableObject()
+            )
+        
+        log_message = caplog.records[0].getMessage()
+        
+        # Verify fallback was used and sensitive data was redacted
+        assert "sk-test123" not in log_message
+        assert "[REDACTED]" in log_message
 
 
 class TestLogConvenienceFunctions:

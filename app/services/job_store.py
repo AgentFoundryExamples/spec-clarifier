@@ -291,42 +291,44 @@ def cleanup_expired_jobs(
     """
     now = datetime.now(timezone.utc)
     cutoff_time = now - timedelta(seconds=ttl_seconds)
-    cleanup_count = 0
     metrics = get_metrics_collector()
     
+    jobs_to_remove = []
     with _store_lock:
-        job_ids_to_remove = []
-        
         for job_id, job in _job_store.items():
             # Clean up completed jobs (SUCCESS or FAILED)
             if job.status in (JobStatus.SUCCESS, JobStatus.FAILED):
                 if job.updated_at < cutoff_time:
-                    job_ids_to_remove.append((job_id, job.status))
+                    jobs_to_remove.append((job_id, job.status))
             # Optionally clean up stale PENDING jobs
             elif job.status == JobStatus.PENDING and stale_pending_ttl_seconds is not None:
                 stale_cutoff = now - timedelta(seconds=stale_pending_ttl_seconds)
                 if job.created_at < stale_cutoff:
-                    job_ids_to_remove.append((job_id, job.status))
+                    jobs_to_remove.append((job_id, job.status))
+    
+    if not jobs_to_remove:
+        return 0
         
-        # Remove expired jobs
-        for job_id, job_status in job_ids_to_remove:
-            del _job_store[job_id]
-            cleanup_count += 1
-            
-            # Update metrics
-            if job_status == JobStatus.PENDING:
-                metrics.decrement("jobs_pending")
-            elif job_status == JobStatus.RUNNING:
-                metrics.decrement("jobs_running")
+    # Update metrics for jobs to be removed (outside lock)
+    for _, job_status in jobs_to_remove:
+        if job_status == JobStatus.PENDING:
+            metrics.decrement("jobs_pending")
+    
+    # Remove expired jobs
+    with _store_lock:
+        for job_id, _ in jobs_to_remove:
+            if job_id in _job_store:
+                del _job_store[job_id]
+    
+    cleanup_count = len(jobs_to_remove)
     
     # Log cleanup summary (outside lock)
-    if cleanup_count > 0:
-        log_info(
-            logger,
-            "jobs_cleanup_completed",
-            jobs_removed=cleanup_count,
-            ttl_seconds=ttl_seconds
-        )
+    log_info(
+        logger,
+        "jobs_cleanup_completed",
+        jobs_removed=cleanup_count,
+        ttl_seconds=ttl_seconds
+    )
     
     return cleanup_count
 

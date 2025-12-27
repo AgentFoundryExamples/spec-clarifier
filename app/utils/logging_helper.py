@@ -52,14 +52,14 @@ def redact_sensitive_data(message: str) -> str:
         Sanitized message with sensitive data replaced with [REDACTED]
     """
     # Remove API keys (various formats)
-    message = re.sub(r'(api[_-]?key["\s:=]+)[^\s\'"]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+    message = re.sub(r'(api[_-]?key["\s:=]+)\S+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
     message = re.sub(r'(["\']api[_-]?key["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
     
     # Remove bearer tokens
-    message = re.sub(r'(bearer\s+)[^\s]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+    message = re.sub(r'(bearer\s+)\S+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
     
     # Remove tokens (various formats)
-    message = re.sub(r'(token["\s:=]+)[^\s\'"]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
+    message = re.sub(r'(token["\s:=]+)\S+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
     message = re.sub(r'(["\']token["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
     
     # Remove authorization headers
@@ -122,9 +122,13 @@ def log_structured(
     # Format as JSON-style structured log
     try:
         log_message = json.dumps(log_data, default=str)
+        # Redact sensitive data from the serialized JSON to catch any
+        # values that were converted to strings during serialization
+        log_message = redact_sensitive_data(log_message)
     except (TypeError, ValueError):
         # Fallback to simple format if JSON serialization fails
-        log_message = f"event={event} " + " ".join(f"{k}={v}" for k, v in log_data.items())
+        fallback_message = f"event={event} " + " ".join(f"{k}={v}" for k, v in log_data.items())
+        log_message = redact_sensitive_data(fallback_message)
     
     # Emit log at specified level
     logger.log(level, log_message)
