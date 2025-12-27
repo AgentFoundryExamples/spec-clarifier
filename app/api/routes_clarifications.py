@@ -94,7 +94,7 @@ def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
         "**Async Workflow:**\n"
         "1. POST /v1/clarifications → receive job_id\n"
         "2. Poll GET /v1/clarifications/{job_id} → check status (PENDING/RUNNING/SUCCESS/FAILED)\n"
-        "3. When status is SUCCESS → processing complete\n"
+        "3. When status is SUCCESS → processing complete"
     ),
     responses={
         202: {

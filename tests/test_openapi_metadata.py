@@ -288,25 +288,28 @@ class TestUUIDValidation:
     
     def test_all_uuid_examples_are_valid(self, openapi_schema):
         """Test that all UUID examples in responses are valid 36-character UUIDs."""
-        def check_for_uuids(obj, path=""):
-            """Recursively check for UUID fields and validate them."""
-            if isinstance(obj, dict):
-                for key, value in obj.items():
-                    if key in ["id", "job_id"] and isinstance(value, str):
-                        # This looks like a UUID, validate it
-                        assert len(value) == 36, f"Invalid UUID length at {path}.{key}: {value}"
-                        try:
-                            UUID(value)
-                        except ValueError:
-                            pytest.fail(f"Invalid UUID format at {path}.{key}: {value}")
-                    else:
-                        check_for_uuids(value, f"{path}.{key}")
-            elif isinstance(obj, list):
-                for i, item in enumerate(obj):
-                    check_for_uuids(item, f"{path}[{i}]")
+        def check_for_uuids_iterative(obj):
+            """Iteratively check for UUID fields and validate them."""
+            stack = [(obj, "")]
+            while stack:
+                current_obj, path = stack.pop()
+                if isinstance(current_obj, dict):
+                    for key, value in current_obj.items():
+                        current_path = f"{path}.{key}" if path else key
+                        if key in ["id", "job_id"] and isinstance(value, str):
+                            assert len(value) == 36, f"Invalid UUID length at {current_path}: {value}"
+                            try:
+                                UUID(value)
+                            except ValueError:
+                                pytest.fail(f"Invalid UUID format at {current_path}: {value}")
+                        else:
+                            stack.append((value, current_path))
+                elif isinstance(current_obj, list):
+                    for i, item in enumerate(current_obj):
+                        stack.append((item, f"{path}[{i}]"))
         
         # Check all examples in the schema
-        check_for_uuids(openapi_schema)
+        check_for_uuids_iterative(openapi_schema)
 
 
 class TestBackwardCompatibility:

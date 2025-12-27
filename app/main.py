@@ -38,6 +38,10 @@ def create_app() -> FastAPI:
     """
     settings = get_settings()
     
+    # Use hardcoded metadata per OpenAPI documentation requirements
+    # to ensure consistent, predictable service identification across
+    # all deployment environments. This makes the service easily
+    # discoverable and identifiable in API catalogs and documentation.
     app = FastAPI(
         title="Agent Foundry Clarification Service",
         version="0.1.0",
