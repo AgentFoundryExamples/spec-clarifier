@@ -7,10 +7,17 @@ A FastAPI service for clarifying specifications.
 - RESTful API built with FastAPI
 - Health check endpoint
 - Admin configuration endpoints for runtime config management
+- **Structured JSON logging with correlation IDs**
+- **Basic operational metrics endpoint (/v1/metrics/basic)**
+- **Automatic sensitive data redaction (API keys, tokens, prompts)**
 - OpenAPI documentation (Swagger UI)
 - Configuration via environment variables
 - In-memory job store for async clarification workflows
 - Thread-safe job management with TTL cleanup
+
+## Documentation
+
+- [Logging and Metrics Guide](docs/LOGGING_AND_METRICS.md) - Comprehensive guide to structured logging and metrics collection
 
 ## Prerequisites
 
