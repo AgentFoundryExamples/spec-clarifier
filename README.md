@@ -72,6 +72,45 @@ graph TB
 
 - [Logging and Metrics Guide](docs/LOGGING_AND_METRICS.md) - Comprehensive guide to structured logging and metrics collection
 
+## Quick Start
+
+**For local development (no API keys required):**
+
+```bash
+# 1. Clone and setup
+git clone <repository-url>
+cd spec-clarifier
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 2. Install dependencies
+pip install -e ".[dev]"
+
+# 3. Run the service (uses dummy mode by default)
+uvicorn app.main:app --reload
+
+# 4. Test the service
+curl http://localhost:8000/health
+
+# 5. View API documentation
+open http://localhost:8000/docs  # or visit in browser
+
+# 6. Run tests, formatting, linting
+make test
+make format
+make lint
+make type-check
+```
+
+**Key commands:**
+- `make help` - View all available commands
+- `make test` - Run test suite (uses dummy mode, no API calls)
+- `make format` - Format code with black
+- `make lint` - Lint code with ruff
+- `make type-check` - Type check with mypy
+
+**Note**: The service defaults to `LLM_PROVIDER=dummy` mode which requires no API keys and makes no external calls. This is perfect for local development, testing, and CI/CD pipelines without incurring costs.
+
 ## Prerequisites
 
 - Python 3.11 or higher
