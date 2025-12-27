@@ -86,8 +86,12 @@ class PlaceholderDownstreamDispatcher:
         """
         job_id = str(job.id)
         
-        # Serialize plan to JSON for logging
-        plan_json = json.dumps(plan.model_dump(), indent=2, ensure_ascii=False)
+        # Serialize plan to JSON for logging with error handling
+        try:
+            plan_json = json.dumps(plan.model_dump(), indent=2, ensure_ascii=False)
+        except (TypeError, ValueError) as e:
+            # Fallback to string representation if JSON serialization fails
+            plan_json = f"[JSON serialization failed: {e}]\n{str(plan)}"
         
         # Banner start - use print for high visibility in production logs
         banner_start = f"{'=' * 80}\n" \

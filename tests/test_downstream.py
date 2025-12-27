@@ -164,6 +164,34 @@ class TestPlaceholderDownstreamDispatcher:
         log_text = caplog.text
         assert "DOWNSTREAM DISPATCH START" in log_text
         assert "DOWNSTREAM DISPATCH END" in log_text
+    
+    async def test_placeholder_dispatcher_handles_serialization_errors_gracefully(self, caplog):
+        """Test that dispatcher handles JSON serialization errors gracefully."""
+        from unittest.mock import patch
+        
+        spec = SpecInput(purpose="Test", vision="Test")
+        plan_input = PlanInput(specs=[spec])
+        request = ClarificationRequest(plan=plan_input)
+        
+        job = create_job(request)
+        
+        clarified_plan = ClarifiedPlan(specs=[
+            ClarifiedSpec(purpose="Test", vision="Test")
+        ])
+        
+        dispatcher = PlaceholderDownstreamDispatcher()
+        
+        # Mock json.dumps to raise an error
+        with patch('app.services.downstream.json.dumps', side_effect=TypeError("Cannot serialize")):
+            with caplog.at_level(logging.INFO):
+                await dispatcher.dispatch(job, clarified_plan)
+        
+        # Should still log banners despite serialization error
+        log_text = caplog.text
+        assert "DOWNSTREAM DISPATCH START" in log_text
+        assert "DOWNSTREAM DISPATCH END" in log_text
+        # Should mention serialization failure
+        assert "JSON serialization failed" in log_text or "Cannot serialize" in log_text
 
 
 class TestGetDownstreamDispatcher:
