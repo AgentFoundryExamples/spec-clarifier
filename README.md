@@ -1059,7 +1059,7 @@ The job store handles several important edge cases:
 
 The spec-clarifier service includes a **DownstreamDispatcher** abstraction that serves as the **sole integration point** for forwarding clarified plans to downstream systems. After a clarification job completes successfully, the service invokes the configured dispatcher to send the clarified plan to your downstream processing pipeline.
 
-**Important**: Downstream dispatch is the **only** way to receive clarified plans in production workflows. The API endpoint `GET /v1/clarifications/{job_id}` returns metadata only (with `result: null` by default) and is not intended for result retrieval.
+**Important**: Downstream dispatch is the **only** way to receive clarified plans in production workflows. The API endpoint `GET /v1/clarifications/{job_id}` returns metadata only (the `result` field is `null` by default) and is not intended for retrieving the actual clarified plan data.
 
 ### File Location
 
@@ -1081,7 +1081,7 @@ The service currently ships with a **placeholder implementation** that logs clar
 2. A clear hook point for future integrations (marked with TODO comments)
 3. A debugging aid for operators to verify successful clarification
 
-**TODO Marker**: The placeholder class includes a comprehensive TODO comment (located within the `PlaceholderDownstreamDispatcher` class docstring around lines 72-79 in `app/services/downstream.py`) listing integration tasks:
+**TODO Marker**: The `PlaceholderDownstreamDispatcher` class docstring contains a comprehensive TODO comment with a complete integration checklist. **To locate it quickly**: Open `app/services/downstream.py` and navigate to lines 72-79 within the `PlaceholderDownstreamDispatcher` class. The TODO lists these integration tasks:
 - Determine target downstream system (HTTP endpoint, message queue, storage, etc.)
 - Implement error handling for network failures and timeouts
 - Add retry logic with exponential backoff for transient failures
@@ -1091,6 +1091,14 @@ The service currently ships with a **placeholder implementation** that logs clar
 - Add configuration for endpoint URLs and credentials via environment variables
 
 ### Replacing the Placeholder
+
+**Integration Approaches**: Consider these patterns for receiving clarified plans:
+
+1. **Webhook/HTTP Callback (Recommended)**: Configure the service to POST results to your HTTP endpoint. This is the simplest approach and works well for most integrations. The HTTP dispatcher example below demonstrates this pattern.
+
+2. **Message Queue**: Publish results to a message queue (RabbitMQ, Kafka, AWS SQS) for asynchronous processing, retry logic, and decoupling. Useful for high-volume or distributed systems.
+
+3. **Database/Storage**: Write results directly to a shared database or object storage (S3, Azure Blob). Useful when multiple systems need access to results.
 
 To integrate with a real downstream system, follow these steps:
 
@@ -1123,17 +1131,37 @@ class HTTPDownstreamDispatcher:
             )
             response.raise_for_status()
 
-# Example: Message queue dispatcher
+# Example: Message queue dispatcher (using AWS SQS as example)
 class QueueDownstreamDispatcher:
     def __init__(self, queue_url: str, queue_name: str):
         self.queue_url = queue_url
         self.queue_name = queue_name
-        # Initialize queue client (e.g., RabbitMQ, Kafka, SQS)
+        # Initialize queue client (e.g., boto3 for SQS, pika for RabbitMQ)
+        # Example: self.sqs_client = boto3.client('sqs')
     
     async def dispatch(self, job: ClarificationJob, plan: ClarifiedPlan) -> None:
         """Publish clarified plan to message queue."""
-        # Serialize and publish to queue
-        pass
+        import json
+        
+        message_body = json.dumps({
+            "job_id": str(job.id),
+            "status": job.status.value,
+            "clarified_plan": plan.model_dump(),
+            "created_at": job.created_at.isoformat(),
+        })
+        
+        # Example for AWS SQS:
+        # response = self.sqs_client.send_message(
+        #     QueueUrl=self.queue_url,
+        #     MessageBody=message_body
+        # )
+        
+        # Example for RabbitMQ:
+        # channel.basic_publish(
+        #     exchange='',
+        #     routing_key=self.queue_name,
+        #     body=message_body
+        # )
 ```
 
 #### 2. Update the Factory Function
@@ -1148,16 +1176,33 @@ def get_downstream_dispatcher() -> DownstreamDispatcher:
     dispatcher_type = os.getenv("DOWNSTREAM_DISPATCHER_TYPE", "placeholder")
     
     if dispatcher_type == "http":
-        return HTTPDownstreamDispatcher(
-            endpoint=os.getenv("DOWNSTREAM_HTTP_ENDPOINT"),
-            api_key=os.getenv("DOWNSTREAM_API_KEY")
-        )
+        endpoint = os.getenv("DOWNSTREAM_HTTP_ENDPOINT")
+        api_key = os.getenv("DOWNSTREAM_API_KEY")
+        
+        # Validate required environment variables
+        if not endpoint or not api_key:
+            raise ValueError(
+                "For 'http' dispatcher, DOWNSTREAM_HTTP_ENDPOINT and "
+                "DOWNSTREAM_API_KEY environment variables must be set."
+            )
+        
+        return HTTPDownstreamDispatcher(endpoint=endpoint, api_key=api_key)
+    
     elif dispatcher_type == "queue":
-        return QueueDownstreamDispatcher(
-            queue_url=os.getenv("DOWNSTREAM_QUEUE_URL"),
-            queue_name=os.getenv("DOWNSTREAM_QUEUE_NAME")
-        )
+        queue_url = os.getenv("DOWNSTREAM_QUEUE_URL")
+        queue_name = os.getenv("DOWNSTREAM_QUEUE_NAME")
+        
+        # Validate required environment variables
+        if not queue_url or not queue_name:
+            raise ValueError(
+                "For 'queue' dispatcher, DOWNSTREAM_QUEUE_URL and "
+                "DOWNSTREAM_QUEUE_NAME environment variables must be set."
+            )
+        
+        return QueueDownstreamDispatcher(queue_url=queue_url, queue_name=queue_name)
+    
     else:
+        # Default to placeholder for development/testing
         return PlaceholderDownstreamDispatcher()
 ```
 
@@ -1177,7 +1222,18 @@ export DOWNSTREAM_QUEUE_URL=amqp://localhost:5672
 export DOWNSTREAM_QUEUE_NAME=clarified-plans
 ```
 
-**Security Note**: Never commit credentials to source control. Use environment variables, secret management systems, or configuration files excluded from version control. The current implementation intentionally does not include credential configuration to prevent accidental exposure.
+**Security Best Practices**:
+
+⚠️ **Critical Security Requirements**:
+- **Never commit credentials to source control** - Use environment variables, AWS Secrets Manager, HashiCorp Vault, or similar secret management systems
+- **Validate all environment variables** - The factory function example above shows validation to fail fast if required credentials are missing
+- **Use HTTPS for HTTP dispatchers** - Never send clarified plans or credentials over unencrypted connections
+- **Rotate credentials regularly** - Implement credential rotation policies for API keys and tokens
+- **Restrict network access** - Use firewall rules, VPCs, or security groups to limit which services can receive dispatched results
+- **Implement authentication** - Always use authentication (API keys, OAuth tokens, mutual TLS) for downstream endpoints
+- **Log dispatch operations** - The service logs dispatch events with structured logging (see [Structured Logging and Metrics](#structured-logging-and-metrics)) but never logs credentials or full plan content
+
+The example code intentionally shows credential handling via environment variables to prevent accidental hardcoding. Adapt the security measures to your organization's requirements.
 
 ### Dispatcher Behavior and Error Handling
 
