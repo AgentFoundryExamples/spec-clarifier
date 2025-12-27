@@ -107,14 +107,15 @@ def disabled_config_client(monkeypatch):
 
     Returns:
         TestClient: Test client with config admin endpoints disabled
+
+    Note:
+        The autouse `clear_settings_cache` fixture handles cache clearing
+        before and after each test, so explicit cleanup is not needed here.
     """
     monkeypatch.setenv("APP_ENABLE_CONFIG_ADMIN_ENDPOINTS", "false")
     get_settings.cache_clear()
     app = create_app()
-    client = TestClient(app)
-    yield client
-    # Clean up: clear cache after test completes
-    get_settings.cache_clear()
+    return TestClient(app)
 
 
 # =============================================================================
@@ -122,7 +123,7 @@ def disabled_config_client(monkeypatch):
 # =============================================================================
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True, scope='function')
 def clean_job_store():
     """Clean the job store before and after each test (autouse).
 
@@ -131,6 +132,7 @@ def clean_job_store():
     test pollution and ensuring deterministic test behavior.
 
     This is the primary job store fixture used by most test modules.
+    Explicit scope='function' ensures each test gets a clean job store.
     """
     clear_all_jobs()
     yield
