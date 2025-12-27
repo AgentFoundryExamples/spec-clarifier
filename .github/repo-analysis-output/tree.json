@@ -120,6 +120,10 @@
             },
             {
               "type": "file",
+              "name": "downstream.py"
+            },
+            {
+              "type": "file",
               "name": "job_store.py"
             },
             {
@@ -197,6 +201,10 @@
         {
           "type": "file",
           "name": "test_config_admin_api.py"
+        },
+        {
+          "type": "file",
+          "name": "test_downstream.py"
         },
         {
           "type": "file",

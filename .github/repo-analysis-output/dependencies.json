@@ -175,6 +175,19 @@
       }
     },
     {
+      "id": "app/services/downstream.py",
+      "path": "app/services/downstream.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "json",
+          "logging",
+          "typing.Protocol"
+        ],
+        "third-party": []
+      }
+    },
+    {
       "id": "app/services/job_store.py",
       "path": "app/services/job_store.py",
       "type": "file",
@@ -306,6 +319,8 @@
       "external_dependencies": {
         "stdlib": [
           "json",
+          "logging",
+          "unittest.mock.AsyncMock",
           "unittest.mock.MagicMock",
           "unittest.mock.patch"
         ],
@@ -358,6 +373,22 @@
         ],
         "third-party": [
           "fastapi.testclient.TestClient",
+          "pytest"
+        ]
+      }
+    },
+    {
+      "id": "tests/test_downstream.py",
+      "path": "tests/test_downstream.py",
+      "type": "file",
+      "external_dependencies": {
+        "stdlib": [
+          "logging",
+          "unittest.mock.MagicMock",
+          "unittest.mock.patch",
+          "uuid.uuid4"
+        ],
+        "third-party": [
           "pytest"
         ]
       }
@@ -610,6 +641,10 @@
     },
     {
       "source": "app/services/clarification.py",
+      "target": "app/services/downstream.py"
+    },
+    {
+      "source": "app/services/clarification.py",
       "target": "app/services/llm_clients.py"
     },
     {
@@ -619,6 +654,14 @@
     {
       "source": "app/services/clarification.py",
       "target": "app/utils/metrics.py"
+    },
+    {
+      "source": "app/services/downstream.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "app/services/downstream.py",
+      "target": "app/utils/logging_helper.py"
     },
     {
       "source": "app/services/job_store.py",
@@ -719,6 +762,18 @@
     {
       "source": "tests/test_config_admin_api.py",
       "target": "app/models/config_models.py"
+    },
+    {
+      "source": "tests/test_downstream.py",
+      "target": "app/models/specs.py"
+    },
+    {
+      "source": "tests/test_downstream.py",
+      "target": "app/services/downstream.py"
+    },
+    {
+      "source": "tests/test_downstream.py",
+      "target": "app/services/job_store.py"
     },
     {
       "source": "tests/test_health.py",
@@ -827,6 +882,7 @@
       "typing.Optional",
       "typing.Protocol",
       "typing.Tuple",
+      "unittest.mock.AsyncMock",
       "unittest.mock.MagicMock",
       "unittest.mock.Mock",
       "unittest.mock.patch",
@@ -871,7 +927,7 @@
       "pytest",
       "starlette.middleware.cors.CORSMiddleware"
     ],
-    "stdlib_count": 30,
+    "stdlib_count": 31,
     "third-party_count": 35
   }
 }

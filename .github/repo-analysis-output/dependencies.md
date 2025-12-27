@@ -8,16 +8,16 @@ Includes classification of external dependencies as stdlib vs third-party.
 
 ## Statistics
 
-- **Total files**: 33
-- **Intra-repo dependencies**: 68
-- **External stdlib dependencies**: 30
+- **Total files**: 35
+- **Intra-repo dependencies**: 74
+- **External stdlib dependencies**: 31
 - **External third-party dependencies**: 35
 
 ## External Dependencies
 
 ### Standard Library / Core Modules
 
-Total: 30 unique modules
+Total: 31 unique modules
 
 - `abc.ABC`
 - `abc.abstractmethod`
@@ -39,7 +39,7 @@ Total: 30 unique modules
 - `typing.Any`
 - `typing.Dict`
 - `typing.List`
-- ... and 10 more (see JSON for full list)
+- ... and 11 more (see JSON for full list)
 
 ### Third-Party Packages
 
@@ -69,20 +69,20 @@ Total: 35 unique packages
 
 ## Most Depended Upon Files (Intra-Repo)
 
-- `app/models/specs.py` (13 dependents)
-- `app/services/job_store.py` (8 dependents)
+- `app/models/specs.py` (15 dependents)
+- `app/services/job_store.py` (9 dependents)
 - `app/config.py` (7 dependents)
 - `app/services/llm_clients.py` (7 dependents)
 - `app/models/config_models.py` (7 dependents)
 - `app/services/clarification.py` (6 dependents)
 - `app/utils/metrics.py` (6 dependents)
+- `app/utils/logging_helper.py` (6 dependents)
 - `app/main.py` (6 dependents)
-- `app/utils/logging_helper.py` (5 dependents)
-- `app/api/routes_health.py` (1 dependents)
+- `app/services/downstream.py` (2 dependents)
 
 ## Files with Most Dependencies (Intra-Repo)
 
-- `app/services/clarification.py` (6 dependencies)
+- `app/services/clarification.py` (7 dependencies)
 - `app/api/routes_clarifications.py` (5 dependencies)
 - `tests/test_clarifications_api.py` (5 dependencies)
 - `tests/test_llm_integration.py` (5 dependencies)
