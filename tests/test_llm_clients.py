@@ -2021,14 +2021,20 @@ class TestAnthropicResponsesClient:
 class TestGetLLMClientFactory:
     """Tests for get_llm_client factory function."""
     
-    def test_factory_creates_openai_client(self):
+    def test_factory_creates_openai_client(self, monkeypatch):
         """Test that factory creates OpenAIResponsesClient for 'openai' provider."""
+        # Mock the OPENAI_API_KEY environment variable
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        
         config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
         client = get_llm_client("openai", config)
         assert isinstance(client, OpenAIResponsesClient)
     
-    def test_factory_creates_anthropic_client(self):
+    def test_factory_creates_anthropic_client(self, monkeypatch):
         """Test that factory creates AnthropicResponsesClient for 'anthropic' provider."""
+        # Mock the ANTHROPIC_API_KEY environment variable
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
+        
         config = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
         client = get_llm_client("anthropic", config)
         assert isinstance(client, AnthropicResponsesClient)
@@ -2070,8 +2076,11 @@ class TestGetLLMClientFactory:
             get_llm_client("   ", config)
         assert "provider must not be empty or blank" in str(exc_info.value)
     
-    def test_factory_normalizes_provider_case(self):
+    def test_factory_normalizes_provider_case(self, monkeypatch):
         """Test that factory handles different case variations of provider names."""
+        # Mock the OPENAI_API_KEY environment variable
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        
         config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
         
         # All these should work
@@ -2085,8 +2094,11 @@ class TestGetLLMClientFactory:
         assert isinstance(client3, OpenAIResponsesClient)
         assert isinstance(client4, OpenAIResponsesClient)
     
-    def test_factory_normalizes_anthropic_case(self):
+    def test_factory_normalizes_anthropic_case(self, monkeypatch):
         """Test that factory handles different case variations for Anthropic."""
+        # Mock the ANTHROPIC_API_KEY environment variable
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
+        
         config = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
         
         client1 = get_llm_client("Anthropic", config)
@@ -2120,8 +2132,12 @@ class TestGetLLMClientFactory:
         # Should be different instances
         assert client1 is not client2
     
-    def test_factory_accepts_config_parameter(self):
+    def test_factory_accepts_config_parameter(self, monkeypatch):
         """Test that factory accepts and uses config parameter."""
+        # Mock both API keys
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
+        
         config1 = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
         config2 = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
         
@@ -2160,8 +2176,12 @@ class TestGetLLMClientFactory:
             get_llm_client("google", config)
         assert "not yet implemented" in str(exc_info2.value).lower()
     
-    def test_factory_returns_llm_client_protocol_implementations(self):
+    def test_factory_returns_llm_client_protocol_implementations(self, monkeypatch):
         """Test that all clients returned by factory implement LLMClient protocol."""
+        # Mock both API keys
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-12345")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-12345")
+        
         config_openai = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
         config_anthropic = ClarificationLLMConfig(provider="anthropic", model="claude-sonnet-4.5")
         # Use valid provider for config even though factory will create dummy

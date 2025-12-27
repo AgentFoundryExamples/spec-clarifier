@@ -85,7 +85,13 @@ def test_global_exception_handler_in_production():
         response = client.get("/test-error")
         
         assert response.status_code == 500
-        assert response.json() == {"detail": "Internal server error"}
+        # Should return sanitized error with correlation_id
+        response_json = response.json()
+        assert response_json["detail"] == "Internal server error"
+        assert "correlation_id" in response_json
+        # correlation_id should be a valid UUID string
+        import uuid
+        uuid.UUID(response_json["correlation_id"])  # Should not raise
 
 
 def test_exception_handler_not_registered_in_debug_mode():

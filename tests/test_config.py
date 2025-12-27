@@ -315,8 +315,8 @@ class TestGlobalDefaults:
         defaults = GlobalDefaults()
         config = defaults.get_default_config()
         
-        assert config.provider == "openai"
-        assert config.model == "gpt-5.1"
+        assert config.provider == "dummy"
+        assert config.model == "test-model"
         assert config.system_prompt_id == "default"
         assert config.temperature == 0.1
         assert config.max_tokens is None
@@ -428,8 +428,8 @@ class TestConfigHelperFunctions:
         
         config = get_default_config()
         
-        assert config.provider == "openai"
-        assert config.model == "gpt-5.1"
+        assert config.provider == "dummy"
+        assert config.model == "test-model"
         assert config.system_prompt_id == "default"
     
     def test_set_default_config(self):
