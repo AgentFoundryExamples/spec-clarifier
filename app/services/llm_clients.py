@@ -48,14 +48,12 @@ Each provider implementation should:
 
 import logging
 import re
-from abc import ABC, abstractmethod
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.utils.logging_helper import log_info, log_error
+from app.utils.logging_helper import log_error, log_info
 from app.utils.metrics import get_metrics_collector
-
 
 # Provider constants
 PROVIDER_OPENAI = "openai"
@@ -76,12 +74,12 @@ class LLMCallError(Exception):
         original_error: The original exception (if available)
         provider: The LLM provider that failed (if known)
     """
-    
+
     def __init__(
         self,
         message: str,
-        original_error: Optional[Exception] = None,
-        provider: Optional[str] = None
+        original_error: Exception | None = None,
+        provider: str | None = None
     ):
         """Initialize LLMCallError with sanitized message.
         
@@ -95,7 +93,7 @@ class LLMCallError(Exception):
         self.message = sanitized_message
         self.original_error = original_error
         self.provider = provider
-    
+
     @staticmethod
     def _sanitize_message(message: str) -> str:
         """Remove potential secrets from error messages.
@@ -113,26 +111,26 @@ class LLMCallError(Exception):
         message = re.sub(r'(api[_-]?key["\s:=]+)[^\s\'"]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
         message = re.sub(r'(["\']api[_-]?key["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
         message = re.sub(r'(api[_-]?key%3D)[^&\s]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-        
+
         # Remove bearer tokens
         message = re.sub(r'(bearer\s+)[^\s]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-        
+
         # Remove tokens (various formats including JSON and URL-encoded)
         message = re.sub(r'(token["\s:=]+)[^\s\'"]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
         message = re.sub(r'(["\']token["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
         message = re.sub(r'(token%3D)[^&\s]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-        
+
         # Remove authorization headers
         message = re.sub(r'(authorization["\s:]+)[^\r\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-        
+
         # Remove x-api-key headers
         message = re.sub(r'(x-api-key["\s:]+)[^\r\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-        
+
         # Remove secrets in JSON format (generic patterns)
         message = re.sub(r'(["\'](?:secret|key|password|apikey)["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
-        
+
         return message
-    
+
     def __str__(self) -> str:
         """Return sanitized error message."""
         return self.message
@@ -170,7 +168,7 @@ class ClarificationLLMConfig(BaseModel):
         temperature: Sampling temperature (0.0-2.0), defaults to 0.1 for deterministic output
         max_tokens: Optional maximum tokens to generate in response
     """
-    
+
     provider: str = Field(
         ...,
         description="LLM provider identifier (openai, anthropic, google)"
@@ -185,12 +183,12 @@ class ClarificationLLMConfig(BaseModel):
         le=2.0,
         description="Sampling temperature for response generation"
     )
-    max_tokens: Optional[int] = Field(
+    max_tokens: int | None = Field(
         default=None,
         gt=0,
         description="Maximum tokens to generate in response"
     )
-    
+
     @field_validator("provider")
     @classmethod
     def validate_provider(cls, v: str) -> str:
@@ -212,7 +210,7 @@ class ClarificationLLMConfig(BaseModel):
                 f"Invalid provider '{v}'. Must be one of: {', '.join(sorted(valid_providers))}"
             )
         return v
-    
+
     @field_validator("model")
     @classmethod
     def validate_model(cls, v: str) -> str:
@@ -250,7 +248,7 @@ class LLMClient(Protocol):
         - GoogleClient: Wraps Google Gemini API
         - DummyLLMClient: Test double for deterministic testing
     """
-    
+
     async def complete(
         self,
         system_prompt: str,
@@ -311,10 +309,10 @@ class DummyLLMClient:
         failure_message: Custom error message for simulated failures
         failure_type: Type of error to simulate (LLMCallError subclass)
     """
-    
+
     def __init__(
         self,
-        canned_response: Optional[str] = None,
+        canned_response: str | None = None,
         echo_prompts: bool = False,
         simulate_failure: bool = False,
         failure_message: str = "Simulated LLM failure",
@@ -331,17 +329,17 @@ class DummyLLMClient:
         """
         if simulate_failure and not issubclass(failure_type, LLMCallError):
             raise TypeError("failure_type must be a subclass of LLMCallError")
-        
+
         self.canned_response = canned_response
         self.echo_prompts = echo_prompts
         self.simulate_failure = simulate_failure
         self.failure_message = failure_message
         self.failure_type = failure_type
-        
+
         # Default canned response if nothing specified
         if not canned_response and not echo_prompts:
             self.canned_response = '{"clarified": true}'
-    
+
     async def complete(
         self,
         system_prompt: str,
@@ -371,22 +369,22 @@ class DummyLLMClient:
             raise ValueError("user_prompt must not be empty or blank")
         if not model or not model.strip():
             raise ValueError("model must not be empty or blank")
-        
+
         # Simulate failure if configured
         if self.simulate_failure:
             raise self.failure_type(
                 message=self.failure_message,
                 provider="dummy"
             )
-        
+
         # Return canned response if provided
         if self.canned_response is not None:
             return self.canned_response
-        
+
         # Echo prompts if configured
         if self.echo_prompts:
             return f"System: {system_prompt}\nUser: {user_prompt}\nModel: {model}"
-        
+
         # Fallback (should never reach here due to __init__ logic)
         return '{"clarified": true}'
 
@@ -420,8 +418,8 @@ class OpenAIResponsesClient:
             max_tokens=500
         )
     """
-    
-    def __init__(self, api_key: Optional[str] = None):
+
+    def __init__(self, api_key: str | None = None):
         """Initialize OpenAIResponsesClient with optional API key.
         
         Args:
@@ -430,9 +428,9 @@ class OpenAIResponsesClient:
                     creation until first API call.
         """
         self._api_key = api_key
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
         self._logger = logging.getLogger(__name__)
-    
+
     def _get_client(self) -> Any:
         """Get or create AsyncOpenAI client instance (lazy initialization).
         
@@ -452,23 +450,23 @@ class OpenAIResponsesClient:
                     original_error=e,
                     provider=PROVIDER_OPENAI
                 )
-            
+
             # Get API key from instance or environment
             import os
             api_key = self._api_key or os.environ.get("OPENAI_API_KEY")
-            
+
             if not api_key:
                 raise LLMCallError(
                     "OPENAI_API_KEY environment variable is not set. "
                     "Please set it with a valid OpenAI API key.",
                     provider=PROVIDER_OPENAI
                 )
-            
+
             self._client = AsyncOpenAI(api_key=api_key)
             self._logger.debug("Initialized AsyncOpenAI client")
-        
+
         return self._client
-    
+
     async def complete(
         self,
         system_prompt: str,
@@ -516,36 +514,36 @@ class OpenAIResponsesClient:
             raise ValueError("user_prompt must not be empty or blank")
         if not model or not model.strip():
             raise ValueError("model must not be empty or blank")
-        
+
         # Get or create client
         client = self._get_client()
-        
+
         # Prepare API parameters - map our kwargs to OpenAI's parameter names
         api_params = {
             "model": model,
             "instructions": system_prompt,
             "input": user_prompt,
         }
-        
+
         # Map max_tokens to max_output_tokens for Responses API
         if "max_tokens" in kwargs:
             api_params["max_output_tokens"] = kwargs.pop("max_tokens")
-        
+
         # Pass through other parameters
         api_params.update(kwargs)
-        
+
         # Track timing for logging using perf_counter for better async performance
         import time
         start_time = time.perf_counter()
-        
+
         try:
             from openai import (
-                APIError,
-                AuthenticationError,
-                RateLimitError,
                 APIConnectionError,
-                BadRequestError,
+                APIError,
                 APITimeoutError,
+                AuthenticationError,
+                BadRequestError,
+                RateLimitError,
             )
         except ImportError as import_err:
             raise LLMCallError(
@@ -553,17 +551,17 @@ class OpenAIResponsesClient:
                 original_error=import_err,
                 provider=PROVIDER_OPENAI
             ) from import_err
-        
+
         try:
             # Call OpenAI Responses API
             response = await client.responses.create(**api_params)
-            
+
         except (AuthenticationError, RateLimitError, BadRequestError, APIConnectionError, APITimeoutError, APIError) as e:
             # Calculate elapsed time for error logging
             elapsed_time = time.perf_counter() - start_time
             metrics = get_metrics_collector()
             metrics.increment("llm_errors")
-            
+
             # Map OpenAI errors to our error hierarchy
             if isinstance(e, AuthenticationError):
                 log_error(
@@ -579,7 +577,7 @@ class OpenAIResponsesClient:
                     original_error=e,
                     provider=PROVIDER_OPENAI
                 ) from e
-            
+
             if isinstance(e, RateLimitError):
                 log_error(
                     self._logger,
@@ -594,7 +592,7 @@ class OpenAIResponsesClient:
                     original_error=e,
                     provider=PROVIDER_OPENAI
                 ) from e
-            
+
             if isinstance(e, BadRequestError):
                 log_error(
                     self._logger,
@@ -609,7 +607,7 @@ class OpenAIResponsesClient:
                     original_error=e,
                     provider=PROVIDER_OPENAI
                 ) from e
-            
+
             if isinstance(e, (APIConnectionError, APITimeoutError)):
                 log_error(
                     self._logger,
@@ -624,7 +622,7 @@ class OpenAIResponsesClient:
                     original_error=e,
                     provider=PROVIDER_OPENAI
                 ) from e
-            
+
             # Fallback for other APIError subclasses
             log_error(
                 self._logger,
@@ -639,10 +637,10 @@ class OpenAIResponsesClient:
                 original_error=e,
                 provider=PROVIDER_OPENAI
             ) from e
-        
+
         # Extract text from response (outside the API error handling block)
         text_content = response.output_text
-        
+
         # If output_text is empty and we have output, try to extract from output list manually
         if not text_content and hasattr(response, "output"):
             text_parts = []
@@ -656,7 +654,7 @@ class OpenAIResponsesClient:
                                 if hasattr(content_part, "text"):
                                     text_parts.append(content_part.text)
             text_content = "".join(text_parts)
-        
+
         # Validate that we got some content
         if not text_content:
             log_error(
@@ -665,7 +663,7 @@ class OpenAIResponsesClient:
                 provider=PROVIDER_OPENAI,
                 model=model
             )
-        
+
         # Log success (provider, model, duration only)
         elapsed_time = time.perf_counter() - start_time
         log_info(
@@ -675,7 +673,7 @@ class OpenAIResponsesClient:
             model=model,
             elapsed_seconds=round(elapsed_time, 2)
         )
-        
+
         return text_content
 
 
@@ -727,25 +725,25 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
     # Validate provider parameter
     if not provider or not provider.strip():
         raise ValueError("provider must not be empty or blank")
-    
+
     provider = provider.strip().lower()
-    
+
     # Special case: 'dummy' provider for testing (not in SUPPORTED_PROVIDERS)
     if provider == "dummy":
         # For dummy client, we return a default canned response
         # Tests can customize behavior by creating DummyLLMClient directly
         return DummyLLMClient()
-    
+
     # Validate against supported providers
     if provider not in SUPPORTED_PROVIDERS:
         raise ValueError(
             f"Unsupported provider '{provider}'. "
             f"Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}, dummy"
         )
-    
+
     # Check for required API keys before creating real provider clients
     import os
-    
+
     # Route to provider-specific implementation
     # Note: Clients currently use environment variables for API keys.
     # Future enhancement: Pass config.api_key if/when added to ClarificationLLMConfig
@@ -759,7 +757,7 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
                 provider=PROVIDER_OPENAI
             )
         return OpenAIResponsesClient()
-    
+
     elif provider == PROVIDER_ANTHROPIC:
         # Validate API key is present
         api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -770,7 +768,7 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
                 provider=PROVIDER_ANTHROPIC
             )
         return AnthropicResponsesClient()
-    
+
     elif provider == PROVIDER_GOOGLE:
         # TODO: Implement GoogleClient when Google Gemini integration is ready
         # For now, raise an error indicating this is not yet implemented
@@ -778,7 +776,7 @@ def get_llm_client(provider: str, config: ClarificationLLMConfig) -> Any:
             f"Provider '{PROVIDER_GOOGLE}' is supported but not yet implemented. "
             "Google Gemini integration is coming soon."
         )
-    
+
     else:
         # This should never be reached due to SUPPORTED_PROVIDERS check above,
         # but included for completeness and future-proofing
@@ -815,11 +813,11 @@ class AnthropicResponsesClient:
             max_tokens=500
         )
     """
-    
+
     # Default model constants
     DEFAULT_MODEL = "claude-sonnet-4.5"
-    
-    def __init__(self, api_key: Optional[str] = None):
+
+    def __init__(self, api_key: str | None = None):
         """Initialize AnthropicResponsesClient with optional API key.
         
         Args:
@@ -828,9 +826,9 @@ class AnthropicResponsesClient:
                     creation until first API call.
         """
         self._api_key = api_key
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
         self._logger = logging.getLogger(__name__)
-    
+
     def _get_client(self) -> Any:
         """Get or create AsyncAnthropic client instance (lazy initialization).
         
@@ -850,23 +848,23 @@ class AnthropicResponsesClient:
                     original_error=e,
                     provider=PROVIDER_ANTHROPIC
                 )
-            
+
             # Get API key from instance or environment
             import os
             api_key = self._api_key or os.environ.get("ANTHROPIC_API_KEY")
-            
+
             if not api_key:
                 raise LLMCallError(
                     "Anthropic API key is not set. Please provide it via the "
                     "'api_key' argument or set the ANTHROPIC_API_KEY environment variable.",
                     provider=PROVIDER_ANTHROPIC
                 )
-            
+
             self._client = AsyncAnthropic(api_key=api_key)
             self._logger.debug("Initialized AsyncAnthropic client")
-        
+
         return self._client
-    
+
     async def complete(
         self,
         system_prompt: str,
@@ -914,19 +912,19 @@ class AnthropicResponsesClient:
             raise ValueError("user_prompt must not be empty or blank")
         if not model or not model.strip():
             raise ValueError("model must not be empty or blank")
-        
+
         # Get or create client
         client = self._get_client()
-        
+
         # Import exception classes (after client is created, so anthropic is available)
         try:
             from anthropic import (
-                APIError,
-                AuthenticationError,
-                RateLimitError,
                 APIConnectionError,
-                BadRequestError,
+                APIError,
                 APITimeoutError,
+                AuthenticationError,
+                BadRequestError,
+                RateLimitError,
                 UnprocessableEntityError,
             )
         except ImportError as import_err:
@@ -935,7 +933,7 @@ class AnthropicResponsesClient:
                 original_error=import_err,
                 provider=PROVIDER_ANTHROPIC
             ) from import_err
-        
+
         # Prepare API parameters - Anthropic Messages API format
         api_params = {
             "model": model,
@@ -947,32 +945,32 @@ class AnthropicResponsesClient:
                 }
             ],
         }
-        
+
         # Ensure max_tokens is present (required by Anthropic)
         if "max_tokens" not in kwargs:
             # Use a reasonable default if not specified
             api_params["max_tokens"] = 4096
         else:
             api_params["max_tokens"] = kwargs.pop("max_tokens")
-        
+
         # Pass through other parameters
         api_params.update(kwargs)
-        
+
         # Track timing for logging using perf_counter for better async performance
         import time
         start_time = time.perf_counter()
-        
+
         try:
             # Call Anthropic Messages API
             response = await client.messages.create(**api_params)
-            
-        except (AuthenticationError, RateLimitError, BadRequestError, UnprocessableEntityError, 
+
+        except (AuthenticationError, RateLimitError, BadRequestError, UnprocessableEntityError,
                 APIConnectionError, APITimeoutError, APIError) as e:
             # Calculate elapsed time for error logging
             elapsed_time = time.perf_counter() - start_time
             metrics = get_metrics_collector()
             metrics.increment("llm_errors")
-            
+
             # Map Anthropic errors to our error hierarchy
             if isinstance(e, AuthenticationError):
                 log_error(
@@ -988,7 +986,7 @@ class AnthropicResponsesClient:
                     original_error=e,
                     provider=PROVIDER_ANTHROPIC
                 ) from e
-            
+
             elif isinstance(e, RateLimitError):
                 log_error(
                     self._logger,
@@ -1003,7 +1001,7 @@ class AnthropicResponsesClient:
                     original_error=e,
                     provider=PROVIDER_ANTHROPIC
                 ) from e
-            
+
             elif isinstance(e, (BadRequestError, UnprocessableEntityError)):
                 log_error(
                     self._logger,
@@ -1018,7 +1016,7 @@ class AnthropicResponsesClient:
                     original_error=e,
                     provider=PROVIDER_ANTHROPIC
                 ) from e
-            
+
             elif isinstance(e, (APIConnectionError, APITimeoutError)):
                 log_error(
                     self._logger,
@@ -1033,7 +1031,7 @@ class AnthropicResponsesClient:
                     original_error=e,
                     provider=PROVIDER_ANTHROPIC
                 ) from e
-            
+
             else:
                 # Fallback for other APIError subclasses
                 log_error(
@@ -1049,7 +1047,7 @@ class AnthropicResponsesClient:
                     original_error=e,
                     provider=PROVIDER_ANTHROPIC
                 ) from e
-        
+
         # Extract text from response content array
         text_parts = []
         for content_block in response.content:
@@ -1057,9 +1055,9 @@ class AnthropicResponsesClient:
             if hasattr(content_block, "type") and content_block.type == "text":
                 if hasattr(content_block, "text"):
                     text_parts.append(content_block.text)
-        
+
         text_content = "".join(text_parts)
-        
+
         # Validate that we got some content
         if not text_content:
             log_error(
@@ -1068,7 +1066,7 @@ class AnthropicResponsesClient:
                 provider=PROVIDER_ANTHROPIC,
                 model=model
             )
-        
+
         # Log success (provider, model, duration only)
         elapsed_time = time.perf_counter() - start_time
         log_info(
@@ -1078,5 +1076,5 @@ class AnthropicResponsesClient:
             model=model,
             elapsed_seconds=round(elapsed_time, 2)
         )
-        
+
         return text_content

@@ -14,20 +14,19 @@
 """Admin configuration endpoints for managing global defaults."""
 
 import logging
-from typing import Dict, List
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import (
-    get_settings,
-    get_default_config,
-    set_default_config,
-    get_allowed_models,
     ConfigValidationError,
+    get_allowed_models,
+    get_default_config,
+    get_settings,
+    set_default_config,
 )
 from app.models.config_models import ClarificationConfig
-from app.utils.logging_helper import log_info, log_warning, log_error
+from app.utils.logging_helper import log_error, log_info, log_warning
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class DefaultsResponse(BaseModel):
     default_config: ClarificationConfig = Field(
         description="Current default ClarificationConfig used when no config is provided"
     )
-    allowed_models: Dict[str, List[str]] = Field(
+    allowed_models: dict[str, list[str]] = Field(
         description="Dictionary mapping provider names to lists of allowed model names"
     )
 
@@ -55,7 +54,7 @@ def _check_config_admin_enabled():
         HTTPException: 403 if endpoints are disabled
     """
     settings = get_settings()
-    
+
     if not settings.enable_config_admin_endpoints:
         log_warning(logger, "config_admin_endpoint_disabled_access_attempt")
         raise HTTPException(
@@ -133,9 +132,9 @@ def get_defaults() -> DefaultsResponse:
         HTTPException: 403 if config admin endpoints are disabled
     """
     _check_config_admin_enabled()
-    
+
     log_info(logger, "config_admin_get_defaults_accessed")
-    
+
     return DefaultsResponse(
         default_config=get_default_config(),
         allowed_models=get_allowed_models(),
@@ -265,19 +264,19 @@ def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
         HTTPException: 403 if config admin endpoints are disabled
     """
     _check_config_admin_enabled()
-    
+
     log_warning(
         logger,
         "config_admin_update_defaults_accessed",
         provider=config.provider,
         model=config.model
     )
-    
+
     try:
         # Validate and set the new default
         # This will raise ConfigValidationError if provider/model is invalid
         set_default_config(config)
-        
+
         log_info(
             logger,
             "config_admin_defaults_updated",
@@ -287,13 +286,13 @@ def update_defaults(config: ClarificationConfig) -> DefaultsResponse:
             temperature=config.temperature,
             max_tokens=config.max_tokens
         )
-        
+
         # Return the config that was just set to avoid race conditions
         return DefaultsResponse(
             default_config=config,
             allowed_models=get_allowed_models(),
         )
-        
+
     except ConfigValidationError as e:
         log_warning(logger, "config_validation_failed", error_message=str(e))
         raise HTTPException(status_code=400, detail=str(e))

@@ -17,11 +17,11 @@ import json
 import logging
 import re
 import uuid
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 
-def get_correlation_id(job_id: Optional[UUID] = None) -> str:
+def get_correlation_id(job_id: UUID | None = None) -> str:
     """Get or generate a correlation ID for tracing requests.
     
     If a job_id is provided, it will be used as the correlation ID.
@@ -54,26 +54,26 @@ def redact_sensitive_data(message: str) -> str:
     # Remove API keys (various formats)
     message = re.sub(r'(api[_-]?key["\s:=]+)\S+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
     message = re.sub(r'(["\']api[_-]?key["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
-    
+
     # Remove bearer tokens
     message = re.sub(r'(bearer\s+)\S+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-    
+
     # Remove tokens (various formats)
     message = re.sub(r'(token["\s:=]+)\S+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
     message = re.sub(r'(["\']token["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
-    
+
     # Remove authorization headers
     message = re.sub(r'(authorization["\s:]+)[^\r\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-    
+
     # Remove x-api-key headers
     message = re.sub(r'(x-api-key["\s:]+)[^\r\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-    
+
     # Remove secrets in JSON format
     message = re.sub(r'(["\'](?:secret|key|password|apikey)["\']\s*:\s*["\'])[^"\'\n\r]+?(["\'])', r'\1[REDACTED]\2', message, flags=re.IGNORECASE)
-    
+
     # Remove prompts if explicitly labeled
     message = re.sub(r'(prompt["\s:=]+)[^\n]+', r'\1[REDACTED]', message, flags=re.IGNORECASE)
-    
+
     return message
 
 
@@ -81,8 +81,8 @@ def log_structured(
     logger: logging.Logger,
     level: int,
     event: str,
-    correlation_id: Optional[str] = None,
-    job_id: Optional[UUID] = None,
+    correlation_id: str | None = None,
+    job_id: UUID | None = None,
     **context: Any
 ) -> None:
     """Log a structured message with consistent format.
@@ -101,7 +101,7 @@ def log_structured(
     """
     # Build structured log entry
     log_data = {"event": event}
-    
+
     # Add correlation/job ID
     if job_id is not None:
         log_data["job_id"] = str(job_id)
@@ -110,7 +110,7 @@ def log_structured(
     else:
         # Generate a correlation ID if neither is provided
         log_data["correlation_id"] = get_correlation_id()
-    
+
     # Add context fields
     for key, value in context.items():
         # Sanitize string values to prevent leakage
@@ -118,7 +118,7 @@ def log_structured(
             log_data[key] = redact_sensitive_data(value)
         else:
             log_data[key] = value
-    
+
     # Format as JSON-style structured log
     try:
         log_message = json.dumps(log_data, default=str)
@@ -129,7 +129,7 @@ def log_structured(
         # Fallback to simple format if JSON serialization fails
         fallback_message = f"event={event} " + " ".join(f"{k}={v}" for k, v in log_data.items())
         log_message = redact_sensitive_data(fallback_message)
-    
+
     # Emit log at specified level
     logger.log(level, log_message)
 
@@ -137,7 +137,7 @@ def log_structured(
 def log_info(
     logger: logging.Logger,
     event: str,
-    job_id: Optional[UUID] = None,
+    job_id: UUID | None = None,
     **context: Any
 ) -> None:
     """Log an informational structured message.
@@ -154,7 +154,7 @@ def log_info(
 def log_warning(
     logger: logging.Logger,
     event: str,
-    job_id: Optional[UUID] = None,
+    job_id: UUID | None = None,
     **context: Any
 ) -> None:
     """Log a warning structured message.
@@ -171,8 +171,8 @@ def log_warning(
 def log_error(
     logger: logging.Logger,
     event: str,
-    job_id: Optional[UUID] = None,
-    error: Optional[Exception] = None,
+    job_id: UUID | None = None,
+    error: Exception | None = None,
     **context: Any
 ) -> None:
     """Log an error structured message.
@@ -187,5 +187,5 @@ def log_error(
     if error is not None:
         context["error_type"] = type(error).__name__
         context["error_message"] = redact_sensitive_data(str(error))
-    
+
     log_structured(logger, logging.ERROR, event, job_id=job_id, **context)

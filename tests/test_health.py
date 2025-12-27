@@ -39,7 +39,7 @@ def reset_metrics():
 def test_health_check_returns_ok(client):
     """Test that /health endpoint returns status ok."""
     response = client.get("/health")
-    
+
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
@@ -47,14 +47,14 @@ def test_health_check_returns_ok(client):
 def test_health_check_returns_json(client):
     """Test that /health endpoint returns JSON content type."""
     response = client.get("/health")
-    
+
     assert response.headers["content-type"] == "application/json"
 
 
 def test_health_check_is_synchronous(client):
     """Test that health check endpoint works and responds quickly."""
     response = client.get("/health")
-    
+
     # Should return immediately without blocking
     assert response.status_code == 200
     assert "status" in response.json()
@@ -63,7 +63,7 @@ def test_health_check_is_synchronous(client):
 def test_metrics_endpoint_exists(client):
     """Test that /v1/metrics/basic endpoint exists."""
     response = client.get("/v1/metrics/basic")
-    
+
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"
 
@@ -72,15 +72,15 @@ def test_metrics_endpoint_returns_expected_counters(client):
     """Test that metrics endpoint returns all expected counters."""
     response = client.get("/v1/metrics/basic")
     data = response.json()
-    
+
     expected_counters = {
         "jobs_queued",
-        "jobs_pending", 
+        "jobs_pending",
         "jobs_running",
         "jobs_success",
         "jobs_failed",
         "llm_errors"
     }
-    
+
     assert set(data.keys()) == expected_counters
     assert all(isinstance(v, int) for v in data.values())
