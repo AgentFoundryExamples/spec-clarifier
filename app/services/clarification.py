@@ -25,6 +25,7 @@ from fastapi import BackgroundTasks
 from app.models.config_models import ClarificationConfig
 from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan, ClarifiedSpec, JobStatus, PlanInput
 from app.services import job_store
+from app.services.downstream import get_downstream_dispatcher
 from app.services.llm_clients import ClarificationLLMConfig, get_llm_client
 from app.utils.logging_helper import log_info, log_warning, log_error
 from app.utils.metrics import get_metrics_collector
@@ -943,7 +944,7 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         # PERSIST RESULT
         # ====================================================================
         # Mark as SUCCESS with result (updated_at will be refreshed automatically)
-        job_store.update_job(job_id, status=JobStatus.SUCCESS, result=result)
+        successful_job = job_store.update_job(job_id, status=JobStatus.SUCCESS, result=result)
         
         log_info(
             logger,
@@ -951,6 +952,44 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
             job_id=job_id,
             status=JobStatus.SUCCESS.value
         )
+        
+        # ====================================================================
+        # DOWNSTREAM DISPATCH
+        # ====================================================================
+        # Dispatch the clarified plan to downstream systems after successful processing
+        # This runs after the job is marked SUCCESS to ensure the result is persisted
+        # Dispatcher errors are caught and logged but do NOT change job status
+        try:
+            dispatcher = get_downstream_dispatcher()
+            
+            log_info(
+                logger,
+                "downstream_dispatch_start",
+                job_id=job_id
+            )
+            
+            # Use the updated job object with SUCCESS status and result
+            await dispatcher.dispatch(successful_job, result)
+            
+            log_info(
+                logger,
+                "downstream_dispatch_success",
+                job_id=job_id
+            )
+            
+        except Exception as dispatch_error:
+            # Capture dispatcher exceptions without affecting job status
+            # The job is already marked SUCCESS and should remain that way
+            log_error(
+                logger,
+                "downstream_dispatch_failed",
+                job_id=job_id,
+                error=dispatch_error
+            )
+            
+            # Note: We deliberately do NOT update job status here
+            # The job completed successfully even if downstream dispatch failed
+            # Downstream dispatch is an optimization/notification, not core functionality
         
     except job_store.JobNotFoundError:
         # Job doesn't exist - log and return cleanly without crashing
