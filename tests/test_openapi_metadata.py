@@ -289,6 +289,7 @@ class TestUUIDValidation:
 
     def test_all_uuid_examples_are_valid(self, openapi_schema):
         """Test that all UUID examples in responses are valid 36-character UUIDs."""
+
         def check_for_uuids_iterative(obj):
             """Iteratively check for UUID fields and validate them."""
             stack = [(obj, "")]
@@ -298,7 +299,9 @@ class TestUUIDValidation:
                     for key, value in current_obj.items():
                         current_path = f"{path}.{key}" if path else key
                         if key in ["id", "job_id"] and isinstance(value, str):
-                            assert len(value) == 36, f"Invalid UUID length at {current_path}: {value}"
+                            assert (
+                                len(value) == 36
+                            ), f"Invalid UUID length at {current_path}: {value}"
                             try:
                                 UUID(value)
                             except ValueError:

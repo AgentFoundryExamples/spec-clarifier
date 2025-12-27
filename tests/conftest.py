@@ -123,7 +123,7 @@ def disabled_config_client(monkeypatch):
 # =============================================================================
 
 
-@pytest.fixture(autouse=True, scope='function')
+@pytest.fixture(autouse=True, scope="function")
 def clean_job_store():
     """Clean the job store before and after each test (autouse).
 
@@ -159,22 +159,29 @@ def mock_llm_client():
     Yields:
         Context manager with patched LLM client factory
     """
+
     def create_dummy_client_from_request(provider, config):
         """Create dummy client that returns valid response."""
-        return DummyLLMClient(canned_response=json.dumps({
-            "specs": [
+        return DummyLLMClient(
+            canned_response=json.dumps(
                 {
-                    "purpose": "Test",
-                    "vision": "Test vision",
-                    "must": [],
-                    "dont": [],
-                    "nice": [],
-                    "assumptions": []
+                    "specs": [
+                        {
+                            "purpose": "Test",
+                            "vision": "Test vision",
+                            "must": [],
+                            "dont": [],
+                            "nice": [],
+                            "assumptions": [],
+                        }
+                    ]
                 }
-            ]
-        }))
+            )
+        )
 
-    with patch('app.services.clarification.get_llm_client', side_effect=create_dummy_client_from_request):
+    with patch(
+        "app.services.clarification.get_llm_client", side_effect=create_dummy_client_from_request
+    ):
         yield
 
 
@@ -206,7 +213,7 @@ def create_dummy_client_with_response(specs):
             "must": spec.must,
             "dont": spec.dont,
             "nice": spec.nice,
-            "assumptions": spec.assumptions
+            "assumptions": spec.assumptions,
         }
         clarified_specs.append(clarified_spec)
 
@@ -252,7 +259,7 @@ def reset_config():
         model="gpt-5.1",
         system_prompt_id="default",
         temperature=0.1,
-        max_tokens=None
+        max_tokens=None,
     )
     set_default_config(default)
     yield
@@ -303,7 +310,7 @@ def sample_spec_input():
         dont=["Complex legacy patterns", "Monolithic architecture"],
         nice=["Dark mode", "Real-time updates", "Mobile app"],
         open_questions=["Which database?", "Which authentication method?"],
-        assumptions=["Users have modern browsers", "Deploy to cloud infrastructure"]
+        assumptions=["Users have modern browsers", "Deploy to cloud infrastructure"],
     )
 
 
@@ -326,7 +333,7 @@ def sample_clarification_request():
         dont=["Anti-pattern X"],
         nice=["Nice feature Y"],
         open_questions=["Question 1?", "Question 2?"],
-        assumptions=["Assumption Z"]
+        assumptions=["Assumption Z"],
     )
     plan = PlanInput(specs=[spec])
     return ClarificationRequest(plan=plan, answers=[])
@@ -350,6 +357,6 @@ def deterministic_job_timing():
     """
     return {
         "poll_interval": 0.01,  # Fast polling for tests (10ms)
-        "max_retries": 10,       # Cap retries to prevent hangs
-        "timeout": 2.0           # 2 second timeout for tests
+        "max_retries": 10,  # Cap retries to prevent hangs
+        "timeout": 2.0,  # 2 second timeout for tests
     }

@@ -35,22 +35,20 @@ DEFAULT_JOB_TTL_SECONDS = 24 * 60 * 60
 
 class JobNotFoundError(Exception):
     """Raised when a job is not found in the store."""
+
     pass
 
 
-def create_job(
-    request: ClarificationRequest,
-    config: dict | None = None
-) -> ClarificationJob:
+def create_job(request: ClarificationRequest, config: dict | None = None) -> ClarificationJob:
     """Create a new clarification job in the store.
-    
+
     Creates a new job with PENDING status and sets both created_at and updated_at
     to the current UTC time. The job is assigned a unique UUID identifier.
-    
+
     Args:
         request: The clarification request to process
         config: Optional configuration dictionary for job processing
-        
+
     Returns:
         ClarificationJob: The newly created job
     """
@@ -83,7 +81,7 @@ def create_job(
         job_id=job_id,
         status=JobStatus.PENDING.value,
         num_specs=len(request.plan.specs) if request.plan else 0,
-        num_answers=len(request.answers) if request.answers else 0
+        num_answers=len(request.answers) if request.answers else 0,
     )
 
     return job
@@ -91,16 +89,16 @@ def create_job(
 
 def get_job(job_id: UUID) -> ClarificationJob:
     """Retrieve a job from the store by ID.
-    
+
     Returns a deep copy of the job to ensure thread-safety when the job
     is accessed outside the lock.
-    
+
     Args:
         job_id: The UUID of the job to retrieve
-        
+
     Returns:
         ClarificationJob: A deep copy of the requested job
-        
+
     Raises:
         JobNotFoundError: If the job does not exist in the store
     """
@@ -117,22 +115,22 @@ def update_job(
     job_id: UUID,
     status: JobStatus | None = None,
     result: ClarifiedPlan | None = None,
-    last_error: str | None = None
+    last_error: str | None = None,
 ) -> ClarificationJob:
     """Update an existing job in the store.
-    
+
     Updates the specified fields of a job and always refreshes the updated_at
     timestamp. The job must exist in the store.
-    
+
     Args:
         job_id: The UUID of the job to update
         status: Optional new status for the job
         result: Optional clarified plan result
         last_error: Optional error message
-        
+
     Returns:
         ClarificationJob: The updated job
-        
+
     Raises:
         JobNotFoundError: If the job does not exist in the store
     """
@@ -185,34 +183,26 @@ def update_job(
             "job_status_transition",
             job_id=job_id,
             old_status=old_status.value,
-            new_status=new_status.value
+            new_status=new_status.value,
         )
 
     # Log error if present
     if last_error is not None:
-        log_error(
-            logger,
-            "job_error_recorded",
-            job_id=job_id,
-            error_message=last_error
-        )
+        log_error(logger, "job_error_recorded", job_id=job_id, error_message=last_error)
 
     return updated_job
 
 
-def list_jobs(
-    status: JobStatus | None = None,
-    limit: int | None = None
-) -> list[ClarificationJob]:
+def list_jobs(status: JobStatus | None = None, limit: int | None = None) -> list[ClarificationJob]:
     """List jobs from the store, optionally filtered by status.
-    
+
     Returns deep copies of jobs to ensure thread-safety when jobs
     are accessed outside the lock.
-    
+
     Args:
         status: Optional status to filter jobs by
         limit: Optional maximum number of jobs to return
-        
+
     Returns:
         List[ClarificationJob]: List of deep copies of jobs matching the criteria
     """
@@ -234,10 +224,10 @@ def list_jobs(
 
 def delete_job(job_id: UUID) -> None:
     """Delete a job from the store.
-    
+
     Args:
         job_id: The UUID of the job to delete
-        
+
     Raises:
         JobNotFoundError: If the job does not exist in the store
     """
@@ -258,33 +248,27 @@ def delete_job(job_id: UUID) -> None:
         metrics.decrement("jobs_running")
 
     # Log deletion
-    log_info(
-        logger,
-        "job_deleted",
-        job_id=job_id,
-        status=job_status.value
-    )
+    log_info(logger, "job_deleted", job_id=job_id, status=job_status.value)
 
 
 def cleanup_expired_jobs(
-    ttl_seconds: int = DEFAULT_JOB_TTL_SECONDS,
-    stale_pending_ttl_seconds: int | None = None
+    ttl_seconds: int = DEFAULT_JOB_TTL_SECONDS, stale_pending_ttl_seconds: int | None = None
 ) -> int:
     """Clean up expired jobs from the store.
-    
+
     Removes jobs that are completed (SUCCESS or FAILED status) and older than
     the specified TTL. Jobs with RUNNING status are never removed to prevent
     data loss during processing.
-    
+
     Optionally removes PENDING jobs that have been stale for longer than
     stale_pending_ttl_seconds to prevent memory leaks from abandoned jobs.
-    
+
     Args:
         ttl_seconds: Time-to-live in seconds for completed jobs (default: 24 hours)
         stale_pending_ttl_seconds: Optional TTL for stale PENDING jobs. If provided,
             PENDING jobs older than this threshold will be removed. Useful for
             cleaning up jobs that were never processed due to worker crashes.
-        
+
     Returns:
         int: Number of jobs cleaned up
     """
@@ -322,19 +306,14 @@ def cleanup_expired_jobs(
     cleanup_count = len(jobs_to_remove)
 
     # Log cleanup summary (outside lock)
-    log_info(
-        logger,
-        "jobs_cleanup_completed",
-        jobs_removed=cleanup_count,
-        ttl_seconds=ttl_seconds
-    )
+    log_info(logger, "jobs_cleanup_completed", jobs_removed=cleanup_count, ttl_seconds=ttl_seconds)
 
     return cleanup_count
 
 
 def clear_all_jobs() -> None:
     """Clear all jobs from the store.
-    
+
     This is primarily useful for testing. Use with caution in production.
     """
     with _store_lock:

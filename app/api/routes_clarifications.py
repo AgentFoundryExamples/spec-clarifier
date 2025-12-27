@@ -53,20 +53,20 @@ router = APIRouter(prefix="/v1/clarifications", tags=["Clarifications"])
 )
 def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
     """Preview clarified specifications from a plan.
-    
+
     ⚠️ DEVELOPER-ONLY - This is a synchronous endpoint for development/debugging.
     For production, use the async POST /v1/clarifications endpoint instead.
-    
+
     This endpoint transforms specifications by copying the required fields
     (purpose, vision, must, dont, nice, assumptions) while omitting open_questions.
     Answers in the request are currently ignored.
-    
+
     FastAPI automatically validates the request body and returns 422 Unprocessable
     Entity responses for malformed payloads or missing required fields.
-    
+
     Args:
         request: The clarification request containing the plan and optional answers
-        
+
     Returns:
         ClarifiedPlan: The clarified plan with specifications ready for use
     """
@@ -107,10 +107,10 @@ def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
                         "status": "PENDING",
                         "created_at": "2025-12-27T03:00:00.000000Z",
                         "updated_at": "2025-12-27T03:00:00.000000Z",
-                        "last_error": None
+                        "last_error": None,
                     }
                 }
-            }
+            },
         },
         400: {
             "description": "Invalid configuration (provider/model combination not allowed)",
@@ -120,7 +120,7 @@ def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
                         "detail": "Model 'invalid-model' is not allowed for provider 'openai'. Allowed models: gpt-5, gpt-5.1, gpt-4o"
                     }
                 }
-            }
+            },
         },
         422: {
             "description": "Invalid request payload (missing required fields or wrong types)",
@@ -131,38 +131,37 @@ def preview_clarifications(request: ClarificationRequest) -> ClarifiedPlan:
                             {
                                 "type": "missing",
                                 "loc": ["body", "plan", "specs", 0, "vision"],
-                                "msg": "Field required"
+                                "msg": "Field required",
                             }
                         ]
                     }
                 }
-            }
-        }
+            },
+        },
     },
 )
 def create_clarification_job(
-    request: ClarificationRequestWithConfig,
-    background_tasks: BackgroundTasks
+    request: ClarificationRequestWithConfig, background_tasks: BackgroundTasks
 ) -> JobSummaryResponse:
     """Create and start an asynchronous clarification job.
-    
+
     This endpoint creates a new clarification job with PENDING status,
     schedules it for background processing, and returns immediately with
     a lightweight summary (no request/result payloads).
-    
+
     The job will transition through RUNNING to either SUCCESS or FAILED status.
-    
+
     Accepts optional per-request config to override defaults. Config is validated
     and merged with global defaults (request fields override, missing fields inherit).
     Invalid provider/model combinations return 400 Bad Request.
-    
+
     Args:
         request: The clarification request with plan, answers, and optional config
         background_tasks: FastAPI BackgroundTasks for async processing
-        
+
     Returns:
         JobSummaryResponse: Lightweight job summary with id, status, and timestamps
-        
+
     Raises:
         HTTPException: 400 if config validation fails (invalid provider/model)
     """
@@ -174,7 +173,7 @@ def create_clarification_job(
             logger,
             "config_validation_failed",
             error_message=str(e),
-            provided_config=request.config.model_dump() if request.config else None
+            provided_config=request.config.model_dump() if request.config else None,
         )
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -182,23 +181,16 @@ def create_clarification_job(
     if request.config is not None:
         # Log only the fields that were actually provided in the request
         overridden_fields = {k: v for k, v in request.config.model_dump().items() if v is not None}
-        log_info(
-            logger,
-            "job_created_with_config",
-            overridden_fields=overridden_fields
-        )
+        log_info(logger, "job_created_with_config", overridden_fields=overridden_fields)
 
     # Convert to ClarificationRequest for service layer
-    clarification_request = ClarificationRequest(
-        plan=request.plan,
-        answers=request.answers
-    )
+    clarification_request = ClarificationRequest(plan=request.plan, answers=request.answers)
 
     # Start job with merged config
     job = start_clarification_job(
         clarification_request,
         background_tasks,
-        config={"clarification_config": merged_config.model_dump()}
+        config={"clarification_config": merged_config.model_dump()},
     )
 
     # Return lightweight summary without request/result payloads
@@ -243,8 +235,8 @@ def create_clarification_job(
                                 "created_at": "2025-12-27T03:00:00.000000Z",
                                 "updated_at": "2025-12-27T03:00:00.000000Z",
                                 "last_error": None,
-                                "result": None
-                            }
+                                "result": None,
+                            },
                         },
                         "running": {
                             "summary": "Job running (actively processing)",
@@ -254,8 +246,8 @@ def create_clarification_job(
                                 "created_at": "2025-12-27T03:00:00.000000Z",
                                 "updated_at": "2025-12-27T03:00:01.500000Z",
                                 "last_error": None,
-                                "result": None
-                            }
+                                "result": None,
+                            },
                         },
                         "success": {
                             "summary": "Job completed successfully (production mode - result is null)",
@@ -265,8 +257,8 @@ def create_clarification_job(
                                 "created_at": "2025-12-27T03:00:00.000000Z",
                                 "updated_at": "2025-12-27T03:00:03.250000Z",
                                 "last_error": None,
-                                "result": None
-                            }
+                                "result": None,
+                            },
                         },
                         "failed": {
                             "summary": "Job failed (with error message)",
@@ -276,22 +268,20 @@ def create_clarification_job(
                                 "created_at": "2025-12-27T03:00:00.000000Z",
                                 "updated_at": "2025-12-27T03:00:02.100000Z",
                                 "last_error": "ValueError: Invalid specification format",
-                                "result": None
-                            }
-                        }
+                                "result": None,
+                            },
+                        },
                     }
                 }
-            }
+            },
         },
         404: {
             "description": "Job not found",
             "content": {
                 "application/json": {
-                    "example": {
-                        "detail": "Job 550e8400-e29b-41d4-a716-446655440000 not found"
-                    }
+                    "example": {"detail": "Job 550e8400-e29b-41d4-a716-446655440000 not found"}
                 }
-            }
+            },
         },
         422: {
             "description": "Invalid UUID format",
@@ -302,28 +292,28 @@ def create_clarification_job(
                             {
                                 "type": "uuid_parsing",
                                 "loc": ["path", "job_id"],
-                                "msg": "Input should be a valid UUID"
+                                "msg": "Input should be a valid UUID",
                             }
                         ]
                     }
                 }
-            }
-        }
+            },
+        },
     },
 )
 def get_clarification_job(job_id: UUID) -> JobStatusResponse:
     """Get the status and details of a clarification job.
-    
+
     Returns job metadata and conditionally includes the result field based on
     the APP_SHOW_JOB_RESULT development flag. In production mode (flag=False),
     the result is excluded to prevent clients from depending on embedded results.
-    
+
     Args:
         job_id: The UUID of the job to retrieve
-        
+
     Returns:
         JobStatusResponse: Job status with conditional result field
-        
+
     Raises:
         HTTPException: 404 if job not found, 422 if UUID is malformed
     """
@@ -334,7 +324,10 @@ def get_clarification_job(job_id: UUID) -> JobStatusResponse:
         # Conditionally include result based on development flag and job status
         # Only expose result when flag is enabled AND job completed successfully
         from app.models.specs import JobStatus
-        result = job.result if (settings.show_job_result and job.status == JobStatus.SUCCESS) else None
+
+        result = (
+            job.result if (settings.show_job_result and job.status == JobStatus.SUCCESS) else None
+        )
 
         return JobStatusResponse(
             id=job.id,
@@ -345,11 +338,7 @@ def get_clarification_job(job_id: UUID) -> JobStatusResponse:
             result=result,
         )
     except JobNotFoundError:
-        log_warning(
-            logger,
-            "job_not_found",
-            job_id=job_id
-        )
+        log_warning(logger, "job_not_found", job_id=job_id)
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
 
@@ -371,17 +360,17 @@ def get_clarification_job(job_id: UUID) -> JobStatusResponse:
 )
 def get_clarification_job_debug(job_id: UUID) -> dict:
     """Get debug information for a clarification job.
-    
+
     This endpoint is protected by the APP_ENABLE_DEBUG_ENDPOINT flag and returns
     sanitized debug information about a job. Raw prompts and LLM responses are
     intentionally excluded to prevent accidental data leakage.
-    
+
     Args:
         job_id: The UUID of the job to retrieve
-        
+
     Returns:
         dict: Debug information including job metadata, config, and sanitized details
-        
+
     Raises:
         HTTPException: 403 if debug endpoint disabled, 404 if job not found
     """
@@ -391,7 +380,7 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
     if not settings.enable_debug_endpoint:
         raise HTTPException(
             status_code=403,
-            detail="Debug endpoint is disabled. Set APP_ENABLE_DEBUG_ENDPOINT=true to enable."
+            detail="Debug endpoint is disabled. Set APP_ENABLE_DEBUG_ENDPOINT=true to enable.",
         )
 
     try:
@@ -413,7 +402,9 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
                         "max_tokens": value.get("max_tokens"),
                     }
                     # Filter out None values for cleaner output
-                    sanitized_config["clarification_config"] = {k: v for k, v in clarification_config_safe.items() if v is not None}
+                    sanitized_config["clarification_config"] = {
+                        k: v for k, v in clarification_config_safe.items() if v is not None
+                    }
                 elif key == "llm_config" and isinstance(value, dict):
                     # For llm_config (legacy), only expose non-sensitive fields
                     llm_config_safe = {
@@ -423,10 +414,22 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
                         "max_tokens": value.get("max_tokens"),
                     }
                     # Filter out None values for cleaner output
-                    sanitized_config["llm_config"] = {k: v for k, v in llm_config_safe.items() if v is not None}
+                    sanitized_config["llm_config"] = {
+                        k: v for k, v in llm_config_safe.items() if v is not None
+                    }
                 elif key not in ["api_key", "token", "secret", "password", "credential", "auth"]:
                     # For other keys, only include if they don't contain sensitive keywords
-                    if not any(sensitive in key.lower() for sensitive in ["key", "token", "secret", "password", "credential", "auth"]):
+                    if not any(
+                        sensitive in key.lower()
+                        for sensitive in [
+                            "key",
+                            "token",
+                            "secret",
+                            "password",
+                            "credential",
+                            "auth",
+                        ]
+                    ):
                         sanitized_config[key] = value
 
         # Sanitize error message to remove potential sensitive information
@@ -434,6 +437,7 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
         if job.last_error:
             # Use the same sanitization as LLMCallError for consistency
             from app.services.llm_clients import LLMCallError
+
             sanitized_error = LLMCallError._sanitize_message(job.last_error)
 
         # Build sanitized debug response
@@ -464,7 +468,7 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
                         "num_assumptions": len(spec.assumptions),
                     }
                     for spec in job.request.plan.specs
-                ]
+                ],
             }
 
         # Add result metadata (not full content)
@@ -482,15 +486,11 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
                         "num_assumptions": len(spec.assumptions),
                     }
                     for spec in job.result.specs
-                ]
+                ],
             }
 
         return debug_info
 
     except JobNotFoundError:
-        log_warning(
-            logger,
-            "job_not_found_debug",
-            job_id=job_id
-        )
+        log_warning(logger, "job_not_found_debug", job_id=job_id)
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")

@@ -25,15 +25,14 @@ from app.utils.logging_helper import get_correlation_id, log_error
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application.
-    
+
     Returns:
         FastAPI: Configured FastAPI application instance
     """
@@ -64,6 +63,7 @@ def create_app() -> FastAPI:
 
     # Register exception handlers only in non-debug mode
     if not settings.debug:
+
         @app.exception_handler(Exception)
         async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
             """Handle uncaught exceptions globally with sanitized responses and structured logging."""
@@ -77,16 +77,13 @@ def create_app() -> FastAPI:
                 error=exc,
                 path=request.url.path,
                 method=request.method,
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
 
             # Return sanitized error response (no stack trace)
             return JSONResponse(
                 status_code=500,
-                content={
-                    "detail": "Internal server error",
-                    "correlation_id": correlation_id
-                },
+                content={"detail": "Internal server error", "correlation_id": correlation_id},
             )
 
     # Register routers

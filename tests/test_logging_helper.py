@@ -112,13 +112,7 @@ class TestLogStructured:
         job_id = uuid.uuid4()
 
         with caplog.at_level(logging.INFO):
-            log_structured(
-                logger,
-                logging.INFO,
-                "test_event",
-                job_id=job_id,
-                custom_field="value"
-            )
+            log_structured(logger, logging.INFO, "test_event", job_id=job_id, custom_field="value")
 
         assert len(caplog.records) == 1
         log_message = caplog.records[0].getMessage()
@@ -135,12 +129,7 @@ class TestLogStructured:
         correlation_id = "test-correlation-123"
 
         with caplog.at_level(logging.INFO):
-            log_structured(
-                logger,
-                logging.INFO,
-                "test_event",
-                correlation_id=correlation_id
-            )
+            log_structured(logger, logging.INFO, "test_event", correlation_id=correlation_id)
 
         assert len(caplog.records) == 1
         log_message = caplog.records[0].getMessage()
@@ -153,11 +142,7 @@ class TestLogStructured:
         logger = logging.getLogger("test")
 
         with caplog.at_level(logging.INFO):
-            log_structured(
-                logger,
-                logging.INFO,
-                "test_event"
-            )
+            log_structured(logger, logging.INFO, "test_event")
 
         assert len(caplog.records) == 1
         log_message = caplog.records[0].getMessage()
@@ -172,12 +157,7 @@ class TestLogStructured:
         logger = logging.getLogger("test")
 
         with caplog.at_level(logging.INFO):
-            log_structured(
-                logger,
-                logging.INFO,
-                "test_event",
-                api_response="api_key: sk-secret123"
-            )
+            log_structured(logger, logging.INFO, "test_event", api_response="api_key: sk-secret123")
 
         log_message = caplog.records[0].getMessage()
 
@@ -195,10 +175,7 @@ class TestLogStructured:
 
         with caplog.at_level(logging.INFO):
             log_structured(
-                logger,
-                logging.INFO,
-                "test_event",
-                unserializable=UnserializableObject()
+                logger, logging.INFO, "test_event", unserializable=UnserializableObject()
             )
 
         log_message = caplog.records[0].getMessage()

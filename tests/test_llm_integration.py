@@ -49,7 +49,7 @@ def _create_dummy_client_with_response(specs):
             "must": spec.must,
             "dont": spec.dont,
             "nice": spec.nice,
-            "assumptions": spec.assumptions
+            "assumptions": spec.assumptions,
         }
         clarified_specs.append(clarified_spec)
 
@@ -77,7 +77,7 @@ class TestLLMPipelineIntegration:
             captured_configs.append((provider, config))
             return _create_dummy_client_with_response([spec])
 
-        with patch('app.services.clarification.get_llm_client', side_effect=capture_factory_call):
+        with patch("app.services.clarification.get_llm_client", side_effect=capture_factory_call):
             await process_clarification_job(job.id)
 
         # Verify default config was used (dummy provider)
@@ -101,9 +101,7 @@ class TestLLMPipelineIntegration:
 
         # Start job with custom config
         custom_config = ClarificationLLMConfig(
-            provider="anthropic",
-            model="claude-sonnet-4.5",
-            temperature=0.3
+            provider="anthropic", model="claude-sonnet-4.5", temperature=0.3
         )
         job = start_clarification_job(request, background_tasks, llm_config=custom_config)
 
@@ -114,7 +112,7 @@ class TestLLMPipelineIntegration:
             captured_configs.append((provider, config))
             return _create_dummy_client_with_response([spec])
 
-        with patch('app.services.clarification.get_llm_client', side_effect=capture_factory_call):
+        with patch("app.services.clarification.get_llm_client", side_effect=capture_factory_call):
             await process_clarification_job(job.id)
 
         # Verify custom config was used
@@ -139,6 +137,7 @@ class TestLLMPipelineIntegration:
         # Manually clear the request to simulate missing data
         job.request = None
         from app.services.job_store import _job_store, _store_lock
+
         with _store_lock:
             _job_store[job.id] = job
 
@@ -159,7 +158,7 @@ class TestLLMPipelineIntegration:
         job = start_clarification_job(request, background_tasks)
 
         # Create client that returns markdown-wrapped JSON
-        markdown_response = '''```json
+        markdown_response = """```json
 {
   "specs": [
     {
@@ -172,7 +171,7 @@ class TestLLMPipelineIntegration:
     }
   ]
 }
-```'''
+```"""
 
         dummy_client = DummyLLMClient(canned_response=markdown_response)
 
@@ -194,7 +193,7 @@ class TestLLMPipelineIntegration:
         job = start_clarification_job(request, background_tasks)
 
         # Create client that returns invalid JSON
-        dummy_client = DummyLLMClient(canned_response='{invalid json}')
+        dummy_client = DummyLLMClient(canned_response="{invalid json}")
 
         await process_clarification_job(job.id, llm_client=dummy_client)
 
@@ -214,14 +213,16 @@ class TestLLMPipelineIntegration:
         job = start_clarification_job(request, background_tasks)
 
         # Create client that returns JSON missing 'vision' field
-        incomplete_response = json.dumps({
-            "specs": [
-                {
-                    "purpose": "Validation Test",
-                    # Missing vision, must, dont, nice, assumptions
-                }
-            ]
-        })
+        incomplete_response = json.dumps(
+            {
+                "specs": [
+                    {
+                        "purpose": "Validation Test",
+                        # Missing vision, must, dont, nice, assumptions
+                    }
+                ]
+            }
+        )
 
         dummy_client = DummyLLMClient(canned_response=incomplete_response)
 
@@ -246,15 +247,17 @@ class TestLLMPipelineIntegration:
 
         job = start_clarification_job(request, background_tasks)
 
-        with patch('app.services.clarification.get_llm_client', side_effect=failing_factory):
+        with patch("app.services.clarification.get_llm_client", side_effect=failing_factory):
             await process_clarification_job(job.id)
 
         # Job should fail with provider error
         failed_job = get_job(job.id)
         assert failed_job.status == JobStatus.FAILED
         # Updated error message format after changes
-        assert ("Failed to initialize LLM client" in failed_job.last_error or
-                "Invalid LLM provider" in failed_job.last_error)
+        assert (
+            "Failed to initialize LLM client" in failed_job.last_error
+            or "Invalid LLM provider" in failed_job.last_error
+        )
 
     async def test_llm_call_logs_metrics_without_prompts(self):
         """Test that LLM call logs structured metrics without including prompts."""
@@ -269,15 +272,17 @@ class TestLLMPipelineIntegration:
         # Capture log messages using caplog
         import json
         import logging
-        logger = logging.getLogger('app.services.clarification')
 
-        with patch.object(logger, 'log') as mock_log:
+        logger = logging.getLogger("app.services.clarification")
+
+        with patch.object(logger, "log") as mock_log:
             await process_clarification_job(job.id, llm_client=dummy_client)
 
             # Find the success log message
             success_logs = [
-                call for call in mock_log.call_args_list
-                if len(call[0]) >= 2 and 'llm_call_success' in str(call[0][1])
+                call
+                for call in mock_log.call_args_list
+                if len(call[0]) >= 2 and "llm_call_success" in str(call[0][1])
             ]
 
             assert len(success_logs) > 0
@@ -287,18 +292,18 @@ class TestLLMPipelineIntegration:
             log_data = json.loads(log_message)
 
             # Verify metrics are logged
-            assert log_data['event'] == 'llm_call_success'
-            assert log_data['provider'] == 'dummy'  # Now using dummy as default
-            assert log_data['model'] == 'test-model'
-            assert 'elapsed_seconds' in log_data
-            assert 'job_id' in log_data
+            assert log_data["event"] == "llm_call_success"
+            assert log_data["provider"] == "dummy"  # Now using dummy as default
+            assert log_data["model"] == "test-model"
+            assert "elapsed_seconds" in log_data
+            assert "job_id" in log_data
 
             # Verify prompts are NOT logged
-            assert 'system_prompt' not in log_data
-            assert 'user_prompt' not in log_data
+            assert "system_prompt" not in log_data
+            assert "user_prompt" not in log_data
             # Ensure content from prompts is not in the log
             full_log = json.dumps(log_data)
-            assert 'Test vision' not in full_log
+            assert "Test vision" not in full_log
 
     async def test_multiple_specs_are_processed_correctly(self):
         """Test that jobs with multiple specs are processed correctly."""
@@ -337,16 +342,20 @@ class TestLLMPipelineIntegration:
         class TrackingClient:
             async def complete(self, system_prompt, user_prompt, model, **kwargs):
                 call_count.append(1)
-                return json.dumps({
-                    "specs": [{
-                        "purpose": "Single Call Test",
-                        "vision": "Test vision",
-                        "must": [],
-                        "dont": [],
-                        "nice": [],
-                        "assumptions": []
-                    }]
-                })
+                return json.dumps(
+                    {
+                        "specs": [
+                            {
+                                "purpose": "Single Call Test",
+                                "vision": "Test vision",
+                                "must": [],
+                                "dont": [],
+                                "nice": [],
+                                "assumptions": [],
+                            }
+                        ]
+                    }
+                )
 
         await process_clarification_job(job.id, llm_client=TrackingClient())
 
@@ -372,16 +381,17 @@ class TestLLMPipelineIntegration:
             model="gpt-5.1",
             system_prompt_id="strict_json",
             temperature=0.2,
-            max_tokens=2000
+            max_tokens=2000,
         )
 
         # Store job with config
-        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        job = job_store.create_job(request, config={"clarification_config": config.model_dump()})
 
         # Track what system_prompt_id is used by checking the template retrieval
         captured_template_ids = []
 
         from app.services.clarification import get_system_prompt_template
+
         original_get_template = get_system_prompt_template
 
         def capture_template_id(system_prompt_id):
@@ -390,12 +400,14 @@ class TestLLMPipelineIntegration:
 
         dummy_client = _create_dummy_client_with_response([spec])
 
-        with patch('app.services.clarification.get_system_prompt_template', side_effect=capture_template_id):
+        with patch(
+            "app.services.clarification.get_system_prompt_template", side_effect=capture_template_id
+        ):
             await process_clarification_job(job.id, llm_client=dummy_client)
 
         # Verify system_prompt_id was used
         assert len(captured_template_ids) == 1
-        assert captured_template_ids[0] == 'strict_json'
+        assert captured_template_ids[0] == "strict_json"
 
         # Job should succeed
         processed_job = get_job(job.id)
@@ -411,17 +423,15 @@ class TestLLMPipelineIntegration:
         request = ClarificationRequest(plan=plan)
 
         # Create config without system_prompt_id
-        config = ClarificationConfig(
-            provider="openai",
-            model="gpt-5.1"
-        )
+        config = ClarificationConfig(provider="openai", model="gpt-5.1")
 
-        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        job = job_store.create_job(request, config={"clarification_config": config.model_dump()})
 
         # Track what system_prompt_id is used
         captured_template_ids = []
 
         from app.services.clarification import get_system_prompt_template
+
         original_get_template = get_system_prompt_template
 
         def capture_template_id(system_prompt_id):
@@ -430,12 +440,14 @@ class TestLLMPipelineIntegration:
 
         dummy_client = _create_dummy_client_with_response([spec])
 
-        with patch('app.services.clarification.get_system_prompt_template', side_effect=capture_template_id):
+        with patch(
+            "app.services.clarification.get_system_prompt_template", side_effect=capture_template_id
+        ):
             await process_clarification_job(job.id, llm_client=dummy_client)
 
         # Verify default system_prompt_id was used
         assert len(captured_template_ids) == 1
-        assert captured_template_ids[0] == 'default'
+        assert captured_template_ids[0] == "default"
 
         # Job should succeed
         processed_job = get_job(job.id)
@@ -452,13 +464,10 @@ class TestLLMPipelineIntegration:
 
         # Create config with specific temperature and max_tokens
         config = ClarificationConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=0.7,
-            max_tokens=3000
+            provider="openai", model="gpt-5.1", temperature=0.7, max_tokens=3000
         )
 
-        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        job = job_store.create_job(request, config={"clarification_config": config.model_dump()})
 
         # Track what kwargs are passed to client
         captured_kwargs = []
@@ -466,23 +475,27 @@ class TestLLMPipelineIntegration:
         class ParamCapturingClient:
             async def complete(self, system_prompt, user_prompt, model, **kwargs):
                 captured_kwargs.append(kwargs)
-                return json.dumps({
-                    "specs": [{
-                        "purpose": "Params Test",
-                        "vision": "Test vision",
-                        "must": [],
-                        "dont": [],
-                        "nice": [],
-                        "assumptions": []
-                    }]
-                })
+                return json.dumps(
+                    {
+                        "specs": [
+                            {
+                                "purpose": "Params Test",
+                                "vision": "Test vision",
+                                "must": [],
+                                "dont": [],
+                                "nice": [],
+                                "assumptions": [],
+                            }
+                        ]
+                    }
+                )
 
         await process_clarification_job(job.id, llm_client=ParamCapturingClient())
 
         # Verify temperature and max_tokens were passed
         assert len(captured_kwargs) == 1
-        assert captured_kwargs[0]['temperature'] == 0.7
-        assert captured_kwargs[0]['max_tokens'] == 3000
+        assert captured_kwargs[0]["temperature"] == 0.7
+        assert captured_kwargs[0]["max_tokens"] == 3000
 
         # Job should succeed
         processed_job = get_job(job.id)
@@ -499,13 +512,10 @@ class TestLLMPipelineIntegration:
 
         # Create config with max_tokens=None (explicit)
         config = ClarificationConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=0.1,
-            max_tokens=None
+            provider="openai", model="gpt-5.1", temperature=0.1, max_tokens=None
         )
 
-        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        job = job_store.create_job(request, config={"clarification_config": config.model_dump()})
 
         # Track what kwargs are passed to client
         captured_kwargs = []
@@ -513,24 +523,28 @@ class TestLLMPipelineIntegration:
         class ParamCapturingClient:
             async def complete(self, system_prompt, user_prompt, model, **kwargs):
                 captured_kwargs.append(kwargs)
-                return json.dumps({
-                    "specs": [{
-                        "purpose": "No Max Tokens Test",
-                        "vision": "Test vision",
-                        "must": [],
-                        "dont": [],
-                        "nice": [],
-                        "assumptions": []
-                    }]
-                })
+                return json.dumps(
+                    {
+                        "specs": [
+                            {
+                                "purpose": "No Max Tokens Test",
+                                "vision": "Test vision",
+                                "must": [],
+                                "dont": [],
+                                "nice": [],
+                                "assumptions": [],
+                            }
+                        ]
+                    }
+                )
 
         await process_clarification_job(job.id, llm_client=ParamCapturingClient())
 
         # Verify max_tokens is NOT in kwargs
         assert len(captured_kwargs) == 1
-        assert 'max_tokens' not in captured_kwargs[0]
+        assert "max_tokens" not in captured_kwargs[0]
         # But temperature should still be present
-        assert 'temperature' in captured_kwargs[0]
+        assert "temperature" in captured_kwargs[0]
 
         # Job should succeed
         processed_job = get_job(job.id)
@@ -547,22 +561,21 @@ class TestLLMPipelineIntegration:
 
         # Create config with unknown system_prompt_id
         config = ClarificationConfig(
-            provider="openai",
-            model="gpt-5.1",
-            system_prompt_id="nonexistent_template"
+            provider="openai", model="gpt-5.1", system_prompt_id="nonexistent_template"
         )
 
-        job = job_store.create_job(request, config={'clarification_config': config.model_dump()})
+        job = job_store.create_job(request, config={"clarification_config": config.model_dump()})
         dummy_client = _create_dummy_client_with_response([spec])
 
         # Capture warnings
         import logging
-        with patch.object(logging.getLogger('app.services.clarification'), 'warning') as mock_warn:
+
+        with patch.object(logging.getLogger("app.services.clarification"), "warning") as mock_warn:
             await process_clarification_job(job.id, llm_client=dummy_client)
 
             # Verify warning was logged
             warning_calls = [str(call) for call in mock_warn.call_args_list]
-            assert any('nonexistent_template' in call for call in warning_calls)
+            assert any("nonexistent_template" in call for call in warning_calls)
 
         # Job should still succeed with fallback template
         processed_job = get_job(job.id)

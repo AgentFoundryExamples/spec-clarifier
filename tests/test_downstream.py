@@ -48,7 +48,7 @@ class TestPlaceholderDownstreamDispatcher:
             must=["Fast", "Reliable"],
             dont=["Slow"],
             nice=["Configurable"],
-            assumptions=["Cloud deployment"]
+            assumptions=["Cloud deployment"],
         )
         plan_input = PlanInput(specs=[spec])
         request = ClarificationRequest(plan=plan_input)
@@ -56,16 +56,18 @@ class TestPlaceholderDownstreamDispatcher:
         # Use job_store to create a proper job
         job = create_job(request)
 
-        clarified_plan = ClarifiedPlan(specs=[
-            ClarifiedSpec(
-                purpose="Test Service",
-                vision="High performance",
-                must=["Fast", "Reliable"],
-                dont=["Slow"],
-                nice=["Configurable"],
-                assumptions=["Cloud deployment"]
-            )
-        ])
+        clarified_plan = ClarifiedPlan(
+            specs=[
+                ClarifiedSpec(
+                    purpose="Test Service",
+                    vision="High performance",
+                    must=["Fast", "Reliable"],
+                    dont=["Slow"],
+                    nice=["Configurable"],
+                    assumptions=["Cloud deployment"],
+                )
+            ]
+        )
 
         dispatcher = PlaceholderDownstreamDispatcher()
 
@@ -91,9 +93,7 @@ class TestPlaceholderDownstreamDispatcher:
 
         job = create_job(request)
 
-        clarified_plan = ClarifiedPlan(specs=[
-            ClarifiedSpec(purpose="Test", vision="Test vision")
-        ])
+        clarified_plan = ClarifiedPlan(specs=[ClarifiedSpec(purpose="Test", vision="Test vision")])
 
         dispatcher = PlaceholderDownstreamDispatcher()
 
@@ -106,18 +106,14 @@ class TestPlaceholderDownstreamDispatcher:
 
     async def test_placeholder_dispatcher_handles_multiple_specs(self, caplog):
         """Test dispatcher with multiple specs in plan."""
-        specs = [
-            SpecInput(purpose=f"Spec {i}", vision=f"Vision {i}")
-            for i in range(3)
-        ]
+        specs = [SpecInput(purpose=f"Spec {i}", vision=f"Vision {i}") for i in range(3)]
         plan_input = PlanInput(specs=specs)
         request = ClarificationRequest(plan=plan_input)
 
         job = create_job(request)
 
         clarified_specs = [
-            ClarifiedSpec(purpose=f"Spec {i}", vision=f"Vision {i}")
-            for i in range(3)
+            ClarifiedSpec(purpose=f"Spec {i}", vision=f"Vision {i}") for i in range(3)
         ]
         clarified_plan = ClarifiedPlan(specs=clarified_specs)
 
@@ -134,23 +130,17 @@ class TestPlaceholderDownstreamDispatcher:
 
     async def test_placeholder_dispatcher_handles_unicode(self, caplog):
         """Test dispatcher with unicode characters in plan."""
-        spec = SpecInput(
-            purpose="系统管理",
-            vision="🚀 Modern system",
-            must=["UTF-8 支持"]
-        )
+        spec = SpecInput(purpose="系统管理", vision="🚀 Modern system", must=["UTF-8 支持"])
         plan_input = PlanInput(specs=[spec])
         request = ClarificationRequest(plan=plan_input)
 
         job = create_job(request)
 
-        clarified_plan = ClarifiedPlan(specs=[
-            ClarifiedSpec(
-                purpose="系统管理",
-                vision="🚀 Modern system",
-                must=["UTF-8 支持"]
-            )
-        ])
+        clarified_plan = ClarifiedPlan(
+            specs=[
+                ClarifiedSpec(purpose="系统管理", vision="🚀 Modern system", must=["UTF-8 支持"])
+            ]
+        )
 
         dispatcher = PlaceholderDownstreamDispatcher()
 
@@ -192,14 +182,12 @@ class TestPlaceholderDownstreamDispatcher:
 
         job = create_job(request)
 
-        clarified_plan = ClarifiedPlan(specs=[
-            ClarifiedSpec(purpose="Test", vision="Test")
-        ])
+        clarified_plan = ClarifiedPlan(specs=[ClarifiedSpec(purpose="Test", vision="Test")])
 
         dispatcher = PlaceholderDownstreamDispatcher()
 
         # Mock json.dumps to raise an error
-        with patch('app.services.downstream.json.dumps', side_effect=TypeError("Cannot serialize")):
+        with patch("app.services.downstream.json.dumps", side_effect=TypeError("Cannot serialize")):
             with caplog.at_level(logging.INFO):
                 await dispatcher.dispatch(job, clarified_plan)
 
@@ -237,9 +225,7 @@ class TestGetDownstreamDispatcher:
 
         job = create_job(request)
 
-        clarified_plan = ClarifiedPlan(specs=[
-            ClarifiedSpec(purpose="Test", vision="Test")
-        ])
+        clarified_plan = ClarifiedPlan(specs=[ClarifiedSpec(purpose="Test", vision="Test")])
 
         with caplog.at_level(logging.INFO):
             await dispatcher.dispatch(job, clarified_plan)

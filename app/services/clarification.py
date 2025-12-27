@@ -89,7 +89,6 @@ IMPORTANT RULES:
 5. If no answer is provided for a question, use your best judgment based on context
 6. Preserve all original content from must, dont, nice, and assumptions arrays
 7. This is a single-call task - return the complete clarified plan in one response""",
-
     "strict_json": """You are a specification clarification assistant operating in STRICT JSON MODE.
 
 INPUT FORMAT:
@@ -122,7 +121,6 @@ CRITICAL RULES - NO EXCEPTIONS:
 8. All string values must be properly escaped
 9. All arrays must be valid JSON arrays
 10. Return the complete clarified plan in one response""",
-
     "verbose_explanation": """You are a specification clarification assistant. Your task is to transform specifications with open questions into clarified specifications by incorporating provided answers.
 
 INPUT FORMAT:
@@ -173,35 +171,35 @@ IMPORTANT RULES:
 5. Preserve all original content from must, dont, nice, and assumptions arrays
 6. Add new content from answers to appropriate arrays
 7. This is a single-call task - return the complete clarified plan in one response
-8. The JSON must be valid and parseable - proper escaping, no trailing commas, no comments"""
+8. The JSON must be valid and parseable - proper escaping, no trailing commas, no comments""",
 }
 
 
 def get_system_prompt_template(system_prompt_id: str) -> str:
     """Retrieve system prompt template by ID with fallback to default.
-    
+
     This function looks up a system prompt template by its identifier and
     returns the corresponding template text. If the requested ID is not found,
     it logs a warning and returns the 'default' template as a fallback. This
     ensures that jobs never fail due to unknown system_prompt_id values.
-    
+
     All templates enforce strict JSON output requirements to ensure consistent
     response parsing across different prompt styles.
-    
+
     Args:
         system_prompt_id: Identifier for the system prompt template
                          (e.g., 'default', 'strict_json', 'verbose_explanation')
-    
+
     Returns:
         System prompt template text
-    
+
     Example:
         >>> template = get_system_prompt_template('strict_json')
         >>> # Returns strict_json template
-        
+
         >>> template = get_system_prompt_template('unknown_id')
         >>> # Logs warning and returns 'default' template
-    
+
     Note:
         The fallback behavior is intentional - we prefer degraded behavior
         (using default template) over failing the entire clarification job.
@@ -216,22 +214,22 @@ def get_system_prompt_template(system_prompt_id: str) -> str:
         f"Available templates: {', '.join(sorted(SYSTEM_PROMPT_TEMPLATES.keys()))}. "
         "Falling back to 'default' template."
     )
-    return SYSTEM_PROMPT_TEMPLATES['default']
+    return SYSTEM_PROMPT_TEMPLATES["default"]
 
 
 def build_clarification_prompts(
     request: ClarificationRequest,
     provider: str | None = None,
     model: str | None = None,
-    system_prompt_id: str | None = None
+    system_prompt_id: str | None = None,
 ) -> tuple[str, str]:
     """Build system and user prompts for LLM-based specification clarification.
-    
+
     This function transforms a ClarificationRequest into a pair of prompts that
     guide the LLM to clarify specifications by incorporating provided answers.
     The prompts are designed to elicit structured JSON responses conforming to
     the ClarifiedPlan schema.
-    
+
     System Prompt:
         - Selected from SYSTEM_PROMPT_TEMPLATES based on system_prompt_id
         - Describes the clarification task
@@ -239,36 +237,36 @@ def build_clarification_prompts(
         - Emphasizes that responses must be raw JSON (no markdown, no prose)
         - Requires single-call processing (no multi-turn interactions)
         - All templates enforce strict JSON output requirements
-    
+
     User Prompt:
         - Serializes source specs (purpose, vision, must, dont, nice, open_questions, assumptions)
         - Includes indexed answers keyed by (spec_index, question_index)
         - Uses pretty-printed JSON for machine readability
         - Wrapped with guardrail reminders to emit valid JSON only
-    
+
     Args:
         request: The clarification request containing plan and answers
         provider: Optional LLM provider for future metrics (not exposed in prompts)
         model: Optional model identifier for future metrics (not exposed in prompts)
         system_prompt_id: Optional identifier for system prompt template (defaults to 'default')
-    
+
     Returns:
         Tuple of (system_prompt, user_prompt) ready for LLM invocation
-    
+
     Raises:
         ValueError: If request is None or invalid
         TypeError: If request is not a ClarificationRequest instance
-    
+
     Example:
         >>> request = ClarificationRequest(plan=plan_input, answers=answers)
         >>> system_prompt, user_prompt = build_clarification_prompts(request)
         >>> # Use prompts with LLM client
-        
+
         >>> # With custom template
         >>> system_prompt, user_prompt = build_clarification_prompts(
         ...     request, system_prompt_id='strict_json'
         ... )
-    
+
     Note:
         Provider and model parameters are threaded through for future use in
         metrics/telemetry but are not included in the generated prompts.
@@ -299,21 +297,21 @@ def build_clarification_prompts(
 
 def _build_system_prompt(system_prompt_id: str | None = None) -> str:
     """Build the system prompt for specification clarification.
-    
+
     Retrieves the appropriate system prompt template based on the provided
     system_prompt_id. If no ID is provided, defaults to 'default' template.
     If an unknown ID is provided, logs a warning and falls back to 'default'.
-    
+
     Args:
         system_prompt_id: Optional identifier for system prompt template
                          Defaults to 'default' if not provided
-    
+
     Returns:
         System prompt string describing the task and output schema
     """
     # Default to 'default' template if not specified
     if system_prompt_id is None:
-        system_prompt_id = 'default'
+        system_prompt_id = "default"
 
     # Retrieve template (with fallback handling)
     return get_system_prompt_template(system_prompt_id)
@@ -321,10 +319,10 @@ def _build_system_prompt(system_prompt_id: str | None = None) -> str:
 
 def _build_user_prompt(request: ClarificationRequest) -> str:
     """Build the user prompt containing the request data.
-    
+
     Args:
         request: The clarification request
-    
+
     Returns:
         User prompt string with serialized request data
     """
@@ -338,7 +336,7 @@ def _build_user_prompt(request: ClarificationRequest) -> str:
             "dont": spec.dont,
             "nice": spec.nice,
             "open_questions": spec.open_questions,
-            "assumptions": spec.assumptions
+            "assumptions": spec.assumptions,
         }
         specs_data.append(spec_dict)
 
@@ -349,15 +347,12 @@ def _build_user_prompt(request: ClarificationRequest) -> str:
             "spec_index": answer.spec_index,
             "question_index": answer.question_index,
             "question": answer.question,
-            "answer": answer.answer
+            "answer": answer.answer,
         }
         answers_data.append(answer_dict)
 
     # Build the complete input payload
-    input_payload = {
-        "specs": specs_data,
-        "answers": answers_data
-    }
+    input_payload = {"specs": specs_data, "answers": answers_data}
 
     # Serialize to pretty JSON for readability
     json_str = json.dumps(input_payload, indent=2, ensure_ascii=False)
@@ -376,9 +371,10 @@ Remember: Return ONLY valid JSON with the exact structure specified. No markdown
 # JSON CLEANUP UTILITIES
 # ============================================================================
 
+
 class JSONCleanupError(Exception):
     """Exception raised when JSON cleanup and parsing fails.
-    
+
     Attributes:
         message: Human-readable error message
         raw_content: The original content that failed to parse
@@ -387,7 +383,7 @@ class JSONCleanupError(Exception):
 
     def __init__(self, message: str, raw_content: str, attempts: int):
         """Initialize JSONCleanupError.
-        
+
         Args:
             message: Error message
             raw_content: Original content that failed
@@ -399,49 +395,46 @@ class JSONCleanupError(Exception):
         self.attempts = attempts
 
 
-def cleanup_and_parse_json(
-    raw_response: str,
-    max_attempts: int = 3
-) -> dict:
+def cleanup_and_parse_json(raw_response: str, max_attempts: int = 3) -> dict:
     """Clean up LLM response and parse as JSON with retry logic.
-    
+
     This function attempts to extract valid JSON from an LLM response by:
     1. Removing markdown code fences (```json, ```)
     2. Stripping leading/trailing whitespace and chatter
     3. Retrying with progressively aggressive cleanup strategies
     4. Surfacing structured errors if all attempts fail
-    
+
     The function preserves legitimate whitespace within JSON strings while
     removing extraneous formatting that LLMs sometimes add.
-    
+
     Args:
         raw_response: Raw text response from LLM
         max_attempts: Maximum number of cleanup attempts (default: 3)
                      Note: The function has 3 built-in cleanup strategies.
                      If max_attempts is greater than 3, only 3 attempts will be made.
                      If max_attempts is less than 3, only that many strategies will be tried.
-    
+
     Returns:
         Parsed JSON object as a Python dictionary
-    
+
     Raises:
         JSONCleanupError: If parsing fails after all attempts
         ValueError: If raw_response is None or empty, or max_attempts < 1
-    
+
     Example:
         >>> response = "```json\\n{\\\"key\\\": \\\"value\\\"}\\n```"
         >>> data = cleanup_and_parse_json(response)
         >>> print(data)
         {'key': 'value'}
-        
+
         >>> # Try only first strategy
         >>> data = cleanup_and_parse_json(response, max_attempts=1)
-    
+
     Cleanup Strategies (applied in order until success):
         1. Remove markdown fences and basic whitespace trimming
         2. Extract JSON between first { and last }
         3. Remove common prose patterns (e.g., "Here is...", "The result is...")
-    
+
     Note:
         The number of attempts will be limited to the number of available strategies (3).
         If you request max_attempts=5, only 3 attempts will be made since there are
@@ -487,49 +480,49 @@ def cleanup_and_parse_json(
         f"Failed to parse JSON after {num_attempts} attempt(s). "
         f"Last error: {str(last_error) if last_error else 'Unknown error'}",
         raw_response,
-        num_attempts
+        num_attempts,
     )
 
 
 def _remove_markdown_fences(text: str) -> str:
     """Remove markdown code fences from text.
-    
+
     Removes patterns like:
     - ```json
     - ```
     - ` (backticks)
-    
+
     Args:
         text: Input text potentially containing markdown fences
-    
+
     Returns:
         Text with fences removed
     """
     # Remove ```json or ``` at start/end
-    text = re.sub(r'^```(?:json)?\s*\n?', '', text, flags=re.MULTILINE)
-    text = re.sub(r'\n?```\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r"^```(?:json)?\s*\n?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\n?```\s*$", "", text, flags=re.MULTILINE)
 
     # Remove inline backticks at boundaries (but preserve in JSON strings)
-    text = re.sub(r'^`+', '', text)
-    text = re.sub(r'`+$', '', text)
+    text = re.sub(r"^`+", "", text)
+    text = re.sub(r"`+$", "", text)
 
     return text
 
 
 def _extract_json_object(text: str) -> str | None:
     """Extract the first valid JSON object from the text.
-    
+
     This function finds the first opening brace '{' and scans forward to find
     its matching closing brace '}', respecting nested structures.
-    
+
     Args:
         text: Input text potentially containing JSON surrounded by prose
-    
+
     Returns:
         Extracted JSON string or None if not found
     """
     try:
-        first_brace_index = text.index('{')
+        first_brace_index = text.index("{")
     except ValueError:
         return None  # No opening brace found
 
@@ -545,7 +538,7 @@ def _extract_json_object(text: str) -> str | None:
             escape_next = False
             continue
 
-        if char == '\\':
+        if char == "\\":
             escape_next = True
             continue
 
@@ -555,9 +548,9 @@ def _extract_json_object(text: str) -> str | None:
 
         # Only count braces outside of strings
         if not in_string:
-            if char == '{':
+            if char == "{":
                 balance += 1
-            elif char == '}':
+            elif char == "}":
                 balance -= 1
 
             if balance == 0:
@@ -569,46 +562,46 @@ def _extract_json_object(text: str) -> str | None:
 
 def _remove_prose_patterns(text: str) -> str:
     """Remove common prose patterns that LLMs add before/after JSON.
-    
+
     Args:
         text: Input text potentially containing prose
-    
+
     Returns:
         Text with prose patterns removed
     """
     # Common phrases LLMs use before JSON
     # Use word boundaries and more precise patterns to avoid false matches
     leading_prose_patterns = [
-        r'^\s*(?:here\s+is|here\'s|the\s+result\s+is|the\s+answer\s+is|the\s+clarified\s+plan\s+is)\s*[:\s]*',
-        r'^\s*(?:sure|okay|certainly)[,\s]*',
+        r"^\s*(?:here\s+is|here\'s|the\s+result\s+is|the\s+answer\s+is|the\s+clarified\s+plan\s+is)\s*[:\s]*",
+        r"^\s*(?:sure|okay|certainly)[,\s]*",
         # Match "I can/let me/I'll help..." followed by anything up to newline or colon
-        r'^\s*(?:i\s+can\s+help|let\s+me\s+help|i\'ll\s+help)(?:[^\n:]*?[:]\s*)?',
+        r"^\s*(?:i\s+can\s+help|let\s+me\s+help|i\'ll\s+help)(?:[^\n:]*?[:]\s*)?",
     ]
 
     # Common phrases LLMs use after JSON
     trailing_prose_patterns = [
-        r'[\s,.]*(?:let\s+me\s+know|hope\s+this\s+helps|if\s+you\s+need\s+anything\s+else).*$',
+        r"[\s,.]*(?:let\s+me\s+know|hope\s+this\s+helps|if\s+you\s+need\s+anything\s+else).*$",
     ]
 
     for pattern in leading_prose_patterns:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.MULTILINE)
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.MULTILINE)
 
     for pattern in trailing_prose_patterns:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
 
     return text
 
 
 def clarify_plan(plan_input: PlanInput) -> ClarifiedPlan:
     """Transform a PlanInput to ClarifiedPlan by copying required fields.
-    
+
     This function processes each specification in the plan, copying the required
     fields (purpose, vision, must, dont, nice, assumptions) while omitting
     open_questions. Currently, answers are ignored as per the requirements.
-    
+
     Args:
         plan_input: The input plan containing specifications with potential questions
-        
+
     Returns:
         ClarifiedPlan: A plan with clarified specifications (no open_questions)
     """
@@ -632,21 +625,21 @@ def start_clarification_job(
     request: ClarificationRequest,
     background_tasks: BackgroundTasks,
     config: dict | None = None,
-    llm_config: ClarificationLLMConfig | None = None
+    llm_config: ClarificationLLMConfig | None = None,
 ) -> ClarificationJob:
     """Start a clarification job asynchronously.
-    
+
     Creates a new job with PENDING status, stores it in the job store,
     and schedules background processing via FastAPI BackgroundTasks.
     Returns immediately without blocking.
-    
+
     Args:
         request: The clarification request to process
         background_tasks: FastAPI BackgroundTasks instance for scheduling
         config: Optional configuration dictionary for job processing
         llm_config: Optional LLM configuration for LLM-powered clarification.
                    If not provided, defaults to provider="openai", model="gpt-5".
-        
+
     Returns:
         ClarificationJob: The newly created job with PENDING status
     """
@@ -655,7 +648,7 @@ def start_clarification_job(
         # Merge llm_config into config dict for storage
         # Use deepcopy to avoid mutating nested structures in the original config
         job_config = copy.deepcopy(config) if config else {}
-        job_config['llm_config'] = llm_config.model_dump()
+        job_config["llm_config"] = llm_config.model_dump()
         job = job_store.create_job(request, config=job_config)
     else:
         job = job_store.create_job(request, config=config)
@@ -669,15 +662,15 @@ def start_clarification_job(
 
 async def process_clarification_job(job_id: UUID, llm_client: Any | None = None) -> None:
     """Process a clarification job asynchronously.
-    
+
     Loads the job from the store, marks it RUNNING, invokes the LLM pipeline
     to clarify specifications, saves the result, and marks it SUCCESS. If any
     exception occurs during processing, marks the job FAILED and captures
     the error message.
-    
+
     This function is designed to be called via FastAPI BackgroundTasks but
     can also be invoked directly for testing purposes.
-    
+
     Args:
         job_id: The UUID of the job to process
         llm_client: Optional pre-configured LLM client for dependency injection.
@@ -701,15 +694,11 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
                 "job_skip_not_pending",
                 job_id=job_id,
                 current_status=job.status.value,
-                expected_status=JobStatus.PENDING.value
+                expected_status=JobStatus.PENDING.value,
             )
             return
 
-        log_info(
-            logger,
-            "job_processing_start",
-            job_id=job_id
-        )
+        log_info(logger, "job_processing_start", job_id=job_id)
 
         # Mark as RUNNING
         job_store.update_job(job_id, status=JobStatus.RUNNING)
@@ -719,12 +708,12 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
         # ====================================================================
         # Resolve LLM configuration: use stored config or apply defaults
         llm_config = None
-        system_prompt_id = 'default'  # Default system prompt template
+        system_prompt_id = "default"  # Default system prompt template
 
-        if job.config and 'clarification_config' in job.config:
+        if job.config and "clarification_config" in job.config:
             # Reconstruct ClarificationConfig from stored dict with error handling
             try:
-                clarification_config_dict = job.config['clarification_config']
+                clarification_config_dict = job.config["clarification_config"]
                 clarification_config = ClarificationConfig(**clarification_config_dict)
 
                 # Extract system_prompt_id if present
@@ -734,34 +723,38 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
                 # Convert to ClarificationLLMConfig (without system_prompt_id)
                 # Only pass non-None values to avoid validation errors
                 llm_config_kwargs = {
-                    'provider': clarification_config.provider,
-                    'model': clarification_config.model,
+                    "provider": clarification_config.provider,
+                    "model": clarification_config.model,
                 }
                 if clarification_config.temperature is not None:
-                    llm_config_kwargs['temperature'] = clarification_config.temperature
+                    llm_config_kwargs["temperature"] = clarification_config.temperature
                 if clarification_config.max_tokens is not None:
-                    llm_config_kwargs['max_tokens'] = clarification_config.max_tokens
+                    llm_config_kwargs["max_tokens"] = clarification_config.max_tokens
 
                 llm_config = ClarificationLLMConfig(**llm_config_kwargs)
             except Exception as e:
                 # If config reconstruction fails, log error and fall through to defaults
                 logger.warning(
                     f"Failed to reconstruct clarification_config for job {job_id}: {e}. "
-                    "Falling back to default configuration."
+                    "Falling back to legacy or default configuration."
                 )
-                # llm_config remains None, will be handled below
-        elif job.config and 'llm_config' in job.config:
+                # llm_config remains None, try legacy config as a fallback
+                if job.config and "llm_config" in job.config:
+                    try:
+                        llm_config_dict = job.config["llm_config"]
+                        llm_config = ClarificationLLMConfig(**llm_config_dict)
+                    except Exception:
+                        # Legacy config is also invalid, llm_config remains None
+                        pass
+        elif job.config and "llm_config" in job.config:
             # Legacy support: Reconstruct ClarificationLLMConfig from stored dict
-            llm_config_dict = job.config['llm_config']
+            llm_config_dict = job.config["llm_config"]
             llm_config = ClarificationLLMConfig(**llm_config_dict)
             # Legacy configs don't have system_prompt_id, so 'default' is used
 
         # If no config loaded, apply default configuration
         if llm_config is None:
-            llm_config = ClarificationLLMConfig(
-                provider="dummy",
-                model="test-model"
-            )
+            llm_config = ClarificationLLMConfig(provider="dummy", model="test-model")
             # system_prompt_id is already 'default'
 
         # ====================================================================
@@ -778,7 +771,7 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
                     "llm_client_initialized",
                     job_id=job_id,
                     provider=llm_config.provider,
-                    model=llm_config.model
+                    model=llm_config.model,
                 )
             except (ValueError, LLMCallError) as e:
                 # Invalid/unsupported provider or missing API key - fail the job immediately
@@ -788,14 +781,11 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
                     "llm_client_init_failed",
                     job_id=job_id,
                     provider=llm_config.provider,
-                    error=e
+                    error=e,
                 )
                 metrics.increment("llm_errors")
                 job_store.update_job(
-                    job_id,
-                    status=JobStatus.FAILED,
-                    last_error=error_message,
-                    result=None
+                    job_id, status=JobStatus.FAILED, last_error=error_message, result=None
                 )
                 return
 
@@ -806,10 +796,7 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
             error_message = "Job missing ClarificationRequest - cannot process"
             logger.error(f"Job {job_id} failed: {error_message}")
             job_store.update_job(
-                job_id,
-                status=JobStatus.FAILED,
-                last_error=error_message,
-                result=None
+                job_id, status=JobStatus.FAILED, last_error=error_message, result=None
             )
             return
 
@@ -821,16 +808,13 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
                 job.request,
                 provider=llm_config.provider,
                 model=llm_config.model,
-                system_prompt_id=system_prompt_id
+                system_prompt_id=system_prompt_id,
             )
         except Exception as e:
             error_message = f"Failed to build prompts: {type(e).__name__}: {str(e)}"
             logger.error(f"Job {job_id} failed: {error_message}")
             job_store.update_job(
-                job_id,
-                status=JobStatus.FAILED,
-                last_error=error_message,
-                result=None
+                job_id, status=JobStatus.FAILED, last_error=error_message, result=None
             )
             return
 
@@ -844,23 +828,23 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
             "llm_call_start",
             job_id=job_id,
             provider=llm_config.provider,
-            model=llm_config.model
+            model=llm_config.model,
         )
 
         try:
             # Prepare kwargs for LLM call
             llm_kwargs = {}
             if llm_config.temperature is not None:
-                llm_kwargs['temperature'] = llm_config.temperature
+                llm_kwargs["temperature"] = llm_config.temperature
             if llm_config.max_tokens is not None:
-                llm_kwargs['max_tokens'] = llm_config.max_tokens
+                llm_kwargs["max_tokens"] = llm_config.max_tokens
 
             # Call LLM exactly once
             raw_response = await client.complete(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 model=llm_config.model,
-                **llm_kwargs
+                **llm_kwargs,
             )
             elapsed_time = time.perf_counter() - start_time
 
@@ -871,7 +855,7 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
                 job_id=job_id,
                 provider=llm_config.provider,
                 model=llm_config.model,
-                elapsed_seconds=round(elapsed_time, 2)
+                elapsed_seconds=round(elapsed_time, 2),
             )
 
         except Exception as e:
@@ -889,13 +873,13 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
                 provider=llm_config.provider,
                 model=llm_config.model,
                 elapsed_seconds=round(elapsed_time, 2),
-                error=e
+                error=e,
             )
             job_store.update_job(
                 job_id,
                 status=JobStatus.FAILED,
                 last_error=f"LLM call failed: {error_message}",
-                result=None
+                result=None,
             )
             return
 
@@ -909,41 +893,27 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
             # Validate as ClarifiedPlan
             result = ClarifiedPlan(**parsed_json)
 
-            log_info(
-                logger,
-                "llm_response_parsed",
-                job_id=job_id,
-                num_specs=len(result.specs)
-            )
+            log_info(logger, "llm_response_parsed", job_id=job_id, num_specs=len(result.specs))
 
         except JSONCleanupError as e:
             error_message = f"Failed to parse LLM response: {e.message}"
             logger.error(f"Job {job_id} failed: {error_message}")
             job_store.update_job(
-                job_id,
-                status=JobStatus.FAILED,
-                last_error=error_message,
-                result=None
+                job_id, status=JobStatus.FAILED, last_error=error_message, result=None
             )
             return
         except ValidationError as e:
             error_message = f"LLM response validation failed: {str(e)}"
             logger.error(f"Job {job_id} failed: {error_message}")
             job_store.update_job(
-                job_id,
-                status=JobStatus.FAILED,
-                last_error=error_message,
-                result=None
+                job_id, status=JobStatus.FAILED, last_error=error_message, result=None
             )
             return
         except Exception as e:
             error_message = f"Unexpected error parsing response: {type(e).__name__}: {str(e)}"
             logger.error(f"Job {job_id} failed: {error_message}")
             job_store.update_job(
-                job_id,
-                status=JobStatus.FAILED,
-                last_error=error_message,
-                result=None
+                job_id, status=JobStatus.FAILED, last_error=error_message, result=None
             )
             return
 
@@ -953,12 +923,7 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
         # Mark as SUCCESS with result (updated_at will be refreshed automatically)
         successful_job = job_store.update_job(job_id, status=JobStatus.SUCCESS, result=result)
 
-        log_info(
-            logger,
-            "job_processing_complete",
-            job_id=job_id,
-            status=JobStatus.SUCCESS.value
-        )
+        log_info(logger, "job_processing_complete", job_id=job_id, status=JobStatus.SUCCESS.value)
 
         # ====================================================================
         # DOWNSTREAM DISPATCH
@@ -969,30 +934,17 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
         try:
             dispatcher = get_downstream_dispatcher()
 
-            log_info(
-                logger,
-                "downstream_dispatch_start",
-                job_id=job_id
-            )
+            log_info(logger, "downstream_dispatch_start", job_id=job_id)
 
             # Use the updated job object with SUCCESS status and result
             await dispatcher.dispatch(successful_job, result)
 
-            log_info(
-                logger,
-                "downstream_dispatch_success",
-                job_id=job_id
-            )
+            log_info(logger, "downstream_dispatch_success", job_id=job_id)
 
         except Exception as dispatch_error:
             # Capture dispatcher exceptions without affecting job status
             # The job is already marked SUCCESS and should remain that way
-            log_error(
-                logger,
-                "downstream_dispatch_failed",
-                job_id=job_id,
-                error=dispatch_error
-            )
+            log_error(logger, "downstream_dispatch_failed", job_id=job_id, error=dispatch_error)
 
             # Note: We deliberately do NOT update job status here
             # The job completed successfully even if downstream dispatch failed
@@ -1000,45 +952,24 @@ async def process_clarification_job(job_id: UUID, llm_client: Any | None = None)
 
     except job_store.JobNotFoundError:
         # Job doesn't exist - log and return cleanly without crashing
-        log_warning(
-            logger,
-            "job_not_found",
-            job_id=job_id
-        )
+        log_warning(logger, "job_not_found", job_id=job_id)
         return
 
     except Exception as e:
         # Capture any unexpected exception and mark job as FAILED
         error_message = f"{type(e).__name__}: {str(e)}"
 
-        log_error(
-            logger,
-            "job_processing_failed",
-            job_id=job_id,
-            error=e
-        )
+        log_error(logger, "job_processing_failed", job_id=job_id, error=e)
 
         try:
             # Try to update the job with error status
             # Clear result to ensure no partial data is stored
             job_store.update_job(
-                job_id,
-                status=JobStatus.FAILED,
-                last_error=error_message,
-                result=None
+                job_id, status=JobStatus.FAILED, last_error=error_message, result=None
             )
         except job_store.JobNotFoundError:
             # Job was deleted while processing - log and continue
-            log_warning(
-                logger,
-                "job_not_found_on_error",
-                job_id=job_id
-            )
+            log_warning(logger, "job_not_found_on_error", job_id=job_id)
         except Exception as update_error:
             # Failed to update job status - log but don't raise
-            log_error(
-                logger,
-                "job_update_failed",
-                job_id=job_id,
-                error=update_error
-            )
+            log_error(logger, "job_update_failed", job_id=job_id, error=update_error)

@@ -72,7 +72,7 @@ class TestMetricsEndpoint:
             "jobs_running",
             "jobs_success",
             "jobs_failed",
-            "llm_errors"
+            "llm_errors",
         }
 
         assert set(data.keys()) == expected_counters
@@ -91,10 +91,7 @@ class TestMetricsEndpoint:
         request_data = ClarificationRequest(plan=plan, answers=[])
 
         # Create a job
-        response = client.post(
-            "/v1/clarifications",
-            json=request_data.model_dump()
-        )
+        response = client.post("/v1/clarifications", json=request_data.model_dump())
         assert response.status_code == 202
 
         # Check metrics - job is queued but may have already been processed

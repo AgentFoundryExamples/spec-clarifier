@@ -79,7 +79,7 @@ def test_metrics_endpoint_returns_expected_counters(client):
         "jobs_running",
         "jobs_success",
         "jobs_failed",
-        "llm_errors"
+        "llm_errors",
     }
 
     assert set(data.keys()) == expected_counters

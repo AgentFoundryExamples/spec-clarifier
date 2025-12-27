@@ -31,8 +31,6 @@ def clean_job_store():
     clear_all_jobs()
 
 
-
-
 def _create_dummy_client_with_response(specs):
     """Helper to create DummyLLMClient with valid ClarifiedPlan JSON response."""
     import json
@@ -47,12 +45,13 @@ def _create_dummy_client_with_response(specs):
             "must": spec.must,
             "dont": spec.dont,
             "nice": spec.nice,
-            "assumptions": spec.assumptions
+            "assumptions": spec.assumptions,
         }
         clarified_specs.append(clarified_spec)
 
     response_json = json.dumps({"specs": clarified_specs}, indent=2)
     return DummyLLMClient(canned_response=response_json)
+
 
 class TestStartClarificationJob:
     """Tests for start_clarification_job function."""
@@ -133,10 +132,7 @@ class TestProcessClarificationJob:
     async def test_process_job_success(self):
         """Test successful job processing."""
         spec = SpecInput(
-            purpose="Test",
-            vision="Test vision",
-            must=["Feature 1"],
-            open_questions=["Q1", "Q2"]
+            purpose="Test", vision="Test vision", must=["Feature 1"], open_questions=["Q1", "Q2"]
         )
         plan = PlanInput(specs=[spec])
         request = ClarificationRequest(plan=plan)
@@ -147,7 +143,8 @@ class TestProcessClarificationJob:
 
         # Create a DummyLLMClient that returns valid ClarifiedPlan JSON
         from app.services.llm_clients import DummyLLMClient
-        valid_response = '''
+
+        valid_response = """
 {
   "specs": [
     {
@@ -160,7 +157,7 @@ class TestProcessClarificationJob:
     }
   ]
 }
-        '''
+        """
         dummy_client = DummyLLMClient(canned_response=valid_response.strip())
 
         # Process it directly with dummy client
@@ -189,8 +186,10 @@ class TestProcessClarificationJob:
 
         # Mock update_job to capture status changes
         import app.services.job_store as job_store_module
-        with patch.object(job_store_module, 'update_job',
-                         wraps=job_store_module.update_job) as mock_update:
+
+        with patch.object(
+            job_store_module, "update_job", wraps=job_store_module.update_job
+        ) as mock_update:
             await process_clarification_job(job.id, llm_client=dummy_client)
 
             # Should have been called at least twice (RUNNING, then SUCCESS)
@@ -198,11 +197,11 @@ class TestProcessClarificationJob:
 
             # First call should be RUNNING
             first_call = mock_update.call_args_list[0]
-            assert first_call[1]['status'] == JobStatus.RUNNING
+            assert first_call[1]["status"] == JobStatus.RUNNING
 
             # Last call should be SUCCESS
             last_call = mock_update.call_args_list[-1]
-            assert last_call[1]['status'] == JobStatus.SUCCESS
+            assert last_call[1]["status"] == JobStatus.SUCCESS
 
     async def test_process_job_updates_timestamps(self):
         """Test that updated_at is refreshed during processing."""
@@ -246,6 +245,7 @@ class TestProcessClarificationJob:
 
         # Mock the LLM client to raise an exception
         from app.services.llm_clients import DummyLLMClient
+
         failing_client = DummyLLMClient(simulate_failure=True, failure_message="Test error")
 
         # Process should not raise
@@ -269,6 +269,7 @@ class TestProcessClarificationJob:
 
         # Mock LLM client to raise exception
         from app.services.llm_clients import DummyLLMClient
+
         failing_client = DummyLLMClient(simulate_failure=True, failure_message="Processing failed")
 
         await process_clarification_job(job.id, llm_client=failing_client)
@@ -309,7 +310,7 @@ class TestProcessClarificationJob:
             dont=["Slow", "Complex"],
             nice=["Configurable", "Extensible"],
             assumptions=["Cloud deployment", "High bandwidth"],
-            open_questions=["Which cloud?", "What latency?"]
+            open_questions=["Which cloud?", "What latency?"],
         )
         plan = PlanInput(specs=[spec])
         request = ClarificationRequest(plan=plan)
@@ -373,10 +374,10 @@ class TestProcessClarificationJob:
 
         failing_client = DummyLLMClient(simulate_failure=True, failure_message="First error")
 
-        with patch.object(job_store_module, 'update_job') as mock_update:
+        with patch.object(job_store_module, "update_job") as mock_update:
             # Make update_job fail when marking as FAILED (but succeed for RUNNING)
             def update_side_effect(job_id, **kwargs):
-                if kwargs.get('status') == JobStatus.FAILED:
+                if kwargs.get("status") == JobStatus.FAILED:
                     raise RuntimeError("Update failed")
                 # For RUNNING status, call the real function
                 return job_store_module.update_job(job_id, **kwargs)
@@ -469,6 +470,7 @@ class TestAsyncJobLifecycleEdgeCases:
 
         # Manually set job to RUNNING
         from app.services.job_store import update_job
+
         update_job(job.id, status=JobStatus.RUNNING)
 
         # Try to process - should skip

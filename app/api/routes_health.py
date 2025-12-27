@@ -23,7 +23,7 @@ router = APIRouter(tags=["Health"])
 @router.get("/health")
 def health_check() -> dict:
     """Health check endpoint.
-    
+
     Returns:
         dict: Health status response
     """
@@ -50,11 +50,11 @@ def health_check() -> dict:
 )
 def get_basic_metrics() -> dict:
     """Get basic operational metrics.
-    
+
     Returns lightweight counters for job processing and LLM interactions.
     This endpoint is designed for monitoring and does not expose sensitive
     information about job contents or API keys.
-    
+
     Returns:
         dict: Dictionary mapping counter names to current values
     """

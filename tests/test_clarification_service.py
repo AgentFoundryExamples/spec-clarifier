@@ -41,12 +41,13 @@ def _create_dummy_client_with_response(specs):
             "must": spec.must,
             "dont": spec.dont,
             "nice": spec.nice,
-            "assumptions": spec.assumptions
+            "assumptions": spec.assumptions,
         }
         clarified_specs.append(clarified_spec)
 
     response_json = json.dumps({"specs": clarified_specs}, indent=2)
     return DummyLLMClient(canned_response=response_json)
+
 
 class TestClarifyPlan:
     """Tests for the clarify_plan service function."""
@@ -109,10 +110,7 @@ class TestClarifyPlan:
 
     def test_clarify_plan_preserves_order(self):
         """Test that spec order is preserved deterministically."""
-        specs = [
-            SpecInput(purpose=f"Spec {i}", vision=f"Vision {i}")
-            for i in range(10)
-        ]
+        specs = [SpecInput(purpose=f"Spec {i}", vision=f"Vision {i}") for i in range(10)]
         plan = PlanInput(specs=specs)
 
         result = clarify_plan(plan)
@@ -221,6 +219,7 @@ class TestProcessClarificationJobService:
         spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature 1"])
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -232,15 +231,16 @@ class TestProcessClarificationJobService:
 
         # Track state transitions to verify RUNNING state occurs
         from app.services import job_store
+
         states_observed = []
         original_update = job_store.update_job
 
         def track_updates(job_id, **kwargs):
-            if 'status' in kwargs:
-                states_observed.append(kwargs['status'])
+            if "status" in kwargs:
+                states_observed.append(kwargs["status"])
             return original_update(job_id, **kwargs)
 
-        with patch.object(job_store, 'update_job', side_effect=track_updates):
+        with patch.object(job_store, "update_job", side_effect=track_updates):
             # Process job (manually invoke)
             # Create dummy client
             dummy_client = _create_dummy_client_with_response([spec])
@@ -268,6 +268,7 @@ class TestProcessClarificationJobService:
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -276,9 +277,9 @@ class TestProcessClarificationJobService:
 
         # Use a failing LLM client
         from app.services.llm_clients import DummyLLMClient
+
         failing_client = DummyLLMClient(
-            simulate_failure=True,
-            failure_message="Simulated processing error"
+            simulate_failure=True, failure_message="Simulated processing error"
         )
 
         # Process should handle exception gracefully
@@ -296,6 +297,7 @@ class TestProcessClarificationJobService:
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -320,10 +322,11 @@ class TestProcessClarificationJobService:
             must=["Fast", "Reliable"],
             dont=["Slow"],
             nice=["Configurable"],
-            assumptions=["Cloud deployment"]
+            assumptions=["Cloud deployment"],
         )
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -352,15 +355,13 @@ class TestClarificationServiceWithLLMConfig:
         spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature"])
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         # Create LLM config for OpenAI
         llm_config = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=0.7,
-            max_tokens=1000
+            provider="openai", model="gpt-5.1", temperature=0.7, max_tokens=1000
         )
 
         # Start job with LLM config
@@ -384,6 +385,7 @@ class TestClarificationServiceWithLLMConfig:
         spec = SpecInput(purpose="Legacy Test", vision="Old behavior")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -406,6 +408,7 @@ class TestClarificationServiceWithLLMConfig:
         spec = SpecInput(purpose="DI Test", vision="Dependency injection")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -427,23 +430,21 @@ class TestClarificationServiceWithLLMConfig:
         spec = SpecInput(purpose="Config Test", vision="From storage")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         # Create config with valid provider
-        llm_config = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1"
-        )
+        llm_config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
 
         job = start_clarification_job(request, background_tasks, llm_config=llm_config)
 
         # Verify config was stored
-        assert 'llm_config' in job.config
+        assert "llm_config" in job.config
 
         # Process job - should initialize client from stored config
         # Mock factory to return dummy client (avoid needing real API keys)
-        with patch('app.services.clarification.get_llm_client') as mock_factory:
+        with patch("app.services.clarification.get_llm_client") as mock_factory:
             dummy_client = _create_dummy_client_with_response([spec])
             mock_factory.return_value = dummy_client
 
@@ -460,19 +461,17 @@ class TestClarificationServiceWithLLMConfig:
         spec = SpecInput(purpose="Fallback Test", vision="Error handling")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         # Create config with valid provider
-        llm_config = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1"
-        )
+        llm_config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
 
         job = start_clarification_job(request, background_tasks, llm_config=llm_config)
 
         # Mock get_llm_client to raise an error (don't inject client, let it try to initialize)
-        with patch('app.services.clarification.get_llm_client') as mock_factory:
+        with patch("app.services.clarification.get_llm_client") as mock_factory:
             mock_factory.side_effect = ValueError("Client initialization failed")
 
             # Process should fail the job
@@ -481,12 +480,15 @@ class TestClarificationServiceWithLLMConfig:
         # Job should be marked as FAILED
         processed_job = get_job(job.id)
         assert processed_job.status == JobStatus.FAILED
-        assert "Invalid LLM provider" in processed_job.last_error or "Client initialization failed" in processed_job.last_error
+        assert (
+            "Invalid LLM provider" in processed_job.last_error
+            or "Client initialization failed" in processed_job.last_error
+        )
 
         job = start_clarification_job(request, background_tasks, llm_config=llm_config)
 
         # Mock get_llm_client to raise an error
-        with patch('app.services.clarification.get_llm_client') as mock_factory:
+        with patch("app.services.clarification.get_llm_client") as mock_factory:
             mock_factory.side_effect = ValueError("Client initialization failed")
 
             # Process should handle error gracefully and continue
@@ -505,6 +507,7 @@ class TestClarificationServiceWithLLMConfig:
         spec = SpecInput(purpose="LLM Invocation", vision="Client is called")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -526,19 +529,18 @@ class TestClarificationServiceWithLLMConfig:
         spec = SpecInput(purpose="Anthropic Test", vision="Claude model")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         llm_config = ClarificationLLMConfig(
-            provider="anthropic",
-            model="claude-sonnet-4.5",
-            temperature=0.2
+            provider="anthropic", model="claude-sonnet-4.5", temperature=0.2
         )
 
         job = start_clarification_job(request, background_tasks, llm_config=llm_config)
 
         # Mock factory to avoid needing real API key
-        with patch('app.services.clarification.get_llm_client') as mock_factory:
+        with patch("app.services.clarification.get_llm_client") as mock_factory:
             mock_factory.return_value = DummyLLMClient()
             # Create dummy client
             dummy_client = _create_dummy_client_with_response([spec])
@@ -553,6 +555,7 @@ class TestClarificationServiceWithLLMConfig:
         spec = SpecInput(purpose="Config Merge", vision="Preserve old config")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -562,56 +565,48 @@ class TestClarificationServiceWithLLMConfig:
         llm_config = ClarificationLLMConfig(provider="openai", model="gpt-5.1")
 
         job = start_clarification_job(
-            request,
-            background_tasks,
-            config=existing_config,
-            llm_config=llm_config
+            request, background_tasks, config=existing_config, llm_config=llm_config
         )
 
         # Verify both configs are present
-        assert 'custom_field' in job.config
-        assert job.config['custom_field'] == "preserved"
-        assert 'llm_config' in job.config
-        assert job.config['llm_config']['provider'] == "openai"
+        assert "custom_field" in job.config
+        assert job.config["custom_field"] == "preserved"
+        assert "llm_config" in job.config
+        assert job.config["llm_config"]["provider"] == "openai"
 
     async def test_service_llm_config_stored_as_dict(self):
         """Test that LLM config is properly serialized to dict for storage."""
         spec = SpecInput(purpose="Serialization Test", vision="Dict storage")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         llm_config = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=0.8,
-            max_tokens=2000
+            provider="openai", model="gpt-5.1", temperature=0.8, max_tokens=2000
         )
 
         job = start_clarification_job(request, background_tasks, llm_config=llm_config)
 
         # Verify stored as dict, not Pydantic model
-        stored_config = job.config['llm_config']
+        stored_config = job.config["llm_config"]
         assert isinstance(stored_config, dict)
-        assert stored_config['provider'] == "openai"
-        assert stored_config['model'] == "gpt-5.1"
-        assert stored_config['temperature'] == 0.8
-        assert stored_config['max_tokens'] == 2000
+        assert stored_config["provider"] == "openai"
+        assert stored_config["model"] == "gpt-5.1"
+        assert stored_config["temperature"] == 0.8
+        assert stored_config["max_tokens"] == 2000
 
     async def test_service_reconstructs_llm_config_from_dict(self):
         """Test that service correctly reconstructs ClarificationLLMConfig from dict."""
         spec = SpecInput(purpose="Reconstruction Test", vision="Dict to model")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
-        llm_config = ClarificationLLMConfig(
-            provider="openai",
-            model="gpt-5.1",
-            temperature=0.5
-        )
+        llm_config = ClarificationLLMConfig(provider="openai", model="gpt-5.1", temperature=0.5)
 
         job = start_clarification_job(request, background_tasks, llm_config=llm_config)
 
@@ -622,7 +617,7 @@ class TestClarificationServiceWithLLMConfig:
             reconstructed_configs.append(config)
             return _create_dummy_client_with_response([spec])
 
-        with patch('app.services.clarification.get_llm_client', side_effect=capture_config):
+        with patch("app.services.clarification.get_llm_client", side_effect=capture_config):
             await process_clarification_job(job.id)  # Don't inject client, let it use factory
 
         # Verify config was reconstructed correctly
@@ -636,7 +631,7 @@ class TestClarificationServiceWithLLMConfig:
 
 class TestLLMPipelineWithDummyClient:
     """Tests for LLM pipeline using DummyLLMClient with various response scenarios.
-    
+
     These tests cover the acceptance criteria from the issue:
     - Valid DummyLLMClient JSON leads to SUCCESS jobs
     - Cleaned JSON from markdown fences parses successfully
@@ -653,25 +648,29 @@ class TestLLMPipelineWithDummyClient:
             dont=["No feature 2"],
             nice=["Feature 3"],
             assumptions=["Assumption 1"],
-            open_questions=["Question 1?"]
+            open_questions=["Question 1?"],
         )
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         # Create DummyLLMClient with valid ClarifiedPlan JSON (no open_questions)
         valid_response = {
-            "specs": [{
-                "purpose": "Test",
-                "vision": "Test vision",
-                "must": ["Feature 1"],
-                "dont": ["No feature 2"],
-                "nice": ["Feature 3"],
-                "assumptions": ["Assumption 1"]
-            }]
+            "specs": [
+                {
+                    "purpose": "Test",
+                    "vision": "Test vision",
+                    "must": ["Feature 1"],
+                    "dont": ["No feature 2"],
+                    "nice": ["Feature 3"],
+                    "assumptions": ["Assumption 1"],
+                }
+            ]
         }
         import json
+
         dummy_client = DummyLLMClient(canned_response=json.dumps(valid_response))
 
         # Start and process job
@@ -699,11 +698,12 @@ class TestLLMPipelineWithDummyClient:
         spec = SpecInput(purpose="Markdown Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         # Create response with markdown fences
-        markdown_wrapped = '''```json
+        markdown_wrapped = """```json
 {
   "specs": [{
     "purpose": "Markdown Test",
@@ -714,7 +714,7 @@ class TestLLMPipelineWithDummyClient:
     "assumptions": []
   }]
 }
-```'''
+```"""
         dummy_client = DummyLLMClient(canned_response=markdown_wrapped)
 
         job = start_clarification_job(request, background_tasks)
@@ -731,13 +731,14 @@ class TestLLMPipelineWithDummyClient:
         spec = SpecInput(purpose="Plain Fence Test", vision="Test")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         # Plain markdown fences without 'json' keyword
-        plain_fences = '''```
+        plain_fences = """```
 {"specs": [{"purpose": "Plain Fence Test", "vision": "Test", "must": [], "dont": [], "nice": [], "assumptions": []}]}
-```'''
+```"""
         dummy_client = DummyLLMClient(canned_response=plain_fences)
 
         job = start_clarification_job(request, background_tasks)
@@ -752,6 +753,7 @@ class TestLLMPipelineWithDummyClient:
         spec = SpecInput(purpose="Trailing Text", vision="Test")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -771,6 +773,7 @@ class TestLLMPipelineWithDummyClient:
         spec = SpecInput(purpose="Test", vision="Test")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -785,7 +788,9 @@ class TestLLMPipelineWithDummyClient:
         failed_job = get_job(job.id)
         assert failed_job.status == JobStatus.FAILED
         assert failed_job.last_error is not None
-        assert "Failed to parse" in failed_job.last_error or "parse" in failed_job.last_error.lower()
+        assert (
+            "Failed to parse" in failed_job.last_error or "parse" in failed_job.last_error.lower()
+        )
         assert failed_job.result is None
 
     async def test_missing_specs_key_fails_with_helpful_error(self):
@@ -793,6 +798,7 @@ class TestLLMPipelineWithDummyClient:
         spec = SpecInput(purpose="Test", vision="Test")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -807,28 +813,35 @@ class TestLLMPipelineWithDummyClient:
         assert failed_job.status == JobStatus.FAILED
         assert failed_job.last_error is not None
         # Should mention validation failure
-        assert "validation" in failed_job.last_error.lower() or "field required" in failed_job.last_error.lower()
+        assert (
+            "validation" in failed_job.last_error.lower()
+            or "field required" in failed_job.last_error.lower()
+        )
 
     async def test_invalid_must_dont_nice_types_rejected(self):
         """Test that non-list values for must/dont/nice are rejected."""
         spec = SpecInput(purpose="Test", vision="Test")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         # 'must' is a string instead of list
         invalid_types = {
-            "specs": [{
-                "purpose": "Test",
-                "vision": "Test",
-                "must": "should be a list, not string",
-                "dont": [],
-                "nice": [],
-                "assumptions": []
-            }]
+            "specs": [
+                {
+                    "purpose": "Test",
+                    "vision": "Test",
+                    "must": "should be a list, not string",
+                    "dont": [],
+                    "nice": [],
+                    "assumptions": [],
+                }
+            ]
         }
         import json
+
         dummy_client = DummyLLMClient(canned_response=json.dumps(invalid_types))
 
         job = start_clarification_job(request, background_tasks)
@@ -844,21 +857,25 @@ class TestLLMPipelineWithDummyClient:
         spec = SpecInput(purpose="Test", vision="Test")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         # 'must' contains integers instead of strings
         invalid_item_types = {
-            "specs": [{
-                "purpose": "Test",
-                "vision": "Test",
-                "must": [1, 2, 3],  # Should be strings
-                "dont": [],
-                "nice": [],
-                "assumptions": []
-            }]
+            "specs": [
+                {
+                    "purpose": "Test",
+                    "vision": "Test",
+                    "must": [1, 2, 3],  # Should be strings
+                    "dont": [],
+                    "nice": [],
+                    "assumptions": [],
+                }
+            ]
         }
         import json
+
         dummy_client = DummyLLMClient(canned_response=json.dumps(invalid_item_types))
 
         job = start_clarification_job(request, background_tasks)
@@ -871,27 +888,28 @@ class TestLLMPipelineWithDummyClient:
     async def test_empty_answers_handled_correctly(self):
         """Test that empty answers list is handled correctly."""
         spec = SpecInput(
-            purpose="Empty Answers",
-            vision="Test",
-            must=["Feature"],
-            open_questions=["Question?"]
+            purpose="Empty Answers", vision="Test", must=["Feature"], open_questions=["Question?"]
         )
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan, answers=[])  # Empty answers
         background_tasks = MagicMock()
 
         valid_response = {
-            "specs": [{
-                "purpose": "Empty Answers",
-                "vision": "Test",
-                "must": ["Feature"],
-                "dont": [],
-                "nice": [],
-                "assumptions": []
-            }]
+            "specs": [
+                {
+                    "purpose": "Empty Answers",
+                    "vision": "Test",
+                    "must": ["Feature"],
+                    "dont": [],
+                    "nice": [],
+                    "assumptions": [],
+                }
+            ]
         }
         import json
+
         dummy_client = DummyLLMClient(canned_response=json.dumps(valid_response))
 
         job = start_clarification_job(request, background_tasks)
@@ -904,7 +922,7 @@ class TestLLMPipelineWithDummyClient:
 
     async def test_answers_merged_into_must_dont_nice(self):
         """Test that answers are intended to be merged into must/dont/nice arrays.
-        
+
         Note: The actual merging logic is done by the LLM, but we test that
         the pipeline accepts answers and produces valid output.
         """
@@ -912,16 +930,17 @@ class TestLLMPipelineWithDummyClient:
             purpose="Merge Test",
             vision="Test",
             must=["Existing feature"],
-            open_questions=["Add new feature?"]
+            open_questions=["Add new feature?"],
         )
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest, QuestionAnswer
+
         answers = [
             QuestionAnswer(
                 spec_index=0,
                 question_index=0,
                 question="Add new feature?",
-                answer="Yes, add feature X"
+                answer="Yes, add feature X",
             )
         ]
         request = ClarificationRequest(plan=plan, answers=answers)
@@ -929,16 +948,19 @@ class TestLLMPipelineWithDummyClient:
 
         # LLM response should include both existing and new features
         merged_response = {
-            "specs": [{
-                "purpose": "Merge Test",
-                "vision": "Test",
-                "must": ["Existing feature", "Feature X"],
-                "dont": [],
-                "nice": [],
-                "assumptions": []
-            }]
+            "specs": [
+                {
+                    "purpose": "Merge Test",
+                    "vision": "Test",
+                    "must": ["Existing feature", "Feature X"],
+                    "dont": [],
+                    "nice": [],
+                    "assumptions": [],
+                }
+            ]
         }
         import json
+
         dummy_client = DummyLLMClient(canned_response=json.dumps(merged_response))
 
         job = start_clarification_job(request, background_tasks)
@@ -952,20 +974,15 @@ class TestLLMPipelineWithDummyClient:
 
     async def test_sanitized_error_messages_no_prompts(self):
         """Test that error messages don't contain prompts or sensitive data."""
-        spec = SpecInput(
-            purpose="Secret Info: api_key=sk-12345",
-            vision="Contains token=abc-xyz"
-        )
+        spec = SpecInput(purpose="Secret Info: api_key=sk-12345", vision="Contains token=abc-xyz")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
         # Use failing client
-        dummy_client = DummyLLMClient(
-            simulate_failure=True,
-            failure_message="Processing failed"
-        )
+        dummy_client = DummyLLMClient(simulate_failure=True, failure_message="Processing failed")
 
         job = start_clarification_job(request, background_tasks)
         await process_clarification_job(job.id, llm_client=dummy_client)
@@ -976,12 +993,15 @@ class TestLLMPipelineWithDummyClient:
         assert "api_key=sk-12345" not in failed_job.last_error
         assert "token=abc-xyz" not in failed_job.last_error
         # But should contain the failure message
-        assert "Processing failed" in failed_job.last_error or "failed" in failed_job.last_error.lower()
+        assert (
+            "Processing failed" in failed_job.last_error
+            or "failed" in failed_job.last_error.lower()
+        )
 
 
 class TestClarifiedPlanValidation:
     """Tests for ClarifiedPlan validation edge cases.
-    
+
     These tests ensure that the Pydantic model correctly validates
     the structure of clarified specifications.
     """
@@ -1021,7 +1041,7 @@ class TestClarifiedPlanValidation:
                 dont=[],
                 nice=[],
                 assumptions=[],
-                open_questions=["Should not be here"]
+                open_questions=["Should not be here"],
             )
 
     def test_clarified_spec_list_fields_must_be_lists(self):
@@ -1033,12 +1053,7 @@ class TestClarifiedPlanValidation:
         # 'must' as string instead of list
         with pytest.raises(ValidationError):
             ClarifiedSpec(
-                purpose="Test",
-                vision="Test",
-                must="Not a list",
-                dont=[],
-                nice=[],
-                assumptions=[]
+                purpose="Test", vision="Test", must="Not a list", dont=[], nice=[], assumptions=[]
             )
 
     def test_clarified_spec_list_items_must_be_strings(self):
@@ -1050,12 +1065,7 @@ class TestClarifiedPlanValidation:
         # 'must' contains integers
         with pytest.raises(ValidationError):
             ClarifiedSpec(
-                purpose="Test",
-                vision="Test",
-                must=[1, 2, 3],
-                dont=[],
-                nice=[],
-                assumptions=[]
+                purpose="Test", vision="Test", must=[1, 2, 3], dont=[], nice=[], assumptions=[]
             )
 
     def test_clarified_plan_requires_specs_key(self):
@@ -1086,7 +1096,7 @@ class TestClarifiedPlanValidation:
 
 class TestJSONCleanupEdgeCases:
     """Tests for JSON cleanup utility edge cases.
-    
+
     These tests cover cleanup_and_parse_json edge cases including:
     - Multiple markdown fence formats
     - Nested JSON structures
@@ -1097,7 +1107,7 @@ class TestJSONCleanupEdgeCases:
         """Test that nested JSON structures are preserved during cleanup."""
         from app.services.clarification import cleanup_and_parse_json
 
-        nested = '''```json
+        nested = """```json
 {
   "specs": [{
     "purpose": "Test",
@@ -1108,7 +1118,7 @@ class TestJSONCleanupEdgeCases:
     "assumptions": []
   }]
 }
-```'''
+```"""
         result = cleanup_and_parse_json(nested)
         assert result["specs"][0]["must"] == ["A", "B"]
 
@@ -1116,7 +1126,7 @@ class TestJSONCleanupEdgeCases:
         """Test JSON with escaped characters is handled correctly."""
         from app.services.clarification import cleanup_and_parse_json
 
-        escaped = '''```{"specs": [{"purpose": "Test \\"quoted\\"", "vision": "Line\\nbreak", "must": [], "dont": [], "nice": [], "assumptions": []}]}```'''
+        escaped = """```{"specs": [{"purpose": "Test \\"quoted\\"", "vision": "Line\\nbreak", "must": [], "dont": [], "nice": [], "assumptions": []}]}```"""
         result = cleanup_and_parse_json(escaped)
         assert 'Test "quoted"' in result["specs"][0]["purpose"]
 
@@ -1124,7 +1134,7 @@ class TestJSONCleanupEdgeCases:
         """Test that unicode characters are preserved."""
         from app.services.clarification import cleanup_and_parse_json
 
-        unicode_json = '''```
+        unicode_json = """```
 {
   "specs": [{
     "purpose": "系统管理",
@@ -1135,7 +1145,7 @@ class TestJSONCleanupEdgeCases:
     "assumptions": []
   }]
 }
-```'''
+```"""
         result = cleanup_and_parse_json(unicode_json)
         assert result["specs"][0]["purpose"] == "系统管理"
         assert result["specs"][0]["vision"] == "🚀"
@@ -1155,7 +1165,7 @@ class TestJSONCleanupEdgeCases:
 
         patterns = [
             'Here is the JSON: {"key": "value"}',
-            "Here's the result: {\"key\": \"value\"}",
+            'Here\'s the result: {"key": "value"}',
             'Sure! {"key": "value"}',
             'Certainly, {"key": "value"}',
         ]
@@ -1192,7 +1202,7 @@ class TestJSONCleanupEdgeCases:
 
 class TestDownstreamDispatcherIntegration:
     """Tests for downstream dispatcher integration in clarification processing.
-    
+
     These tests verify that the dispatcher is invoked after successful job
     completion and that dispatcher errors are handled without affecting job status.
     """
@@ -1202,6 +1212,7 @@ class TestDownstreamDispatcherIntegration:
         spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature"])
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -1212,6 +1223,7 @@ class TestDownstreamDispatcherIntegration:
         dummy_client = _create_dummy_client_with_response([spec])
 
         import logging
+
         with caplog.at_level(logging.INFO):
             await process_clarification_job(job.id, llm_client=dummy_client)
 
@@ -1230,6 +1242,7 @@ class TestDownstreamDispatcherIntegration:
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -1238,12 +1251,11 @@ class TestDownstreamDispatcherIntegration:
 
         # Use failing LLM client
         from app.services.llm_clients import DummyLLMClient
-        failing_client = DummyLLMClient(
-            simulate_failure=True,
-            failure_message="Simulated failure"
-        )
+
+        failing_client = DummyLLMClient(simulate_failure=True, failure_message="Simulated failure")
 
         import logging
+
         with caplog.at_level(logging.INFO):
             await process_clarification_job(job.id, llm_client=failing_client)
 
@@ -1261,6 +1273,7 @@ class TestDownstreamDispatcherIntegration:
         spec = SpecInput(purpose="Test", vision="Test vision", must=["Feature"])
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -1276,8 +1289,12 @@ class TestDownstreamDispatcherIntegration:
         dummy_client = _create_dummy_client_with_response([spec])
 
         import logging
+
         with caplog.at_level(logging.INFO):
-            with patch('app.services.clarification.get_downstream_dispatcher', return_value=failing_dispatcher):
+            with patch(
+                "app.services.clarification.get_downstream_dispatcher",
+                return_value=failing_dispatcher,
+            ):
                 await process_clarification_job(job.id, llm_client=dummy_client)
 
         # Verify job is still SUCCESS despite dispatcher error
@@ -1295,6 +1312,7 @@ class TestDownstreamDispatcherIntegration:
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -1309,8 +1327,12 @@ class TestDownstreamDispatcherIntegration:
         dummy_client = _create_dummy_client_with_response([spec])
 
         import logging
+
         with caplog.at_level(logging.INFO):
-            with patch('app.services.clarification.get_downstream_dispatcher', return_value=failing_dispatcher):
+            with patch(
+                "app.services.clarification.get_downstream_dispatcher",
+                return_value=failing_dispatcher,
+            ):
                 await process_clarification_job(job.id, llm_client=dummy_client)
 
         # Verify error log contains job_id
@@ -1326,6 +1348,7 @@ class TestDownstreamDispatcherIntegration:
         plan1 = PlanInput(specs=[spec1])
         plan2 = PlanInput(specs=[spec2])
         from app.models.specs import ClarificationRequest
+
         request1 = ClarificationRequest(plan=plan1)
         request2 = ClarificationRequest(plan=plan2)
         background_tasks = MagicMock()
@@ -1338,6 +1361,7 @@ class TestDownstreamDispatcherIntegration:
         dummy_client2 = _create_dummy_client_with_response([spec2])
 
         import logging
+
         with caplog.at_level(logging.INFO):
             await process_clarification_job(job1.id, llm_client=dummy_client1)
             await process_clarification_job(job2.id, llm_client=dummy_client2)
@@ -1358,6 +1382,7 @@ class TestDownstreamDispatcherIntegration:
         spec = SpecInput(purpose="Test", vision="Test vision")
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -1373,8 +1398,12 @@ class TestDownstreamDispatcherIntegration:
         dummy_client = _create_dummy_client_with_response([spec])
 
         import logging
+
         with caplog.at_level(logging.INFO):
-            with patch('app.services.clarification.get_downstream_dispatcher', return_value=failing_dispatcher):
+            with patch(
+                "app.services.clarification.get_downstream_dispatcher",
+                return_value=failing_dispatcher,
+            ):
                 await process_clarification_job(job.id, llm_client=dummy_client)
 
         # Job should still be SUCCESS
@@ -1390,10 +1419,11 @@ class TestDownstreamDispatcherIntegration:
         spec = SpecInput(
             purpose="Verification Test",
             vision="Ensure correct data",
-            must=["Feature A", "Feature B"]
+            must=["Feature A", "Feature B"],
         )
         plan = PlanInput(specs=[spec])
         from app.models.specs import ClarificationRequest
+
         request = ClarificationRequest(plan=plan)
         background_tasks = MagicMock()
 
@@ -1406,7 +1436,9 @@ class TestDownstreamDispatcherIntegration:
 
         dummy_client = _create_dummy_client_with_response([spec])
 
-        with patch('app.services.clarification.get_downstream_dispatcher', return_value=mock_dispatcher):
+        with patch(
+            "app.services.clarification.get_downstream_dispatcher", return_value=mock_dispatcher
+        ):
             await process_clarification_job(job.id, llm_client=dummy_client)
 
         # Verify dispatcher was called once
