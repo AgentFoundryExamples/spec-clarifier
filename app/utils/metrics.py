@@ -15,7 +15,6 @@
 
 import logging
 import threading
-from typing import Dict
 
 from app.utils.logging_helper import log_info
 
@@ -33,11 +32,11 @@ class MetricsCollector:
         _lock: Threading lock for atomic counter updates
         _counters: Dictionary of counter names to current values
     """
-    
+
     def __init__(self) -> None:
         """Initialize metrics collector with zero counters."""
         self._lock = threading.Lock()
-        self._counters: Dict[str, int] = {
+        self._counters: dict[str, int] = {
             "jobs_queued": 0,
             "jobs_pending": 0,
             "jobs_running": 0,
@@ -45,7 +44,7 @@ class MetricsCollector:
             "jobs_failed": 0,
             "llm_errors": 0,
         }
-    
+
     def increment(self, counter_name: str, delta: int = 1) -> None:
         """Increment a counter by the specified amount.
         
@@ -62,10 +61,10 @@ class MetricsCollector:
         with self._lock:
             if counter_name not in self._counters:
                 raise ValueError(f"Unknown counter: {counter_name}")
-            
+
             self._counters[counter_name] += delta
             new_value = self._counters[counter_name]
-        
+
         # Log outside lock to avoid holding it during I/O
         log_info(
             logger,
@@ -74,7 +73,7 @@ class MetricsCollector:
             value=new_value,
             delta=delta
         )
-    
+
     def decrement(self, counter_name: str, delta: int = 1) -> None:
         """Decrement a counter by the specified amount.
         
@@ -91,10 +90,10 @@ class MetricsCollector:
         with self._lock:
             if counter_name not in self._counters:
                 raise ValueError(f"Unknown counter: {counter_name}")
-            
+
             self._counters[counter_name] = max(0, self._counters[counter_name] - delta)
             new_value = self._counters[counter_name]
-        
+
         # Log outside lock to avoid holding it during I/O
         log_info(
             logger,
@@ -103,8 +102,8 @@ class MetricsCollector:
             value=new_value,
             delta=-delta
         )
-    
-    def get_all(self) -> Dict[str, int]:
+
+    def get_all(self) -> dict[str, int]:
         """Get a snapshot of all counter values.
         
         Thread-safe operation that returns a copy of the current state.
@@ -114,7 +113,7 @@ class MetricsCollector:
         """
         with self._lock:
             return self._counters.copy()
-    
+
     def reset(self) -> None:
         """Reset all counters to zero.
         
@@ -123,7 +122,7 @@ class MetricsCollector:
         with self._lock:
             for key in self._counters:
                 self._counters[key] = 0
-        
+
         log_info(logger, "metrics_reset")
 
 

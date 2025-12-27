@@ -36,7 +36,7 @@ class DownstreamDispatcher(Protocol):
     transient failures gracefully. Implementations must not raise exceptions
     that would crash the clarification worker.
     """
-    
+
     async def dispatch(self, job: ClarificationJob, plan: ClarifiedPlan) -> None:
         """Dispatch a clarified plan to a downstream system.
         
@@ -83,7 +83,7 @@ class PlaceholderDownstreamDispatcher:
     - QueueDownstreamDispatcher: Publish plans to message queue
     - StorageDownstreamDispatcher: Save plans to object storage
     """
-    
+
     async def dispatch(self, job: ClarificationJob, plan: ClarifiedPlan) -> None:
         """Log the clarified plan with clear banner messages.
         
@@ -98,21 +98,21 @@ class PlaceholderDownstreamDispatcher:
             plan: The clarified plan to dispatch
         """
         job_id = str(job.id)
-        
+
         # Serialize plan to JSON for logging with error handling
         try:
             plan_json = json.dumps(plan.model_dump(), indent=2, ensure_ascii=False)
         except (TypeError, ValueError) as e:
             # Fallback to string representation if JSON serialization fails
             plan_json = f"[JSON serialization failed: {e}]\n{str(plan)}"
-        
+
         # Banner start - use print for high visibility in production logs
         banner_start = f"{'=' * 80}\n" \
                       f"DOWNSTREAM DISPATCH START - Job {job_id}\n" \
                       f"{'=' * 80}"
         print(banner_start)
         logger.info(banner_start)
-        
+
         # Log structured dispatch event
         log_info(
             logger,
@@ -121,12 +121,12 @@ class PlaceholderDownstreamDispatcher:
             num_specs=len(plan.specs),
             message="Placeholder dispatcher invoked - plan would be sent to downstream system"
         )
-        
+
         # Log the plan JSON
         plan_output = f"Clarified Plan JSON:\n{plan_json}"
         print(plan_output)
         logger.info(plan_output)
-        
+
         # Banner end
         banner_end = f"{'=' * 80}\n" \
                     f"DOWNSTREAM DISPATCH END - Job {job_id}\n" \

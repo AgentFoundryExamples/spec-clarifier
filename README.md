@@ -44,6 +44,17 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+4. Configure environment (optional):
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env to customize your configuration (optional)
+# By default, the service runs in dummy mode with no API keys required
+```
+
+The `.env.example` file contains all available configuration options with safe defaults. For local development and testing, you can run the service without creating a `.env` file - it will use dummy mode by default.
+
 ## Running the Service
 
 You can run the service using either Python directly or Docker.
@@ -195,17 +206,44 @@ The application can be configured via environment variables with the `APP_` pref
 
 #### LLM Configuration
 
-The service uses LLM providers for specification clarification. Configure the default provider and model:
+The service uses LLM providers for specification clarification. By default, the service runs in **dummy mode** which doesn't require any API keys and is perfect for local development and testing.
+
+##### LLM Provider Selection
+
+- `LLM_PROVIDER`: Choose which LLM provider to use (default: "dummy")
+  - **"dummy"**: Mock LLM responses for testing/development (no API keys required)
+  - **"openai"**: Use OpenAI GPT models (requires `OPENAI_API_KEY`)
+  - **"anthropic"**: Use Anthropic Claude models (requires `ANTHROPIC_API_KEY`)
+
+##### API Keys (Required only for real providers)
+
+- `OPENAI_API_KEY`: Your OpenAI API key (required when `LLM_PROVIDER=openai`)
+  - Get your key from: https://platform.openai.com/api-keys
+  - The service validates this key is present before creating OpenAI clients
+
+- `ANTHROPIC_API_KEY`: Your Anthropic API key (required when `LLM_PROVIDER=anthropic`)
+  - Get your key from: https://console.anthropic.com/
+  - The service validates this key is present before creating Anthropic clients
+
+**Important**: API keys are only required when using real LLM providers. The dummy provider works without any keys, making it ideal for CI/CD pipelines, testing, and local development.
+
+##### Default Provider and Model
+
+The service uses default provider and model settings when no explicit configuration is provided:
 
 - `APP_LLM_DEFAULT_PROVIDER`: Default LLM provider (default: "openai")
   - Supported values: "openai", "anthropic", "google"
   - This sets the default provider when no explicit configuration is provided
+  - Note: This is a fallback setting; `LLM_PROVIDER` takes precedence
 
 - `APP_LLM_DEFAULT_MODEL`: Default model identifier (default: "gpt-5")
   - For OpenAI: "gpt-5", "gpt-5.1" (uses Responses API)
   - For Anthropic: "claude-sonnet-4.5", "claude-opus-4" (uses Messages API)
   - For Google: "gemini-3.0-pro" (uses Gemini API)
+  - For Dummy: "test-model", "dummy-model" (returns deterministic responses)
   - See LLMs.md for detailed provider information
+
+##### Allowed Models
 
 - `APP_ALLOWED_MODELS_OPENAI`: Comma-separated list of allowed OpenAI models (default: "gpt-5,gpt-5.1,gpt-4o")
   - Restricts which OpenAI models can be used in clarification requests and set as defaults
@@ -214,6 +252,31 @@ The service uses LLM providers for specification clarification. Configure the de
 - `APP_ALLOWED_MODELS_ANTHROPIC`: Comma-separated list of allowed Anthropic models (default: "claude-sonnet-4.5,claude-opus-4")
   - Restricts which Anthropic models can be used in clarification requests and set as defaults
   - Only models in this list will be accepted by the validation layer
+
+- `APP_ALLOWED_MODELS_DUMMY`: Comma-separated list of allowed dummy models (default: "test-model,dummy-model")
+  - Used for testing and development environments
+
+**Example - Local Development (No API Keys):**
+```bash
+export LLM_PROVIDER=dummy  # Default, no API keys needed
+uvicorn app.main:app --reload
+```
+
+**Example - Production with OpenAI:**
+```bash
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=sk-your-actual-api-key
+export APP_LLM_DEFAULT_MODEL=gpt-5.1
+uvicorn app.main:app
+```
+
+**Example - Production with Anthropic:**
+```bash
+export LLM_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=sk-ant-your-actual-api-key
+export APP_LLM_DEFAULT_MODEL=claude-sonnet-4.5
+uvicorn app.main:app
+```
 
 **Note**: The LLM pipeline intentionally redacts prompts, answers, and raw responses from logs to protect sensitive data. Only metadata (provider, model, elapsed time, error messages) is logged.
 

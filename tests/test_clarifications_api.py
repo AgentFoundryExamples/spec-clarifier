@@ -41,10 +41,11 @@ def clean_job_store():
 @pytest.fixture(autouse=True)
 def mock_llm_client():
     """Mock LLM client for API tests to avoid needing real API keys."""
-    from unittest.mock import patch
-    from app.services.llm_clients import DummyLLMClient
     import json
-    
+    from unittest.mock import patch
+
+    from app.services.llm_clients import DummyLLMClient
+
     def create_dummy_client_from_request(provider, config):
         """Create dummy client that returns valid response based on request specs."""
         # Return a DummyLLMClient that echoes back valid ClarifiedPlan JSON
@@ -61,7 +62,7 @@ def mock_llm_client():
                 }
             ]
         }))
-    
+
     with patch('app.services.clarification.get_llm_client', side_effect=create_dummy_client_from_request):
         yield
 
@@ -72,14 +73,15 @@ def enabled_debug_client(monkeypatch):
     monkeypatch.setenv("APP_ENABLE_DEBUG_ENDPOINT", "true")
     from app.config import get_settings
     get_settings.cache_clear()
-    from app.main import create_app
     from fastapi.testclient import TestClient
+
+    from app.main import create_app
     return TestClient(create_app())
 
 
 class TestPreviewClarificationsEndpoint:
     """Tests for POST /v1/clarifications/preview endpoint."""
-    
+
     def test_preview_single_spec(self, client):
         """Test preview endpoint with a single spec."""
         request_data = {
@@ -98,15 +100,15 @@ class TestPreviewClarificationsEndpoint:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert "specs" in data
         assert len(data["specs"]) == 1
-        
+
         spec = data["specs"][0]
         assert spec["purpose"] == "Build a web app"
         assert spec["vision"] == "Modern and user-friendly"
@@ -114,10 +116,10 @@ class TestPreviewClarificationsEndpoint:
         assert spec["dont"] == ["Complex UI"]
         assert spec["nice"] == ["Dark mode"]
         assert spec["assumptions"] == ["Modern browsers"]
-        
+
         # Verify open_questions is not in the response
         assert "open_questions" not in spec
-    
+
     def test_preview_multiple_specs(self, client):
         """Test preview endpoint with multiple specs."""
         request_data = {
@@ -145,16 +147,16 @@ class TestPreviewClarificationsEndpoint:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert len(data["specs"]) == 2
         assert data["specs"][0]["purpose"] == "Frontend"
         assert data["specs"][1]["purpose"] == "Backend"
-    
+
     def test_preview_with_answers_ignores_them(self, client):
         """Test that answers are accepted but ignored."""
         request_data = {
@@ -180,27 +182,27 @@ class TestPreviewClarificationsEndpoint:
                 }
             ],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         # Should succeed and ignore answers
         assert response.status_code == 200
         data = response.json()
         assert len(data["specs"]) == 1
-    
+
     def test_preview_with_empty_specs_list(self, client):
         """Test preview with empty specs list."""
         request_data = {
             "plan": {"specs": []},
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["specs"] == []
-    
+
     def test_preview_with_empty_lists_in_spec(self, client):
         """Test that empty lists are serialized correctly."""
         request_data = {
@@ -219,18 +221,18 @@ class TestPreviewClarificationsEndpoint:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         spec = data["specs"][0]
         assert spec["must"] == []
         assert spec["dont"] == []
         assert spec["nice"] == []
         assert spec["assumptions"] == []
-    
+
     def test_preview_missing_required_field_returns_422(self, client):
         """Test that missing required fields return 422 validation error."""
         request_data = {
@@ -243,13 +245,13 @@ class TestPreviewClarificationsEndpoint:
                 ]
             }
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
-    
+
     def test_preview_wrong_type_returns_422(self, client):
         """Test that wrong field types return 422 validation error."""
         request_data = {
@@ -263,11 +265,11 @@ class TestPreviewClarificationsEndpoint:
                 ]
             }
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 422
-    
+
     def test_preview_extra_field_returns_422(self, client):
         """Test that extra fields are rejected with 422."""
         request_data = {
@@ -282,11 +284,11 @@ class TestPreviewClarificationsEndpoint:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 422
-    
+
     def test_preview_extra_field_in_request_returns_422(self, client):
         """Test that extra fields in ClarificationRequest are rejected (edge case from issue)."""
         request_data = {
@@ -301,16 +303,16 @@ class TestPreviewClarificationsEndpoint:
             "answers": [],
             "extra_request_field": "should trigger validation error"
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 422
         data = response.json()
         # Verify it's a validation error with sanitized message
         assert "detail" in data
         errors = data["detail"]
         assert any("extra_request_field" in str(error) for error in errors)
-    
+
     def test_preview_null_string_rejected(self, client):
         """Test that null strings are rejected before invoking LLM (edge case from issue)."""
         request_data = {
@@ -324,13 +326,13 @@ class TestPreviewClarificationsEndpoint:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
-    
+
     def test_preview_wrong_list_type_rejected(self, client):
         """Test that wrong list types are rejected before invoking LLM (edge case from issue)."""
         request_data = {
@@ -345,13 +347,13 @@ class TestPreviewClarificationsEndpoint:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
-    
+
     def test_preview_invalid_json_returns_422(self, client):
         """Test that invalid JSON returns 422."""
         response = client.post(
@@ -359,9 +361,9 @@ class TestPreviewClarificationsEndpoint:
             data="not valid json",
             headers={"Content-Type": "application/json"},
         )
-        
+
         assert response.status_code == 422
-    
+
     def test_preview_returns_json_content_type(self, client):
         """Test that response has correct content type."""
         request_data = {
@@ -375,12 +377,12 @@ class TestPreviewClarificationsEndpoint:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 200
         assert "application/json" in response.headers["content-type"]
-    
+
     def test_preview_with_unicode_content(self, client):
         """Test preview with unicode and special characters."""
         request_data = {
@@ -399,14 +401,14 @@ class TestPreviewClarificationsEndpoint:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["specs"][0]["purpose"] == "Système de gestion 系统管理"
         assert data["specs"][0]["vision"] == "🚀 Modern & scalable"
-    
+
     def test_preview_deterministic_order(self, client):
         """Test that spec order is preserved deterministically."""
         specs = [
@@ -416,21 +418,21 @@ class TestPreviewClarificationsEndpoint:
             }
             for i in range(5)
         ]
-        
+
         request_data = {
             "plan": {"specs": specs},
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         for i, spec in enumerate(data["specs"]):
             assert spec["purpose"] == f"Spec {i}"
             assert spec["vision"] == f"Vision {i}"
-    
+
     def test_preview_negative_answer_indices_rejected(self, client):
         """Test that negative indices in answers are rejected."""
         request_data = {
@@ -451,11 +453,11 @@ class TestPreviewClarificationsEndpoint:
                 }
             ],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 422
-    
+
     def test_preview_out_of_range_answer_indices_accepted(self, client):
         """Test that out-of-range indices are accepted (validation happens later)."""
         request_data = {
@@ -476,43 +478,43 @@ class TestPreviewClarificationsEndpoint:
                 }
             ],
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         # Should succeed as answers are ignored
         assert response.status_code == 200
 
 
 class TestClarificationsOpenAPI:
     """Tests for OpenAPI documentation of clarifications endpoint."""
-    
+
     def test_openapi_schema_includes_clarifications(self, client):
         """Test that OpenAPI schema includes clarifications endpoint."""
         response = client.get("/openapi.json")
-        
+
         assert response.status_code == 200
         openapi = response.json()
-        
+
         # Check that the endpoint is documented
         assert "/v1/clarifications/preview" in openapi["paths"]
-        
+
         endpoint = openapi["paths"]["/v1/clarifications/preview"]
         assert "post" in endpoint
-        
+
         # Check tags
         post_spec = endpoint["post"]
         assert "Clarifications" in post_spec["tags"]
-        
+
         # Check that request body is documented
         assert "requestBody" in post_spec
-        
+
         # Check that response is documented
         assert "200" in post_spec["responses"]
 
 
 class TestCreateClarificationJob:
     """Tests for POST /v1/clarifications endpoint."""
-    
+
     def test_create_job_returns_202_with_pending_status(self, client):
         """Test that creating a job returns 202 with PENDING status."""
         request_data = {
@@ -527,12 +529,12 @@ class TestCreateClarificationJob:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 202
         data = response.json()
-        
+
         # Should return a lightweight job summary with PENDING status
         assert data["status"] == "PENDING"
         assert "id" in data
@@ -543,7 +545,7 @@ class TestCreateClarificationJob:
         assert "request" not in data
         assert "result" not in data
         assert "config" not in data
-    
+
     def test_create_job_returns_immediately(self, client):
         """Test that job creation returns immediately without blocking."""
         request_data = {
@@ -557,19 +559,19 @@ class TestCreateClarificationJob:
             },
             "answers": [],
         }
-        
+
         start_time = time.time()
         response = client.post("/v1/clarifications", json=request_data)
         elapsed_time = time.time() - start_time
-        
+
         # Should return very quickly (within 1 second)
         assert elapsed_time < 1.0
         assert response.status_code == 202
-        
+
         # Job should be in PENDING state (not processed yet)
         data = response.json()
         assert data["status"] == "PENDING"
-    
+
     def test_create_job_stores_in_job_store(self, client):
         """Test that created job is retrievable via GET endpoint."""
         request_data = {
@@ -583,20 +585,20 @@ class TestCreateClarificationJob:
             },
             "answers": [],
         }
-        
+
         # Create job
         response = client.post("/v1/clarifications", json=request_data)
         assert response.status_code == 202
-        
+
         job_id = response.json()["id"]
-        
+
         # Retrieve job
         get_response = client.get(f"/v1/clarifications/{job_id}")
         assert get_response.status_code == 200
-        
+
         job_data = get_response.json()
         assert job_data["id"] == job_id
-    
+
     def test_create_job_processing_completes(self, client):
         """Test that background processing completes successfully."""
         request_data = {
@@ -615,36 +617,36 @@ class TestCreateClarificationJob:
             },
             "answers": [],
         }
-        
+
         # Create job
         response = client.post("/v1/clarifications", json=request_data)
         assert response.status_code == 202
-        
+
         job_id = response.json()["id"]
-        
+
         # Poll for completion (with timeout)
         max_wait = 5.0
         start_time = time.time()
         job_data = None
-        
+
         while time.time() - start_time < max_wait:
             get_response = client.get(f"/v1/clarifications/{job_id}")
             job_data = get_response.json()
-            
+
             if job_data["status"] in ["SUCCESS", "FAILED"]:
                 break
-            
+
             time.sleep(0.1)
-        
+
         assert job_data["status"] in ["SUCCESS", "FAILED"], "Job did not complete within timeout"
-        
+
         # Job should have completed successfully
         assert job_data is not None
         assert job_data["status"] == "SUCCESS"
         # Result is NOT included by default (show_job_result=False)
         assert job_data["result"] is None
         assert job_data["last_error"] is None
-    
+
     def test_create_job_with_multiple_specs(self, client):
         """Test creating a job with multiple specs."""
         request_data = {
@@ -666,33 +668,33 @@ class TestCreateClarificationJob:
             },
             "answers": [],
         }
-        
+
         # Create job
         response = client.post("/v1/clarifications", json=request_data)
         assert response.status_code == 202
-        
+
         job_id = response.json()["id"]
-        
+
         # Wait for completion
         max_wait = 5.0
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             get_response = client.get(f"/v1/clarifications/{job_id}")
             job_data = get_response.json()
-            
+
             if job_data["status"] in ["SUCCESS", "FAILED"]:
                 break
-            
+
             time.sleep(0.1)
-        
+
         assert job_data["status"] in ["SUCCESS", "FAILED"], "Job did not complete within timeout"
-        
+
         # Job should have completed successfully
         assert job_data["status"] == "SUCCESS"
         # Result is NOT included by default (show_job_result=False)
         assert job_data["result"] is None
-    
+
     def test_create_job_invalid_request_returns_422(self, client):
         """Test that invalid requests return 422."""
         request_data = {
@@ -705,11 +707,11 @@ class TestCreateClarificationJob:
                 ]
             }
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 422
-    
+
     def test_create_job_with_extra_fields_returns_422(self, client):
         """Test that extra fields in request trigger validation error (edge case from issue)."""
         request_data = {
@@ -724,13 +726,13 @@ class TestCreateClarificationJob:
             "answers": [],
             "unexpected_field": "should fail"
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
-    
+
     def test_create_job_without_answers_succeeds(self, client):
         """Test that omitting answers defaults to empty list (edge case from issue)."""
         request_data = {
@@ -744,36 +746,36 @@ class TestCreateClarificationJob:
             }
             # Note: answers field is omitted
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         # Should succeed with default empty answers list
         assert response.status_code == 202
         data = response.json()
         assert "id" in data
         assert data["status"] == "PENDING"
-        
+
         # Verify job actually processes correctly with empty answers
         job_id = data["id"]
         max_wait = 5.0
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             get_response = client.get(f"/v1/clarifications/{job_id}")
             job_data = get_response.json()
-            
+
             if job_data["status"] in ["SUCCESS", "FAILED"]:
                 break
-            
+
             time.sleep(0.1)
-        
+
         # Job should complete successfully with empty answers
         assert job_data["status"] == "SUCCESS", f"Job failed or timed out: {job_data.get('last_error', 'timeout')}"
 
 
 class TestGetClarificationJob:
     """Tests for GET /v1/clarifications/{job_id} endpoint."""
-    
+
     def test_get_job_returns_job_details(self, client):
         """Test retrieving a job by ID."""
         request_data = {
@@ -787,37 +789,37 @@ class TestGetClarificationJob:
             },
             "answers": [],
         }
-        
+
         # Create job
         create_response = client.post("/v1/clarifications", json=request_data)
         job_id = create_response.json()["id"]
-        
+
         # Get job
         get_response = client.get(f"/v1/clarifications/{job_id}")
-        
+
         assert get_response.status_code == 200
         data = get_response.json()
-        
+
         assert data["id"] == job_id
         assert data["status"] in ["PENDING", "RUNNING", "SUCCESS", "FAILED"]
         assert "created_at" in data
         assert "updated_at" in data
-    
+
     def test_get_nonexistent_job_returns_404(self, client):
         """Test that getting a nonexistent job returns 404."""
         fake_id = "00000000-0000-0000-0000-000000000000"
-        
+
         response = client.get(f"/v1/clarifications/{fake_id}")
-        
+
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
-    
+
     def test_get_job_invalid_uuid_returns_422(self, client):
         """Test that invalid UUID returns 422."""
         response = client.get("/v1/clarifications/not-a-valid-uuid")
-        
+
         assert response.status_code == 422
-    
+
     def test_get_job_shows_success_status(self, client):
         """Test that completed job shows SUCCESS status."""
         request_data = {
@@ -831,30 +833,30 @@ class TestGetClarificationJob:
             },
             "answers": [],
         }
-        
+
         # Create and wait for completion
         create_response = client.post("/v1/clarifications", json=request_data)
         job_id = create_response.json()["id"]
-        
+
         # Poll until complete
         max_wait = 5.0
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             get_response = client.get(f"/v1/clarifications/{job_id}")
             job_data = get_response.json()
-            
+
             if job_data["status"] in ["SUCCESS", "FAILED"]:
                 assert job_data["status"] == "SUCCESS"
                 # Result is NOT included by default (show_job_result=False)
                 assert job_data["result"] is None
                 return
-            
+
             time.sleep(0.1)
-        
+
         # Should have completed within timeout
         assert False, "Job did not complete within timeout"
-    
+
     def test_get_job_returns_json_content_type(self, client):
         """Test that response has correct content type."""
         request_data = {
@@ -868,40 +870,40 @@ class TestGetClarificationJob:
             },
             "answers": [],
         }
-        
+
         create_response = client.post("/v1/clarifications", json=request_data)
         job_id = create_response.json()["id"]
-        
+
         get_response = client.get(f"/v1/clarifications/{job_id}")
-        
+
         assert get_response.status_code == 200
         assert "application/json" in get_response.headers["content-type"]
 
 
 class TestAsyncClarificationsOpenAPI:
     """Tests for OpenAPI documentation of async clarification endpoints."""
-    
+
     def test_openapi_includes_async_endpoints(self, client):
         """Test that OpenAPI schema includes async clarification endpoints."""
         response = client.get("/openapi.json")
-        
+
         assert response.status_code == 200
         openapi = response.json()
-        
+
         # Check POST endpoint (empty path for POST to base)
         assert "/v1/clarifications" in openapi["paths"]
         clarifications_path = openapi["paths"]["/v1/clarifications"]
-        
+
         # Should have POST method
         assert "post" in clarifications_path
         post_spec = clarifications_path["post"]
         assert "Clarifications" in post_spec["tags"]
         assert "202" in post_spec["responses"]
-        
+
         # Check GET by ID endpoint
         assert "/v1/clarifications/{job_id}" in openapi["paths"]
         get_path = openapi["paths"]["/v1/clarifications/{job_id}"]
-        
+
         # Should have GET method
         assert "get" in get_path
         get_spec = get_path["get"]
@@ -912,12 +914,12 @@ class TestAsyncClarificationsOpenAPI:
 
 class TestShowJobResultFlag:
     """Tests for APP_SHOW_JOB_RESULT development flag behavior."""
-    
+
     def test_get_job_excludes_result_by_default(self, client, monkeypatch):
         """Test that result is excluded when flag is False (default)."""
         # Ensure flag is False (default)
         monkeypatch.setenv("APP_SHOW_JOB_RESULT", "false")
-        
+
         request_data = {
             "plan": {
                 "specs": [
@@ -929,28 +931,28 @@ class TestShowJobResultFlag:
             },
             "answers": [],
         }
-        
+
         # Create job
         response = client.post("/v1/clarifications", json=request_data)
         job_id = response.json()["id"]
-        
+
         # Wait for completion
         max_wait = 5.0
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             get_response = client.get(f"/v1/clarifications/{job_id}")
             job_data = get_response.json()
-            
+
             if job_data["status"] == "SUCCESS":
                 # Result should be None (excluded)
                 assert job_data["result"] is None
                 return
-            
+
             time.sleep(0.1)
-        
+
         assert False, "Job did not complete within timeout"
-    
+
     def test_get_job_includes_result_when_flag_enabled(self, monkeypatch):
         """Test that result is included when flag is True."""
         # Enable the flag
@@ -958,10 +960,11 @@ class TestShowJobResultFlag:
         # Force settings reload and create a new client with the updated settings
         from app.config import get_settings
         get_settings.cache_clear()
-        from app.main import create_app
         from fastapi.testclient import TestClient
+
+        from app.main import create_app
         client = TestClient(create_app())
-        
+
         request_data = {
             "plan": {
                 "specs": [
@@ -975,25 +978,25 @@ class TestShowJobResultFlag:
             },
             "answers": [],
         }
-        
+
         # Create job
         response = client.post("/v1/clarifications", json=request_data)
         job_id = response.json()["id"]
-        
+
         # Wait for completion
         max_wait = 5.0
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             get_response = client.get(f"/v1/clarifications/{job_id}")
             job_data = get_response.json()
-            
+
             if job_data["status"] == "SUCCESS":
                 # Result SHOULD be included when flag is enabled
                 assert job_data["result"] is not None
                 assert "specs" in job_data["result"]
                 assert len(job_data["result"]["specs"]) == 1
-                
+
                 spec = job_data["result"]["specs"][0]
                 # With mocked LLM client, we get generic response
                 assert spec["purpose"] == "Test"
@@ -1001,21 +1004,22 @@ class TestShowJobResultFlag:
                 # open_questions should not be in the result
                 assert "open_questions" not in spec
                 return
-            
+
             time.sleep(0.1)
-        
+
         assert False, "Job did not complete within timeout"
-    
+
     def test_post_job_never_includes_result(self, monkeypatch):
         """Test that POST response never includes result, regardless of flag."""
         # Enable flag to verify POST ignores it
         monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
         from app.config import get_settings
         get_settings.cache_clear()
-        from app.main import create_app
         from fastapi.testclient import TestClient
+
+        from app.main import create_app
         client = TestClient(create_app())
-        
+
         request_data = {
             "plan": {
                 "specs": [
@@ -1027,33 +1031,34 @@ class TestShowJobResultFlag:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 202
         data = response.json()
-        
+
         # POST response should NEVER include result (lightweight summary)
         assert "result" not in data
         assert "request" not in data
         assert "config" not in data
-        
+
         # Only includes id, status, timestamps, and last_error
         assert "id" in data
         assert "status" in data
         assert "created_at" in data
         assert "updated_at" in data
         assert "last_error" in data
-    
+
     def test_flag_only_affects_get_endpoint(self, monkeypatch):
         """Test that flag only controls GET, not POST responses."""
         monkeypatch.setenv("APP_SHOW_JOB_RESULT", "false")
         from app.config import get_settings
         get_settings.cache_clear()
-        from app.main import create_app
         from fastapi.testclient import TestClient
+
+        from app.main import create_app
         client = TestClient(create_app())
-        
+
         request_data = {
             "plan": {
                 "specs": [
@@ -1065,35 +1070,35 @@ class TestShowJobResultFlag:
             },
             "answers": [],
         }
-        
+
         # POST should return lightweight summary
         post_response = client.post("/v1/clarifications", json=request_data)
         post_data = post_response.json()
         assert "result" not in post_data
-        
+
         job_id = post_data["id"]
-        
+
         # Wait for completion
         max_wait = 5.0
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             get_response = client.get(f"/v1/clarifications/{job_id}")
             get_data = get_response.json()
-            
+
             if get_data["status"] == "SUCCESS":
                 # GET should have result=None when flag is False
                 assert get_data["result"] is None
                 return
-            
+
             time.sleep(0.1)
-        
+
         assert False, "Job did not complete within timeout"
 
 
 class TestAsyncJobLifecycleAPI:
     """Additional tests for async job lifecycle at the API level."""
-    
+
     def test_post_returns_immediately_without_result_payload(self, client):
         """Test that POST /v1/clarifications returns immediately without ClarifiedPlan in response."""
         request_data = {
@@ -1108,12 +1113,12 @@ class TestAsyncJobLifecycleAPI:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         # Response should be 202 Accepted
         assert response.status_code == 202
-        
+
         data = response.json()
         # Should have minimal fields only
         assert "id" in data
@@ -1121,15 +1126,15 @@ class TestAsyncJobLifecycleAPI:
         assert "created_at" in data
         assert "updated_at" in data
         assert "last_error" in data
-        
+
         # Should NOT have full request or result - this is the robust check
         assert "request" not in data
         assert "result" not in data
         assert "config" not in data
-        
+
         # Status should be PENDING (not yet processed)
         assert data["status"] == "PENDING"
-    
+
     def test_get_returns_documented_fields(self, client):
         """Test that GET returns id, status, timestamps, last_error, and result fields."""
         request_data = {
@@ -1143,17 +1148,17 @@ class TestAsyncJobLifecycleAPI:
             },
             "answers": [],
         }
-        
+
         # Create job
         post_response = client.post("/v1/clarifications", json=request_data)
         job_id = post_response.json()["id"]
-        
+
         # Get job
         get_response = client.get(f"/v1/clarifications/{job_id}")
-        
+
         assert get_response.status_code == 200
         data = get_response.json()
-        
+
         # Verify all documented fields are present
         assert "id" in data
         assert "status" in data
@@ -1161,23 +1166,24 @@ class TestAsyncJobLifecycleAPI:
         assert "updated_at" in data
         assert "last_error" in data
         assert "result" in data  # Field is present but may be null
-    
+
     def test_get_returns_404_for_unknown_job_id(self, client):
         """Test that GET returns 404 for unknown job IDs."""
         from uuid import uuid4
         fake_id = uuid4()
-        
+
         response = client.get(f"/v1/clarifications/{fake_id}")
-        
+
         assert response.status_code == 404
         assert "detail" in response.json()
         assert str(fake_id) in response.json()["detail"]
-    
+
     def test_failed_job_shows_last_error_in_get(self, client):
         """Test that FAILED jobs return last_error in GET response."""
         from unittest.mock import patch
+
         from app.services.llm_clients import DummyLLMClient
-        
+
         request_data = {
             "plan": {
                 "specs": [
@@ -1189,41 +1195,41 @@ class TestAsyncJobLifecycleAPI:
             },
             "answers": [],
         }
-        
+
         # Patch get_llm_client to return a failing client
         def create_failing_client(provider, config):
             return DummyLLMClient(
                 simulate_failure=True,
                 failure_message="Forced failure for testing"
             )
-        
+
         with patch('app.services.clarification.get_llm_client', side_effect=create_failing_client):
             # Create job (will be processed in background with failing client)
             post_response = client.post("/v1/clarifications", json=request_data)
             job_id = post_response.json()["id"]
-            
+
             # Wait for background processing to complete
             max_wait = 5.0
             start_time = time.time()
             job_done = False
-            
+
             while time.time() - start_time < max_wait:
                 get_response = client.get(f"/v1/clarifications/{job_id}")
                 data = get_response.json()
-                
+
                 if data["status"] in ["SUCCESS", "FAILED"]:
                     job_done = True
                     break
-                
+
                 time.sleep(0.1)
-            
+
             assert job_done, f"Job did not complete within {max_wait} seconds. Final status: {data.get('status')}"
-        
+
         # Get final job status
         get_response = client.get(f"/v1/clarifications/{job_id}")
         assert get_response.status_code == 200
         data = get_response.json()
-        
+
         assert data["status"] == "FAILED"
         assert data["last_error"] is not None
         assert "Forced failure for testing" in data["last_error"]
@@ -1232,7 +1238,7 @@ class TestAsyncJobLifecycleAPI:
 
 class TestDebugEndpoint:
     """Tests for GET /v1/clarifications/{job_id}/debug endpoint."""
-    
+
     def test_debug_endpoint_disabled_by_default(self, client):
         """Test that debug endpoint returns 403 when disabled (default)."""
         request_data = {
@@ -1246,22 +1252,22 @@ class TestDebugEndpoint:
             },
             "answers": [],
         }
-        
+
         # Create job
         post_response = client.post("/v1/clarifications", json=request_data)
         job_id = post_response.json()["id"]
-        
+
         # Try to access debug endpoint (should be disabled by default)
         debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
-        
+
         assert debug_response.status_code == 403
         assert "detail" in debug_response.json()
         assert "disabled" in debug_response.json()["detail"].lower()
-    
+
     def test_debug_endpoint_enabled_returns_metadata(self, enabled_debug_client):
         """Test that debug endpoint returns sanitized metadata when enabled."""
         client = enabled_debug_client
-        
+
         request_data = {
             "plan": {
                 "specs": [
@@ -1285,30 +1291,30 @@ class TestDebugEndpoint:
                 }
             ],
         }
-        
+
         # Create job
         post_response = client.post("/v1/clarifications", json=request_data)
         job_id = post_response.json()["id"]
-        
+
         # Wait for completion
         max_wait = 5.0
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             get_response = client.get(f"/v1/clarifications/{job_id}")
             job_data = get_response.json()
-            
+
             if job_data["status"] in ["SUCCESS", "FAILED"]:
                 break
-            
+
             time.sleep(0.1)
-        
+
         # Access debug endpoint
         debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
-        
+
         assert debug_response.status_code == 200
         debug_data = debug_response.json()
-        
+
         # Verify debug data structure
         assert "job_id" in debug_data
         assert "status" in debug_data
@@ -1317,14 +1323,14 @@ class TestDebugEndpoint:
         assert "has_request" in debug_data
         assert "has_result" in debug_data
         assert "config" in debug_data
-        
+
         # Verify request metadata (not full content)
         assert "request_metadata" in debug_data
         req_meta = debug_data["request_metadata"]
         assert req_meta["num_specs"] == 1
         assert req_meta["num_answers"] == 1
         assert len(req_meta["spec_summaries"]) == 1
-        
+
         spec_summary = req_meta["spec_summaries"][0]
         assert "purpose_length" in spec_summary
         assert "vision_length" in spec_summary
@@ -1333,18 +1339,18 @@ class TestDebugEndpoint:
         assert spec_summary["num_nice"] == 1
         assert spec_summary["num_open_questions"] == 1
         assert spec_summary["num_assumptions"] == 1
-        
+
         # Verify result metadata is present if job succeeded
         if debug_data["status"] == "SUCCESS":
             assert "result_metadata" in debug_data
             result_meta = debug_data["result_metadata"]
             assert result_meta["num_specs"] == 1
             assert len(result_meta["spec_summaries"]) == 1
-    
+
     def test_debug_endpoint_excludes_sensitive_content(self, enabled_debug_client):
         """Test that debug endpoint does not expose prompts or raw content."""
         client = enabled_debug_client
-        
+
         request_data = {
             "plan": {
                 "specs": [
@@ -1357,52 +1363,52 @@ class TestDebugEndpoint:
             },
             "answers": [],
         }
-        
+
         # Create job
         post_response = client.post("/v1/clarifications", json=request_data)
         job_id = post_response.json()["id"]
-        
+
         # Access debug endpoint
         debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
         debug_data = debug_response.json()
-        
+
         # Convert to string to search for sensitive content
         debug_str = str(debug_data).lower()
-        
+
         # Verify sensitive content is NOT present
         assert "sensitive purpose text" not in debug_str
         assert "sensitive vision text" not in debug_str
         assert "sensitive requirement" not in debug_str
-        
+
         # Verify only metadata is present
         assert "purpose_length" in str(debug_data)
         assert "vision_length" in str(debug_data)
         assert "num_must" in str(debug_data)
-    
+
     def test_debug_endpoint_returns_404_for_nonexistent_job(self, enabled_debug_client):
         """Test that debug endpoint returns 404 for nonexistent jobs."""
         client = enabled_debug_client
-        
+
         from uuid import uuid4
         fake_id = uuid4()
-        
+
         debug_response = client.get(f"/v1/clarifications/{fake_id}/debug")
-        
+
         assert debug_response.status_code == 404
         assert "not found" in debug_response.json()["detail"].lower()
-    
+
     def test_debug_endpoint_invalid_uuid_returns_422(self, enabled_debug_client):
         """Test that debug endpoint returns 422 for invalid UUIDs."""
         client = enabled_debug_client
-        
+
         debug_response = client.get("/v1/clarifications/invalid-uuid/debug")
-        
+
         assert debug_response.status_code == 422
-    
+
     def test_debug_endpoint_shows_config_when_present(self, enabled_debug_client):
         """Test that debug endpoint shows job config when available."""
         client = enabled_debug_client
-        
+
         request_data = {
             "plan": {
                 "specs": [
@@ -1414,32 +1420,31 @@ class TestDebugEndpoint:
             },
             "answers": [],
         }
-        
+
         # Create job
         post_response = client.post("/v1/clarifications", json=request_data)
         job_id = post_response.json()["id"]
-        
+
         # Access debug endpoint
         debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
         debug_data = debug_response.json()
-        
+
         # Should have config field
         assert "config" in debug_data
         # Config should contain clarification_config since that's set by default now
         if debug_data["config"]:
             assert "clarification_config" in debug_data["config"]
-    
+
     def test_debug_endpoint_sanitizes_config(self, enabled_debug_client):
         """Test that debug endpoint sanitizes sensitive fields from config."""
-        from app.services.job_store import create_job
         from app.models.specs import ClarificationRequest, PlanInput, SpecInput
-        
+
         client = enabled_debug_client
-        
+
         # Create a job with potentially sensitive config
         plan = PlanInput(specs=[SpecInput(purpose="Test", vision="Test vision")])
         request = ClarificationRequest(plan=plan, answers=[])
-        
+
         # Manually create a job with sensitive config data
         from app.services import job_store
         job = job_store.create_job(request, config={
@@ -1453,64 +1458,63 @@ class TestDebugEndpoint:
             "token": "should-be-filtered",  # This should be filtered
             "safe_field": "should-be-included"  # This should be included
         })
-        
+
         # Access debug endpoint
         debug_response = client.get(f"/v1/clarifications/{job.id}/debug")
         debug_data = debug_response.json()
-        
+
         # Verify config is sanitized
         assert "config" in debug_data
         config = debug_data["config"]
-        
+
         # llm_config should only have safe fields
         assert "llm_config" in config
         assert config["llm_config"]["provider"] == "openai"
         assert config["llm_config"]["model"] == "gpt-5"
         assert config["llm_config"]["temperature"] == 0.5
         assert "api_key" not in config["llm_config"]  # Should be filtered out
-        
+
         # Top-level sensitive fields should be filtered
         assert "api_key" not in config
         assert "token" not in config
-        
+
         # Safe fields should be preserved
         assert config["safe_field"] == "should-be-included"
-    
+
     def test_debug_endpoint_sanitizes_error_messages(self, enabled_debug_client):
         """Test that debug endpoint sanitizes error messages containing sensitive data."""
-        from app.services.job_store import create_job, update_job
-        from app.models.specs import ClarificationRequest, PlanInput, SpecInput, JobStatus
-        
+        from app.models.specs import ClarificationRequest, PlanInput, SpecInput
+
         client = enabled_debug_client
-        
+
         # Create a job
         plan = PlanInput(specs=[SpecInput(purpose="Test", vision="Test vision")])
         request = ClarificationRequest(plan=plan, answers=[])
-        
+
         from app.services import job_store
         job = job_store.create_job(request)
-        
+
         # Update job with error message containing sensitive data
         error_message = "Authentication failed with api_key=sk-secret-12345 and token=bearer-token-xyz"
         job_store.update_job(job.id, status=JobStatus.FAILED, last_error=error_message)
-        
+
         # Access debug endpoint
         debug_response = client.get(f"/v1/clarifications/{job.id}/debug")
         debug_data = debug_response.json()
-        
+
         # Verify error message is sanitized
         assert "last_error" in debug_data
         sanitized_error = debug_data["last_error"]
-        
+
         # Sensitive data should be redacted
         assert "sk-secret-12345" not in sanitized_error
         assert "bearer-token-xyz" not in sanitized_error
         assert "[REDACTED]" in sanitized_error
-    
+
     def test_debug_endpoint_includes_num_open_questions_in_result(self, enabled_debug_client):
         """Test that result metadata includes num_open_questions field for consistency."""
         client = enabled_debug_client
-        
+
         request_data = {
             "plan": {
                 "specs": [
@@ -1523,28 +1527,28 @@ class TestDebugEndpoint:
             },
             "answers": [],
         }
-        
+
         # Create job
         post_response = client.post("/v1/clarifications", json=request_data)
         job_id = post_response.json()["id"]
-        
+
         # Wait for completion
         max_wait = 5.0
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             get_response = client.get(f"/v1/clarifications/{job_id}")
             job_data = get_response.json()
-            
+
             if job_data["status"] in ["SUCCESS", "FAILED"]:
                 break
-            
+
             time.sleep(0.1)
-        
+
         # Access debug endpoint
         debug_response = client.get(f"/v1/clarifications/{job_id}/debug")
         debug_data = debug_response.json()
-        
+
         # Verify result metadata includes num_open_questions
         if debug_data["status"] == "SUCCESS" and "result_metadata" in debug_data:
             result_meta = debug_data["result_metadata"]
@@ -1558,29 +1562,29 @@ class TestDebugEndpoint:
 
 class TestDebugEndpointOpenAPI:
     """Tests for OpenAPI documentation of debug endpoint."""
-    
+
     def test_openapi_includes_debug_endpoint(self, client):
         """Test that OpenAPI schema includes debug endpoint."""
         response = client.get("/openapi.json")
-        
+
         assert response.status_code == 200
         openapi = response.json()
-        
+
         # Check that the debug endpoint is documented
         assert "/v1/clarifications/{job_id}/debug" in openapi["paths"]
-        
+
         endpoint = openapi["paths"]["/v1/clarifications/{job_id}/debug"]
         assert "get" in endpoint
-        
+
         # Check GET method documentation
         get_spec = endpoint["get"]
         assert "Clarifications" in get_spec["tags"]
         assert "summary" in get_spec
         assert "debug" in get_spec["summary"].lower()
-        
+
         # Check that it has 200 response
         assert "200" in get_spec["responses"]
-        
+
         # Verify description mentions it's disabled by default
         assert "description" in get_spec
         assert "disabled by default" in get_spec["description"].lower() or "debug mode only" in get_spec["description"].lower()
@@ -1616,8 +1620,9 @@ def client_with_job_results(monkeypatch):
     monkeypatch.setenv("APP_SHOW_JOB_RESULT", "true")
     from app.config import get_settings
     get_settings.cache_clear()
-    from app.main import create_app
     from fastapi.testclient import TestClient
+
+    from app.main import create_app
     return TestClient(create_app())
 
 
@@ -1627,7 +1632,7 @@ class TestOpenQuestionsNeverExposed:
     These tests verify the acceptance criteria that GET responses never expose
     open_questions, while must/dont/nice arrays retain prior entries.
     """
-    
+
     def test_preview_response_never_includes_open_questions(self, client):
         """Test that preview endpoint response excludes open_questions."""
         request_data = {
@@ -1644,20 +1649,20 @@ class TestOpenQuestionsNeverExposed:
             },
             "answers": []
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Verify response structure
         assert "specs" in data
         assert len(data["specs"]) == 1
         spec = data["specs"][0]
-        
+
         # Verify open_questions is NOT in response
         assert "open_questions" not in spec
-        
+
         # Verify the 6 allowed keys are present
         assert "purpose" in spec
         assert "vision" in spec
@@ -1665,11 +1670,11 @@ class TestOpenQuestionsNeverExposed:
         assert "dont" in spec
         assert "nice" in spec
         assert "assumptions" in spec
-    
+
     def test_get_job_result_never_includes_open_questions_when_enabled(self, client_with_job_results):
         """Test that GET job result never includes open_questions (development mode)."""
         client = client_with_job_results
-        
+
         request_data = {
             "plan": {
                 "specs": [{
@@ -1681,29 +1686,29 @@ class TestOpenQuestionsNeverExposed:
             },
             "answers": []
         }
-        
+
         # Create job
         response = client.post("/v1/clarifications", json=request_data)
         job_id = response.json()["id"]
-        
+
         # Wait for completion using helper
         job_data = _wait_for_job_completion(client, job_id)
-        
+
         assert job_data["status"] == "SUCCESS", f"Job failed or timed out: {job_data.get('last_error', 'unknown')}"
-        
+
         # Verify result exists and open_questions is not present
         assert job_data["result"] is not None
         assert "specs" in job_data["result"]
         spec = job_data["result"]["specs"][0]
-        
+
         # open_questions should NOT be in result
         assert "open_questions" not in spec
-        
+
         # Verify only the 6 allowed keys
         spec_keys = set(spec.keys())
         expected_keys = {"purpose", "vision", "must", "dont", "nice", "assumptions"}
         assert spec_keys == expected_keys
-    
+
     def test_post_response_never_includes_open_questions_in_metadata(self, client):
         """Test that POST response doesn't leak open_questions in any field."""
         request_data = {
@@ -1716,26 +1721,27 @@ class TestOpenQuestionsNeverExposed:
             },
             "answers": []
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 202
         data = response.json()
-        
+
         # Convert entire response to string and verify no open_questions leak
         response_str = str(data).lower()
         assert "secret question" not in response_str
-        
+
         # Verify lightweight response (no request/result fields)
         assert "request" not in data
         assert "result" not in data
-    
+
     def test_must_dont_nice_arrays_preserved_in_result(self, client_with_job_results):
         """Test that must/dont/nice arrays retain prior entries in result."""
-        from unittest.mock import patch
-        from app.services.llm_clients import DummyLLMClient
         import json
-        
+        from unittest.mock import patch
+
+        from app.services.llm_clients import DummyLLMClient
+
         # Create a custom mock that preserves the input arrays
         def create_preserving_client(provider, config):
             return DummyLLMClient(canned_response=json.dumps({
@@ -1748,10 +1754,10 @@ class TestOpenQuestionsNeverExposed:
                     "assumptions": []
                 }]
             }))
-        
+
         with patch('app.services.clarification.get_llm_client', side_effect=create_preserving_client):
             client = client_with_job_results
-            
+
             request_data = {
                 "plan": {
                     "specs": [{
@@ -1765,32 +1771,32 @@ class TestOpenQuestionsNeverExposed:
                 },
                 "answers": []
             }
-            
+
             # Create and wait for job
             response = client.post("/v1/clarifications", json=request_data)
             job_id = response.json()["id"]
-            
+
             # Wait for completion using helper
             job_data = _wait_for_job_completion(client, job_id)
-            
+
             assert job_data["status"] == "SUCCESS", f"Job failed: {job_data.get('last_error', 'unknown')}"
-            
+
             result_spec = job_data["result"]["specs"][0]
-            
+
             # Verify prior entries are preserved
             assert isinstance(result_spec["must"], list)
             assert isinstance(result_spec["dont"], list)
             assert isinstance(result_spec["nice"], list)
-            
+
             # Validate that the arrays contain the expected values
             assert "Existing feature A" in result_spec["must"]
             assert "Existing feature B" in result_spec["must"]
             assert "Existing constraint X" in result_spec["dont"]
             assert "Existing nice-to-have Y" in result_spec["nice"]
-            
+
             # Verify open_questions is NOT present
             assert "open_questions" not in result_spec
-    
+
     def test_multiple_specs_none_include_open_questions(self, client):
         """Test that with multiple specs, none include open_questions in response."""
         request_data = {
@@ -1815,12 +1821,12 @@ class TestOpenQuestionsNeverExposed:
             },
             "answers": []
         }
-        
+
         response = client.post("/v1/clarifications/preview", json=request_data)
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Verify none of the specs include open_questions
         for spec in data["specs"]:
             assert "open_questions" not in spec
@@ -1835,12 +1841,13 @@ class TestAPIWithVariousDummyClientResponses:
     
     These tests verify the full API workflow with different LLM response patterns.
     """
-    
+
     def test_api_handles_markdown_wrapped_response(self, client):
         """Test that API successfully handles markdown-wrapped LLM responses."""
         from unittest.mock import patch
+
         from app.services.llm_clients import DummyLLMClient
-        
+
         # Create a dummy client that returns markdown-wrapped JSON
         def create_markdown_client(provider, config):
             return DummyLLMClient(canned_response='''```json
@@ -1855,7 +1862,7 @@ class TestAPIWithVariousDummyClientResponses:
   }]
 }
 ```''')
-        
+
         with patch('app.services.clarification.get_llm_client', side_effect=create_markdown_client):
             request_data = {
                 "plan": {
@@ -1866,26 +1873,27 @@ class TestAPIWithVariousDummyClientResponses:
                 },
                 "answers": []
             }
-            
+
             # Create job
             response = client.post("/v1/clarifications", json=request_data)
             assert response.status_code == 202
             job_id = response.json()["id"]
-            
+
             # Poll for completion using helper
             job_data = _wait_for_job_completion(client, job_id)
-            
+
             # Should succeed despite markdown
             assert job_data["status"] == "SUCCESS"
-    
+
     def test_api_handles_malformed_response_gracefully(self, client):
         """Test that API gracefully handles malformed LLM responses."""
         from unittest.mock import patch
+
         from app.services.llm_clients import DummyLLMClient
-        
+
         def create_malformed_client(provider, config):
             return DummyLLMClient(canned_response='{"incomplete": "json"')
-        
+
         with patch('app.services.clarification.get_llm_client', side_effect=create_malformed_client):
             request_data = {
                 "plan": {
@@ -1896,18 +1904,18 @@ class TestAPIWithVariousDummyClientResponses:
                 },
                 "answers": []
             }
-            
+
             response = client.post("/v1/clarifications", json=request_data)
             job_id = response.json()["id"]
-            
+
             # Poll for completion using helper
             job_data = _wait_for_job_completion(client, job_id)
-            
+
             # Should be FAILED with error
             assert job_data["status"] == "FAILED"
             assert job_data["last_error"] is not None
             assert "parse" in job_data["last_error"].lower() or "failed" in job_data["last_error"].lower()
-    
+
     def test_api_backward_compatible_with_existing_clients(self, client):
         """Test that API remains backward compatible."""
         # Test that old-style requests still work
@@ -1925,15 +1933,15 @@ class TestAPIWithVariousDummyClientResponses:
             },
             "answers": []
         }
-        
+
         # POST should work
         response = client.post("/v1/clarifications", json=request_data)
         assert response.status_code == 202
-        
+
         # Preview should work
         preview_response = client.post("/v1/clarifications/preview", json=request_data)
         assert preview_response.status_code == 200
-        
+
         # Result should not include open_questions
         preview_data = preview_response.json()
         assert "open_questions" not in preview_data["specs"][0]
@@ -1946,7 +1954,7 @@ class TestAPIWithVariousDummyClientResponses:
 
 class TestPerRequestConfig:
     """Tests for per-request config on POST /v1/clarifications."""
-    
+
     def test_request_without_config_uses_defaults(self, client):
         """Test that requests without config field work (backward compatibility)."""
         request_data = {
@@ -1965,14 +1973,14 @@ class TestPerRequestConfig:
             },
             "answers": [],
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 202
         data = response.json()
         assert "id" in data
         assert data["status"] == "PENDING"
-    
+
     def test_request_with_valid_config_succeeds(self, client):
         """Test that request with valid config is accepted."""
         request_data = {
@@ -1998,14 +2006,14 @@ class TestPerRequestConfig:
                 "max_tokens": 2000
             }
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 202
         data = response.json()
         assert "id" in data
         assert data["status"] == "PENDING"
-    
+
     def test_request_with_anthropic_config(self, client):
         """Test that Anthropic provider config is accepted."""
         request_data = {
@@ -2029,13 +2037,13 @@ class TestPerRequestConfig:
                 "system_prompt_id": "default"
             }
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 202
         data = response.json()
         assert "id" in data
-    
+
     def test_request_with_invalid_model_returns_400(self, client):
         """Test that invalid model for provider returns 400."""
         request_data = {
@@ -2059,15 +2067,15 @@ class TestPerRequestConfig:
                 "system_prompt_id": "default"
             }
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 400
         data = response.json()
         assert "detail" in data
         assert "invalid-model-xyz" in data["detail"]
         assert "not allowed" in data["detail"]
-    
+
     def test_request_with_invalid_provider_returns_422(self, client):
         """Test that invalid provider returns 422 (Pydantic validation)."""
         request_data = {
@@ -2091,9 +2099,9 @@ class TestPerRequestConfig:
                 "system_prompt_id": "default"
             }
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         # Pydantic validation fails before our validation
         assert response.status_code == 422
         data = response.json()
@@ -2102,7 +2110,7 @@ class TestPerRequestConfig:
         error_detail = str(data["detail"])
         assert "'invalid-provider'" in error_detail or "invalid-provider" in error_detail
         assert "openai" in error_detail.lower() or "anthropic" in error_detail.lower()
-    
+
     def test_config_persisted_in_job(self, client, enabled_debug_client):
         """Test that config is persisted in the job."""
         request_data = {
@@ -2128,30 +2136,30 @@ class TestPerRequestConfig:
                 "max_tokens": 1500
             }
         }
-        
+
         response = enabled_debug_client.post("/v1/clarifications", json=request_data)
         assert response.status_code == 202
         job_id = response.json()["id"]
-        
+
         # Wait a bit for background task to start
         import time
         time.sleep(0.5)
-        
+
         # Check debug endpoint for config
         debug_response = enabled_debug_client.get(f"/v1/clarifications/{job_id}/debug")
         assert debug_response.status_code == 200
         debug_data = debug_response.json()
-        
+
         assert "config" in debug_data
         assert "clarification_config" in debug_data["config"]
-        
+
         config = debug_data["config"]["clarification_config"]
         assert config["provider"] == "anthropic"
         assert config["model"] == "claude-opus-4"
         assert config["system_prompt_id"] == "custom-prompt"
         assert config["temperature"] == 0.3
         assert config["max_tokens"] == 1500
-    
+
     def test_partial_config_merges_with_defaults(self, client):
         """Test that partial config (only some fields) works."""
         request_data = {
@@ -2176,13 +2184,13 @@ class TestPerRequestConfig:
                 "temperature": 0.5  # Only override temperature
             }
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         assert response.status_code == 202
         data = response.json()
         assert "id" in data
-    
+
     def test_config_validation_with_extra_fields_forbidden(self, client):
         """Test that extra fields in config are rejected."""
         request_data = {
@@ -2207,8 +2215,8 @@ class TestPerRequestConfig:
                 "extra_field": "not allowed"
             }
         }
-        
+
         response = client.post("/v1/clarifications", json=request_data)
-        
+
         # Pydantic validation should reject extra fields
         assert response.status_code == 422

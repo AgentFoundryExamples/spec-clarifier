@@ -17,7 +17,7 @@ This module contains configuration-related Pydantic models that are shared
 between the config and specs modules to avoid circular dependencies.
 """
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -59,7 +59,7 @@ class ClarificationConfig(BaseModel):
         >>> # Partial config (only override model)
         >>> config = ClarificationConfig(model="gpt-4o")
     """
-    
+
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
@@ -81,28 +81,28 @@ class ClarificationConfig(BaseModel):
             ]
         }
     )
-    
-    provider: Optional[Literal["openai", "anthropic"]] = Field(
+
+    provider: Literal["openai", "anthropic", "dummy"] | None = Field(
         default=None,
-        description="LLM provider identifier (must be 'openai' or 'anthropic')"
+        description="LLM provider identifier (must be 'openai', 'anthropic', or 'dummy')"
     )
-    model: Optional[str] = Field(
+    model: str | None = Field(
         default=None,
         min_length=1,
         description="Model identifier specific to the provider"
     )
-    system_prompt_id: Optional[str] = Field(
+    system_prompt_id: str | None = Field(
         default=None,
         min_length=1,
         description="Identifier for the system prompt template to use"
     )
-    temperature: Optional[float] = Field(
+    temperature: float | None = Field(
         default=None,
         ge=0.0,
         le=2.0,
         description="Sampling temperature for response generation"
     )
-    max_tokens: Optional[int] = Field(
+    max_tokens: int | None = Field(
         default=None,
         gt=0,
         description="Maximum tokens to generate in response"

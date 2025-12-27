@@ -18,7 +18,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-from app.config import get_settings, validate_and_merge_config, ConfigValidationError
+from app.config import ConfigValidationError, get_settings, validate_and_merge_config
 from app.models.specs import (
     ClarificationRequest,
     ClarificationRequestWithConfig,
@@ -28,6 +28,7 @@ from app.models.specs import (
 )
 from app.services.clarification import clarify_plan, start_clarification_job
 from app.services.job_store import JobNotFoundError, get_job
+from app.utils.logging_helper import log_info, log_warning
 
 logger = logging.getLogger(__name__)
 
@@ -169,28 +170,37 @@ def create_clarification_job(
     try:
         merged_config = validate_and_merge_config(request.config)
     except ConfigValidationError as e:
-        logger.warning(f"Config validation failed: {e}")
+        log_warning(
+            logger,
+            "config_validation_failed",
+            error_message=str(e),
+            provided_config=request.config.model_dump() if request.config else None
+        )
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     # Log if non-default config is used
     if request.config is not None:
         # Log only the fields that were actually provided in the request
         overridden_fields = {k: v for k, v in request.config.model_dump().items() if v is not None}
-        logger.info(f"Creating job with overridden config fields: {overridden_fields}")
-    
+        log_info(
+            logger,
+            "job_created_with_config",
+            overridden_fields=overridden_fields
+        )
+
     # Convert to ClarificationRequest for service layer
     clarification_request = ClarificationRequest(
         plan=request.plan,
         answers=request.answers
     )
-    
+
     # Start job with merged config
     job = start_clarification_job(
         clarification_request,
         background_tasks,
         config={"clarification_config": merged_config.model_dump()}
     )
-    
+
     # Return lightweight summary without request/result payloads
     return JobSummaryResponse(
         id=job.id,
@@ -320,12 +330,12 @@ def get_clarification_job(job_id: UUID) -> JobStatusResponse:
     try:
         job = get_job(job_id)
         settings = get_settings()
-        
+
         # Conditionally include result based on development flag and job status
         # Only expose result when flag is enabled AND job completed successfully
         from app.models.specs import JobStatus
         result = job.result if (settings.show_job_result and job.status == JobStatus.SUCCESS) else None
-        
+
         return JobStatusResponse(
             id=job.id,
             status=job.status,
@@ -335,6 +345,11 @@ def get_clarification_job(job_id: UUID) -> JobStatusResponse:
             result=result,
         )
     except JobNotFoundError:
+        log_warning(
+            logger,
+            "job_not_found",
+            job_id=job_id
+        )
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
 
@@ -371,17 +386,17 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
         HTTPException: 403 if debug endpoint disabled, 404 if job not found
     """
     settings = get_settings()
-    
+
     # Check if debug endpoint is enabled
     if not settings.enable_debug_endpoint:
         raise HTTPException(
             status_code=403,
             detail="Debug endpoint is disabled. Set APP_ENABLE_DEBUG_ENDPOINT=true to enable."
         )
-    
+
     try:
         job = get_job(job_id)
-        
+
         # Sanitize config to remove sensitive data (API keys, tokens, etc.)
         sanitized_config = None
         if job.config:
@@ -413,14 +428,14 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
                     # For other keys, only include if they don't contain sensitive keywords
                     if not any(sensitive in key.lower() for sensitive in ["key", "token", "secret", "password", "credential", "auth"]):
                         sanitized_config[key] = value
-        
+
         # Sanitize error message to remove potential sensitive information
         sanitized_error = None
         if job.last_error:
             # Use the same sanitization as LLMCallError for consistency
             from app.services.llm_clients import LLMCallError
             sanitized_error = LLMCallError._sanitize_message(job.last_error)
-        
+
         # Build sanitized debug response
         debug_info = {
             "job_id": str(job.id),
@@ -432,7 +447,7 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
             "has_result": job.result is not None,
             "config": sanitized_config,
         }
-        
+
         # Add request metadata (not full content)
         if job.request:
             debug_info["request_metadata"] = {
@@ -451,7 +466,7 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
                     for spec in job.request.plan.specs
                 ]
             }
-        
+
         # Add result metadata (not full content)
         if job.result:
             debug_info["result_metadata"] = {
@@ -469,8 +484,13 @@ def get_clarification_job_debug(job_id: UUID) -> dict:
                     for spec in job.result.specs
                 ]
             }
-        
+
         return debug_info
-        
+
     except JobNotFoundError:
+        log_warning(
+            logger,
+            "job_not_found_debug",
+            job_id=job_id
+        )
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
