@@ -26,6 +26,8 @@ from app.models.config_models import ClarificationConfig
 from app.models.specs import ClarificationJob, ClarificationRequest, ClarifiedPlan, ClarifiedSpec, JobStatus, PlanInput
 from app.services import job_store
 from app.services.llm_clients import ClarificationLLMConfig, get_llm_client
+from app.utils.logging_helper import log_info, log_warning, log_error
+from app.utils.metrics import get_metrics_collector
 
 logger = logging.getLogger(__name__)
 
@@ -678,19 +680,28 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
     import time
     from pydantic import ValidationError
     
+    metrics = get_metrics_collector()
+    
     try:
         # Load the job
         job = job_store.get_job(job_id)
         
         # Only process jobs that are in PENDING state
         if job.status != JobStatus.PENDING:
-            logger.warning(
-                f"Skipping processing for job {job_id} because its status is "
-                f"'{job.status.value}' (expected PENDING)."
+            log_warning(
+                logger,
+                "job_skip_not_pending",
+                job_id=job_id,
+                current_status=job.status.value,
+                expected_status=JobStatus.PENDING.value
             )
             return
         
-        logger.info(f"Processing clarification job {job_id}")
+        log_info(
+            logger,
+            "job_processing_start",
+            job_id=job_id
+        )
         
         # Mark as RUNNING
         job_store.update_job(job_id, status=JobStatus.RUNNING)
@@ -754,14 +765,24 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
             # Initialize LLM client using factory
             try:
                 client = get_llm_client(llm_config.provider, llm_config)
-                logger.info(
-                    f"Initialized {llm_config.provider} LLM client for job {job_id} "
-                    f"with model {llm_config.model}"
+                log_info(
+                    logger,
+                    "llm_client_initialized",
+                    job_id=job_id,
+                    provider=llm_config.provider,
+                    model=llm_config.model
                 )
             except ValueError as e:
                 # Invalid/unsupported provider - fail the job immediately
                 error_message = f"Invalid LLM provider '{llm_config.provider}': {str(e)}"
-                logger.error(f"Job {job_id} failed: {error_message}")
+                log_error(
+                    logger,
+                    "llm_client_init_failed",
+                    job_id=job_id,
+                    provider=llm_config.provider,
+                    error=e
+                )
+                metrics.increment("llm_errors")
                 job_store.update_job(
                     job_id,
                     status=JobStatus.FAILED,
@@ -809,6 +830,15 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         # INVOKE LLM
         # ====================================================================
         start_time = time.perf_counter()
+        
+        log_info(
+            logger,
+            "llm_call_start",
+            job_id=job_id,
+            provider=llm_config.provider,
+            model=llm_config.model
+        )
+        
         try:
             # Prepare kwargs for LLM call
             llm_kwargs = {}
@@ -827,20 +857,31 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
             elapsed_time = time.perf_counter() - start_time
             
             # Log success metrics (without prompts or full response)
-            logger.info(
-                f"LLM call successful for job {job_id}: "
-                f"provider={llm_config.provider}, model={llm_config.model}, "
-                f"elapsed_time={elapsed_time:.2f}s"
+            log_info(
+                logger,
+                "llm_call_success",
+                job_id=job_id,
+                provider=llm_config.provider,
+                model=llm_config.model,
+                elapsed_seconds=round(elapsed_time, 2)
             )
             
         except Exception as e:
             elapsed_time = time.perf_counter() - start_time
             # Sanitize error message (LLMCallError already does this, but be safe)
             error_message = str(e)
-            logger.error(
-                f"LLM call failed for job {job_id}: "
-                f"provider={llm_config.provider}, model={llm_config.model}, "
-                f"elapsed_time={elapsed_time:.2f}s, error={error_message}"
+            
+            # Increment LLM error counter
+            metrics.increment("llm_errors")
+            
+            log_error(
+                logger,
+                "llm_call_failed",
+                job_id=job_id,
+                provider=llm_config.provider,
+                model=llm_config.model,
+                elapsed_seconds=round(elapsed_time, 2),
+                error=e
             )
             job_store.update_job(
                 job_id,
@@ -860,7 +901,12 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
             # Validate as ClarifiedPlan
             result = ClarifiedPlan(**parsed_json)
             
-            logger.info(f"Successfully parsed and validated LLM response for job {job_id}")
+            log_info(
+                logger,
+                "llm_response_parsed",
+                job_id=job_id,
+                num_specs=len(result.specs)
+            )
             
         except JSONCleanupError as e:
             error_message = f"Failed to parse LLM response: {e.message}"
@@ -898,17 +944,33 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
         # ====================================================================
         # Mark as SUCCESS with result (updated_at will be refreshed automatically)
         job_store.update_job(job_id, status=JobStatus.SUCCESS, result=result)
-        logger.info(f"Clarification job {job_id} completed successfully")
+        
+        log_info(
+            logger,
+            "job_processing_complete",
+            job_id=job_id,
+            status=JobStatus.SUCCESS.value
+        )
         
     except job_store.JobNotFoundError:
         # Job doesn't exist - log and return cleanly without crashing
-        logger.warning(f"Job {job_id} not found during processing - skipping")
+        log_warning(
+            logger,
+            "job_not_found",
+            job_id=job_id
+        )
         return
         
     except Exception as e:
         # Capture any unexpected exception and mark job as FAILED
         error_message = f"{type(e).__name__}: {str(e)}"
-        logger.error(f"Clarification job {job_id} failed: {error_message}", exc_info=True)
+        
+        log_error(
+            logger,
+            "job_processing_failed",
+            job_id=job_id,
+            error=e
+        )
         
         try:
             # Try to update the job with error status
@@ -921,10 +983,16 @@ async def process_clarification_job(job_id: UUID, llm_client: Optional[Any] = No
             )
         except job_store.JobNotFoundError:
             # Job was deleted while processing - log and continue
-            logger.warning(f"Job {job_id} not found when trying to mark as FAILED")
+            log_warning(
+                logger,
+                "job_not_found_on_error",
+                job_id=job_id
+            )
         except Exception as update_error:
             # Failed to update job status - log but don't raise
-            logger.error(
-                f"Failed to update job {job_id} with error status: {update_error}",
-                exc_info=True
+            log_error(
+                logger,
+                "job_update_failed",
+                job_id=job_id,
+                error=update_error
             )

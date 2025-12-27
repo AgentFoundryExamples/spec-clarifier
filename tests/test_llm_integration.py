@@ -264,29 +264,39 @@ class TestLLMPipelineIntegration:
         job = start_clarification_job(request, background_tasks)
         dummy_client = _create_dummy_client_with_response([spec])
         
-        # Capture log messages
+        # Capture log messages using caplog
         import logging
-        with patch.object(logging.getLogger('app.services.clarification'), 'info') as mock_log:
+        import json
+        logger = logging.getLogger('app.services.clarification')
+        
+        with patch.object(logger, 'log') as mock_log:
             await process_clarification_job(job.id, llm_client=dummy_client)
             
             # Find the success log message
             success_logs = [
                 call for call in mock_log.call_args_list
-                if 'LLM call successful' in str(call)
+                if len(call[0]) >= 2 and 'llm_call_success' in str(call[0][1])
             ]
             
             assert len(success_logs) > 0
-            log_message = str(success_logs[0])
+            log_level, log_message = success_logs[0][0]
+            
+            # Parse structured log
+            log_data = json.loads(log_message)
             
             # Verify metrics are logged
-            assert 'provider=openai' in log_message
-            assert 'model=gpt-5' in log_message
-            assert 'elapsed_time=' in log_message
+            assert log_data['event'] == 'llm_call_success'
+            assert log_data['provider'] == 'openai'
+            assert log_data['model'] == 'gpt-5'
+            assert 'elapsed_seconds' in log_data
+            assert 'job_id' in log_data
             
             # Verify prompts are NOT logged
-            assert 'system_prompt' not in log_message
-            assert 'user_prompt' not in log_message
-            assert 'Test vision' not in log_message  # Content from prompt
+            assert 'system_prompt' not in log_data
+            assert 'user_prompt' not in log_data
+            # Ensure content from prompts is not in the log
+            full_log = json.dumps(log_data)
+            assert 'Test vision' not in full_log
     
     async def test_multiple_specs_are_processed_correctly(self):
         """Test that jobs with multiple specs are processed correctly."""
