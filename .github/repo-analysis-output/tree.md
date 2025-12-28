@@ -66,6 +66,8 @@
 ├── LICENSE
 ├── LLMs.md
 ├── Makefile
+├── notes.md
+├── openapi.json
 ├── pyproject.toml
 ├── README.md
 └── requirements.txt

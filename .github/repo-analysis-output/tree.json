@@ -290,6 +290,14 @@
     },
     {
       "type": "file",
+      "name": "notes.md"
+    },
+    {
+      "type": "file",
+      "name": "openapi.json"
+    },
+    {
+      "type": "file",
       "name": "pyproject.toml"
     },
     {
