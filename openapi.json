@@ -1,0 +1,1051 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Agent Foundry Clarification Service",
+    "description": "A service for asynchronously clarifying specifications using LLM-powered processing. Submit specifications with open questions, receive clarified specifications with questions resolved and integrated into requirements, assumptions, and constraints.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health Check",
+        "description": "Health check endpoint.\n\nReturns:\n    dict: Health status response",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Health Check Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/metrics/basic": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Get basic operational metrics",
+        "description": "Returns lightweight operational counters for monitoring job processing and LLM interactions. This endpoint is read-only and does not require authentication.\n\n**Metrics Tracked:**\n- jobs_queued: Total number of jobs created\n- jobs_pending: Current number of jobs in PENDING state\n- jobs_running: Current number of jobs in RUNNING state\n- jobs_success: Total number of jobs completed successfully\n- jobs_failed: Total number of jobs that failed\n- llm_errors: Total number of LLM API errors encountered\n\nAll counters are maintained in memory and reset on service restart.",
+        "operationId": "get_basic_metrics_v1_metrics_basic_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Basic Metrics V1 Metrics Basic Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/clarifications/preview": {
+      "post": {
+        "tags": [
+          "Clarifications"
+        ],
+        "summary": "Preview clarified specifications (synchronous, developer-only)",
+        "description": "⚠️ DEVELOPER-ONLY ENDPOINT - NOT FOR PRODUCTION USE\n\nThis endpoint provides a synchronous preview of the clarification process for development and debugging purposes only. It returns immediately with the clarified specifications without async processing or LLM operations.\n\nFor production use cases, use POST /v1/clarifications to create an async job and poll GET /v1/clarifications/{job_id} for results.\n\nAccepts a ClarificationRequest containing specifications with open questions and returns a ClarifiedPlan with the questions removed. Answers in the request are currently ignored.",
+        "operationId": "preview_clarifications_v1_clarifications_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClarificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClarifiedPlan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/clarifications": {
+      "post": {
+        "tags": [
+          "Clarifications"
+        ],
+        "summary": "Start async clarification job",
+        "description": "**ASYNCHRONOUS PROCESSING - Returns immediately with job ID**\n\nCreates an asynchronous clarification job and returns immediately with lightweight job details (id, status, timestamps). The job is initially in PENDING status and will be processed in the background.\n\n**Important:** This endpoint returns a job_id, not the clarified plan. Processing happens asynchronously. Poll GET /v1/clarifications/{job_id} to check status and retrieve results when complete.\n\nAccepts an optional 'config' field to override default LLM configuration (provider, model, system_prompt_id, temperature, max_tokens). Config is validated and merged with defaults before processing. Invalid provider/model combinations return 400 Bad Request.\n\nReturns HTTP 202 Accepted with minimal job metadata. The response does NOT include the full request payload or result to keep responses lightweight.\n\n**Async Workflow:**\n1. POST /v1/clarifications → receive job_id\n2. Poll GET /v1/clarifications/{job_id} → check status (PENDING/RUNNING/SUCCESS/FAILED)\n3. When status is SUCCESS → processing complete",
+        "operationId": "create_clarification_job_v1_clarifications_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClarificationRequestWithConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Job created successfully and queued for processing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSummaryResponse"
+                },
+                "example": {
+                  "id": "550e8400-e29b-41d4-a716-446655440000",
+                  "status": "PENDING",
+                  "created_at": "2025-12-27T03:00:00.000000Z",
+                  "updated_at": "2025-12-27T03:00:00.000000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid configuration (provider/model combination not allowed)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Model 'invalid-model' is not allowed for provider 'openai'. Allowed models: gpt-5, gpt-5.1, gpt-4o"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request payload (missing required fields or wrong types)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": [
+                    {
+                      "type": "missing",
+                      "loc": [
+                        "body",
+                        "plan",
+                        "specs",
+                        0, "vision"
+                      ],
+                      "msg": "Field required"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/clarifications/{job_id}": {
+      "get": {
+        "tags": [
+          "Clarifications"
+        ],
+        "summary": "Get clarification job status",
+        "description": "Retrieves the current status and details of a clarification job by its ID. Use this endpoint to poll for job completion after creating an async job.\n\n**Important:** This endpoint returns only job metadata and status. The result field is null by default (production mode) to keep responses lightweight. To view results during development, set APP_SHOW_JOB_RESULT=true.\n\n**Status Values:**\n- PENDING: Job queued, not yet started\n- RUNNING: Job actively processing\n- SUCCESS: Job completed successfully\n- FAILED: Job encountered an error (see last_error field)\n\nWhen status is FAILED, the last_error field will contain the error message.\n\nReturns 404 if the job ID is not found. Invalid UUIDs return 422 validation errors.",
+        "operationId": "get_clarification_job_v1_clarifications__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                },
+                "examples": {
+                  "pending": {
+                    "summary": "Job pending (queued, not yet started)",
+                    "value": {
+                      "id": "550e8400-e29b-41d4-a716-446655440000",
+                      "status": "PENDING",
+                      "created_at": "2025-12-27T03:00:00.000000Z",
+                      "updated_at": "2025-12-27T03:00:00.000000Z"
+                    }
+                  },
+                  "running": {
+                    "summary": "Job running (actively processing)",
+                    "value": {
+                      "id": "550e8400-e29b-41d4-a716-446655440000",
+                      "status": "RUNNING",
+                      "created_at": "2025-12-27T03:00:00.000000Z",
+                      "updated_at": "2025-12-27T03:00:01.500000Z"
+                    }
+                  },
+                  "success": {
+                    "summary": "Job completed successfully (production mode - result is null)",
+                    "value": {
+                      "id": "550e8400-e29b-41d4-a716-446655440000",
+                      "status": "SUCCESS",
+                      "created_at": "2025-12-27T03:00:00.000000Z",
+                      "updated_at": "2025-12-27T03:00:03.250000Z"
+                    }
+                  },
+                  "failed": {
+                    "summary": "Job failed (with error message)",
+                    "value": {
+                      "id": "550e8400-e29b-41d4-a716-446655440000",
+                      "status": "FAILED",
+                      "created_at": "2025-12-27T03:00:00.000000Z",
+                      "updated_at": "2025-12-27T03:00:02.100000Z",
+                      "last_error": "ValueError: Invalid specification format"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Job 550e8400-e29b-41d4-a716-446655440000 not found"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid UUID format",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": [
+                    {
+                      "type": "uuid_parsing",
+                      "loc": [
+                        "path",
+                        "job_id"
+                      ],
+                      "msg": "Input should be a valid UUID"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/clarifications/{job_id}/debug": {
+      "get": {
+        "tags": [
+          "Clarifications"
+        ],
+        "summary": "Get debug information for a clarification job (debug mode only)",
+        "description": "⚠️ DEBUG ENDPOINT - DISABLED BY DEFAULT\n\nReturns detailed debug information for a clarification job including configuration, timestamps, and metadata. This endpoint is only available when APP_ENABLE_DEBUG_ENDPOINT is set to true.\n\nThis endpoint intentionally excludes raw prompts and LLM responses to prevent accidental exposure of sensitive data. Only metadata and sanitized information is returned.\n\nReturns 403 Forbidden if the debug endpoint is not enabled.\nReturns 404 if the job ID is not found.",
+        "operationId": "get_clarification_job_debug_v1_clarifications__job_id__debug_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Clarification Job Debug V1 Clarifications  Job Id  Debug Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/config/defaults": {
+      "get": {
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Get current default configuration (admin-only)",
+        "description": "⚠️ ADMIN-ONLY ENDPOINT - USE ONLY IN TRUSTED ENVIRONMENTS\n\nReturns the current global default ClarificationConfig and allowed models for all providers. This endpoint exposes internal configuration state and should only be accessible in trusted environments with proper network-level access controls.\n\nThe returned default_config contains:\n- provider: LLM provider (e.g., 'openai', 'anthropic')\n- model: Model identifier (e.g., 'gpt-5.1', 'claude-sonnet-4.5')\n- system_prompt_id: System prompt template identifier\n- temperature: Sampling temperature for response generation\n- max_tokens: Optional maximum tokens to generate\n\nThe allowed_models dictionary maps provider names to lists of allowed model names. Only provider/model combinations in this dictionary can be set as defaults or used in clarification requests.\n\nThis endpoint can be disabled by setting APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=false, which will return 403 Forbidden.",
+        "operationId": "get_defaults_v1_config_defaults_get",
+        "responses": {
+          "200": {
+            "description": "Current default configuration retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultsResponse"
+                },
+                "example": {
+                  "default_config": {
+                    "provider": "openai",
+                    "model": "gpt-5.1",
+                    "system_prompt_id": "default",
+                    "temperature": 0.1
+                  },
+                  "allowed_models": {
+                    "openai": [
+                      "gpt-5",
+                      "gpt-5.1",
+                      "gpt-4o"
+                    ],
+                    "anthropic": [
+                      "claude-sonnet-4.5",
+                      "claude-opus-4"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Config admin endpoints are disabled",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable."
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Update default configuration (admin-only)",
+        "description": "⚠️ ADMIN-ONLY ENDPOINT - USE ONLY IN TRUSTED ENVIRONMENTS\n\nUpdates the global default ClarificationConfig. This change affects all subsequent clarification requests that don't provide explicit configuration overrides. The endpoint does NOT persist changes across restarts - defaults reset to initial values (from environment or built-ins) when the service restarts.\n\nThe provided config is validated before being set as the new default:\n- Provider must be in allowed_models (e.g., 'openai', 'anthropic')\n- Model must be in the provider's allowed model list\n- System prompt ID is accepted but not validated (unknown IDs fall back to 'default' at runtime)\n- Temperature must be 0.0-2.0\n- Max tokens must be positive if provided\n\nAll fields are required in the request. To see current defaults, use GET /v1/config/defaults.\n\nInvalid provider/model combinations return 400 Bad Request with actionable error messages.\n\nThis endpoint can be disabled by setting APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=false, which will return 403 Forbidden.\n\n**Thread Safety:** Updates are atomic and protected by a lock to handle concurrent PUT requests safely.",
+        "operationId": "update_defaults_v1_config_defaults_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClarificationConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Configuration updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultsResponse"
+                },
+                "examples": {
+                  "openai": {
+                    "summary": "Update to OpenAI GPT-5",
+                    "value": {
+                      "default_config": {
+                        "provider": "openai",
+                        "model": "gpt-5",
+                        "system_prompt_id": "default",
+                        "temperature": 0.1,
+                        "max_tokens": 2000
+                      },
+                      "allowed_models": {
+                        "openai": [
+                          "gpt-5",
+                          "gpt-5.1",
+                          "gpt-4o"
+                        ],
+                        "anthropic": [
+                          "claude-sonnet-4.5",
+                          "claude-opus-4"
+                        ]
+                      }
+                    }
+                  },
+                  "anthropic": {
+                    "summary": "Update to Anthropic Claude",
+                    "value": {
+                      "default_config": {
+                        "provider": "anthropic",
+                        "model": "claude-sonnet-4.5",
+                        "system_prompt_id": "strict_json",
+                        "temperature": 0.2,
+                        "max_tokens": 3000
+                      },
+                      "allowed_models": {
+                        "openai": [
+                          "gpt-5",
+                          "gpt-5.1",
+                          "gpt-4o"
+                        ],
+                        "anthropic": [
+                          "claude-sonnet-4.5",
+                          "claude-opus-4"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid configuration (validation failed)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Model 'gpt-3.5-turbo' is not allowed for provider 'openai'. Allowed models: gpt-5, gpt-5.1, gpt-4o"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Config admin endpoints are disabled",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "Config admin endpoints are disabled. Set APP_ENABLE_CONFIG_ADMIN_ENDPOINTS=true to enable."
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request payload (wrong types or out of range values)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": [
+                    {
+                      "type": "literal_error",
+                      "loc": [
+                        "body",
+                        "provider"
+                      ],
+                      "msg": "Input should be 'openai' or 'anthropic'"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ClarificationConfig": {
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "openai",
+                  "anthropic",
+                  "dummy"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "LLM provider identifier (must be 'openai', 'anthropic', or 'dummy')"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "Model identifier specific to the provider"
+          },
+          "system_prompt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt Id",
+            "description": "Identifier for the system prompt template to use"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 2,
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature",
+            "description": "Sampling temperature for response generation"
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens",
+            "description": "Maximum tokens to generate in response"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ClarificationConfig",
+        "description": "Configuration for clarification LLM calls.\n\nThis model defines the runtime configuration for LLM-based specification\nclarification, including provider selection, model specification, system\nprompt identification, and generation parameters.\n\nThe config is designed to be:\n- Validated at creation time (provider/model membership checks)\n- Serializable for storage in job configs or API responses\n- Reusable across API and service layers\n- Compatible with global defaults and runtime overrides\n\nAll fields are optional to support partial config overrides. When used\nin a request, missing fields will be filled from the default config\nduring validation/merging.\n\nAttributes:\n    provider: LLM provider identifier (must be 'openai' or 'anthropic')\n    model: Model identifier specific to the provider (e.g., 'gpt-5.1', 'claude-sonnet-4.5')\n    system_prompt_id: Identifier for the system prompt template to use\n    temperature: Sampling temperature for response generation (0.0-2.0), defaults to 0.1\n    max_tokens: Optional maximum tokens to generate in response\n\nExample:\n    \u003E\u003E\u003E # Full config\n    \u003E\u003E\u003E config = ClarificationConfig(\n    ...     provider=\"openai\",\n    ...     model=\"gpt-5.1\",\n    ...     system_prompt_id=\"default\",\n    ...     temperature=0.1,\n    ...     max_tokens=2000\n    ... )\n    \u003E\u003E\u003E\n    \u003E\u003E\u003E # Partial config (only override model)\n    \u003E\u003E\u003E config = ClarificationConfig(model=\"gpt-4o\")",
+        "examples": [
+          {
+            "max_tokens": 2000,
+            "model": "gpt-5.1",
+            "provider": "openai",
+            "system_prompt_id": "default",
+            "temperature": 0.1
+          },
+          {
+            "max_tokens": 3000,
+            "model": "claude-sonnet-4.5",
+            "provider": "anthropic",
+            "system_prompt_id": "strict_json",
+            "temperature": 0.2
+          }
+        ]
+      },
+      "ClarificationRequest": {
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/PlanInput",
+            "description": "The plan input with specifications"
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionAnswer"
+            },
+            "type": "array",
+            "title": "Answers",
+            "description": "List of answers to open questions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan"
+        ],
+        "title": "ClarificationRequest",
+        "description": "Request to clarify specifications with optional answers.\n\nAttributes:\n    plan: The plan input with specifications\n    answers: List of answers to open questions (optional, currently ignored)"
+      },
+      "ClarificationRequestWithConfig": {
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/PlanInput",
+            "description": "The plan input with specifications"
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionAnswer"
+            },
+            "type": "array",
+            "title": "Answers",
+            "description": "List of answers to open questions"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClarificationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional config to override defaults"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan"
+        ],
+        "title": "ClarificationRequestWithConfig",
+        "description": "Request to clarify specifications with optional answers and config.\n\nThis schema extends the basic ClarificationRequest by allowing clients to\noptionally supply a ClarificationConfig that overrides process defaults.\nThe config is validated and merged with defaults before job processing.\n\nAttributes:\n    plan: The plan input with specifications\n    answers: List of answers to open questions (optional, currently ignored)\n    config: Optional ClarificationConfig to override defaults for this request",
+        "examples": [
+          {
+            "answers": [],
+            "plan": {
+              "specs": [
+                {
+                  "assumptions": [
+                    "Users have valid email addresses",
+                    "System will be deployed on HTTPS"
+                  ],
+                  "dont": [
+                    "Store passwords in plain text",
+                    "Use deprecated authentication methods"
+                  ],
+                  "must": [
+                    "Support OAuth 2.0",
+                    "Implement JWT tokens",
+                    "Store passwords securely with bcrypt"
+                  ],
+                  "nice": [
+                    "Support biometric authentication",
+                    "Multi-factor authentication"
+                  ],
+                  "open_questions": [
+                    "Which OAuth providers should be supported?",
+                    "What is the token expiration policy?"
+                  ],
+                  "purpose": "Build a user authentication system",
+                  "vision": "A secure, scalable authentication system supporting multiple providers"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "ClarifiedPlan": {
+        "properties": {
+          "specs": {
+            "items": {
+              "$ref": "#/components/schemas/ClarifiedSpec"
+            },
+            "type": "array",
+            "title": "Specs",
+            "description": "List of clarified specifications"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "specs"
+        ],
+        "title": "ClarifiedPlan",
+        "description": "Plan containing clarified specifications.\n\nAttributes:\n    specs: List of clarified specifications"
+      },
+      "ClarifiedSpec": {
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "title": "Purpose",
+            "description": "The purpose of the specification"
+          },
+          "vision": {
+            "type": "string",
+            "title": "Vision",
+            "description": "The vision statement"
+          },
+          "must": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Must",
+            "description": "List of must-have requirements"
+          },
+          "dont": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dont",
+            "description": "List of don't requirements"
+          },
+          "nice": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Nice",
+            "description": "List of nice-to-have features"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assumptions",
+            "description": "List of assumptions made"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "purpose",
+          "vision"
+        ],
+        "title": "ClarifiedSpec",
+        "description": "Clarified specification after processing (no open questions).\n\nAttributes:\n    purpose: The purpose of the specification\n    vision: The vision statement\n    must: List of must-have requirements\n    dont: List of don't requirements (things to avoid)\n    nice: List of nice-to-have features\n    assumptions: List of assumptions made"
+      },
+      "DefaultsResponse": {
+        "properties": {
+          "default_config": {
+            "$ref": "#/components/schemas/ClarificationConfig",
+            "description": "Current default ClarificationConfig used when no config is provided"
+          },
+          "allowed_models": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Allowed Models",
+            "description": "Dictionary mapping provider names to lists of allowed model names"
+          }
+        },
+        "type": "object",
+        "required": [
+          "default_config",
+          "allowed_models"
+        ],
+        "title": "DefaultsResponse",
+        "description": "Response model for GET /v1/config/defaults.\n\nContains the current default configuration and allowed models\nfor all providers."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "RUNNING",
+          "SUCCESS",
+          "FAILED"
+        ],
+        "title": "JobStatus",
+        "description": "Status of a clarification job.\n\nAttributes:\n    PENDING: Job created but not yet started\n    RUNNING: Job is currently being processed\n    SUCCESS: Job completed successfully\n    FAILED: Job failed with an error"
+      },
+      "JobStatusResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique identifier for the job"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus",
+            "description": "Current status of the job"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "UTC timestamp when job was created"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "UTC timestamp when job was last updated"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error",
+            "description": "Optional error message if job failed"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClarifiedPlan"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional clarified plan result when job succeeds (development mode only)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobStatusResponse",
+        "description": "Job status response with conditional result field.\n\nReturns job status and details. The result field is always present in the response\nschema but is conditionally populated based on the APP_SHOW_JOB_RESULT flag and\njob status. In production mode (flag=False), the result is always set to null to\nkeep responses lightweight and prevent clients from depending on embedded results.\n\nThe result field behavior:\n- Production mode (APP_SHOW_JOB_RESULT=false): result is always null\n- Development mode (APP_SHOW_JOB_RESULT=true): result contains ClarifiedPlan when\n  job status is SUCCESS, otherwise null\n\nAttributes:\n    id: Unique identifier for the job\n    status: Current status of the job\n    created_at: UTC timestamp when job was created\n    updated_at: UTC timestamp when job was last updated\n    last_error: Optional error message if job failed\n    result: Optional clarified plan result (null in production, populated in\n            development mode only when status is SUCCESS)"
+      },
+      "JobSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique identifier for the job"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus",
+            "description": "Current status of the job"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "UTC timestamp when job was created"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "UTC timestamp when job was last updated"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error",
+            "description": "Optional error message if job failed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobSummaryResponse",
+        "description": "Lightweight job summary for POST responses.\n\nReturns minimal job metadata without the full request or result payloads.\nThis keeps POST responses lightweight as required by the API specification.\n\nAttributes:\n    id: Unique identifier for the job\n    status: Current status of the job\n    created_at: UTC timestamp when job was created\n    updated_at: UTC timestamp when job was last updated\n    last_error: Optional error message if job failed"
+      },
+      "PlanInput": {
+        "properties": {
+          "specs": {
+            "items": {
+              "$ref": "#/components/schemas/SpecInput"
+            },
+            "type": "array",
+            "title": "Specs",
+            "description": "List of specification inputs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "specs"
+        ],
+        "title": "PlanInput",
+        "description": "Input plan containing multiple specifications.\n\nAttributes:\n    specs: List of specification inputs"
+      },
+      "QuestionAnswer": {
+        "properties": {
+          "spec_index": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Spec Index",
+            "description": "Index of the specification containing the question"
+          },
+          "question_index": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Question Index",
+            "description": "Index of the question within the specification"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question",
+            "description": "The question text"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer",
+            "description": "The answer provided"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "spec_index",
+          "question_index",
+          "question",
+          "answer"
+        ],
+        "title": "QuestionAnswer",
+        "description": "Answer to a specific question in a specification.\n\nAttributes:\n    spec_index: Index of the specification containing the question\n    question_index: Index of the question within the specification\n    question: The question text\n    answer: The answer provided"
+      },
+      "SpecInput": {
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "title": "Purpose",
+            "description": "The purpose of the specification"
+          },
+          "vision": {
+            "type": "string",
+            "title": "Vision",
+            "description": "The vision statement"
+          },
+          "must": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Must",
+            "description": "List of must-have requirements"
+          },
+          "dont": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dont",
+            "description": "List of don't requirements"
+          },
+          "nice": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Nice",
+            "description": "List of nice-to-have features"
+          },
+          "open_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Open Questions",
+            "description": "List of questions needing clarification"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assumptions",
+            "description": "List of assumptions made"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "purpose",
+          "vision"
+        ],
+        "title": "SpecInput",
+        "description": "Input specification with questions to be clarified.\n\nAttributes:\n    purpose: The purpose of the specification\n    vision: The vision statement\n    must: List of must-have requirements\n    dont: List of don't requirements (things to avoid)\n    nice: List of nice-to-have features\n    open_questions: List of questions needing clarification\n    assumptions: List of assumptions made"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

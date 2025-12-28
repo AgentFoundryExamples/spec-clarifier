@@ -178,8 +178,8 @@ class GlobalDefaults:
 
         # Built-in default configuration
         self._default_config = ClarificationConfig(
-            provider="dummy",
-            model="test-model",
+            provider="openai",
+            model="gpt-5.1",
             system_prompt_id="default",
             temperature=0.1,
             max_tokens=None,
